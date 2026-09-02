@@ -15,7 +15,7 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Wavery Contributors"]
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/wavery-player/wavery"
+repository = "https://github.com/Arda-codes/Wavery"
 
 [workspace.dependencies]
 wavery-core = { path = "crates/core" }

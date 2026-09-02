@@ -132,6 +132,9 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         run: |
-          gh release upload ${{ github.ref_name }} packaging/arch/*.pkg.tar.zst --clobber
+          git config --global --add safe.directory "*"
+          gh release upload ${{ github.ref_name }} packaging/arch/*.pkg.tar.zst --repo ${{ github.repository }} --clobber
+
 

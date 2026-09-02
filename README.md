@@ -2,7 +2,7 @@
 
 A fast, local-first music player that runs on your desktop or streams your audio library to any web browser. Built in Rust, Tauri v2, and React.
 
-[![Release](https://img.shields.io/github/v/release/Arda-codes/Wavery?style=flat-square&color=FA586A)](https://github.com/Arda-codes/Wavery/releases)
+[![Release](https://img.shields.io/github/v/release/Arda-codes/Wavery?include_prereleases&style=flat-square&color=FA586A)](https://github.com/Arda-codes/Wavery/releases)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue?style=flat-square)](LICENSE-MIT)
 
 ---

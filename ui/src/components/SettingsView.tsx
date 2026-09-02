@@ -1108,7 +1108,7 @@ export const SettingsView: React.FC = () => {
                   </div>
                   <div>
                     <h3 className="text-lg font-black text-white tracking-tight">Wavery</h3>
-                    <p className="text-xs text-[#FA586A] font-semibold">Version 0.1.1 • Release Build</p>
+                    <p className="text-xs text-[#FA586A] font-semibold">Version 0.1.2 • Release Build</p>
                     <p className="text-[11px] text-[#71717A] mt-0.5">
                       Music player built with Rust, Tauri, and React.
                     </p>

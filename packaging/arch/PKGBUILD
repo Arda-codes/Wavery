@@ -1,6 +1,6 @@
 # Maintainer: Arda <ardaatk1@gmail.com>
 pkgname=wavery-bin
-pkgver=0.1.0_alpha.1
+pkgver=0.1.0
 pkgrel=1
 pkgdesc="Modular, high-performance desktop music player with SQLite FTS5, gapless audio, and Apple HIG aesthetic"
 arch=('x86_64')
@@ -10,7 +10,7 @@ depends=('webkit2gtk-4.1' 'openssl' 'alsa-lib' 'libayatana-appindicator')
 provides=('wavery')
 conflicts=('wavery')
 options=('!strip')
-source_x86_64=("wavery-${pkgver}.deb::https://github.com/Arda-codes/Wavery/releases/download/v0.1.0-alpha.1/Wavery_0.1.0_amd64.deb")
+source_x86_64=("wavery_deb.deb::https://github.com/Arda-codes/Wavery/releases/download/${TAG_NAME}/Wavery_0.1.0_amd64.deb")
 sha256sums_x86_64=('SKIP')
 
 package() {

@@ -285,7 +285,10 @@ fn process_single_file(
                     fs::copy(source_path, &target_dest)?;
                 }
                 ImportStrategy::Move => {
-                    fs::rename(source_path, &target_dest)?;
+                    if fs::rename(source_path, &target_dest).is_err() {
+                        fs::copy(source_path, &target_dest)?;
+                        let _ = fs::remove_file(source_path);
+                    }
                 }
             }
         }

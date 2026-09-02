@@ -378,7 +378,34 @@ pub fn save(path: &Path, config: &Config) -> Result<(), ConfigError> {
         file.write_all(toml_str.as_bytes())?;
         file.sync_all()?;
     }
-    fs::rename(&tmp_path, path)?;
+
+    #[cfg(target_os = "windows")]
+    {
+        let mut replaced = false;
+        let mut last_err = None;
+        for _ in 0..25 {
+            if fs::rename(&tmp_path, path).is_ok() {
+                replaced = true;
+                break;
+            }
+            if fs::copy(&tmp_path, path).is_ok() {
+                let _ = fs::remove_file(&tmp_path);
+                replaced = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        if !replaced {
+            let _ = fs::remove_file(&tmp_path);
+            if let Some(err) = last_err {
+                return Err(ConfigError::Io(err));
+            }
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        fs::rename(&tmp_path, path)?;
+    }
     Ok(())
 }
 

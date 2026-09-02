@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { playerAdapter } from "../services/adapter";
 import { Monitor, Globe, Loader2 } from "lucide-react";
 
+import { usePlayerStore } from "../stores/playerStore";
+
 interface ModeSwitcherProps {
   onSwitchStart?: (targetMode: "native" | "web") => void;
 }
@@ -23,7 +25,7 @@ export const ModeSwitcher: React.FC<ModeSwitcherProps> = ({ onSwitchStart }) => 
 
     try {
       if (target === "web") {
-        await playerAdapter.switchToWeb();
+        await usePlayerStore.getState().switchToWeb();
       } else {
         await playerAdapter.switchToNative();
         if (typeof window !== "undefined") {

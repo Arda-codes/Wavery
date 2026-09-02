@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tokio::sync::Mutex as AsyncMutex;
 use wavery_audio::{RodioPlayer, StandardQueueManager};
 use wavery_config::{default_config_path, load_or_create, save as save_config_file, Config};
@@ -564,7 +564,7 @@ fn open_browser_url(url: &str) -> Result<(), std::io::Error> {
     #[cfg(target_os = "windows")]
     {
         std::process::Command::new("cmd")
-            .args(["/c", "start", url])
+            .args(["/c", "start", "", url])
             .spawn()?;
     }
     #[cfg(target_os = "macos")]
@@ -575,8 +575,33 @@ fn open_browser_url(url: &str) -> Result<(), std::io::Error> {
     }
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
-        if std::process::Command::new("xdg-open").arg(url).spawn().is_err() {
-            let _ = std::process::Command::new("gio").args(["open", url]).spawn();
+        let success = std::process::Command::new("xdg-open")
+            .arg(url)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+
+        if !success {
+            let gio_success = std::process::Command::new("gio")
+                .args(["open", url])
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
+
+            if !gio_success {
+                let _ = std::process::Command::new("python3")
+                    .args(["-m", "webbrowser", url])
+                    .stdin(std::process::Stdio::null())
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .spawn();
+            }
         }
     }
     Ok(())
@@ -613,6 +638,12 @@ fn ensure_server_running(host: &str, port: u16) {
     let addr = format!("{}:{}", host, port);
     if std::net::TcpStream::connect(&addr).is_err() {
         let _ = spawn_server_process();
+        for _ in 0..15 {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            if std::net::TcpStream::connect(&addr).is_ok() {
+                break;
+            }
+        }
     }
 }
 
@@ -644,6 +675,9 @@ async fn switch_to_web(
         }
     }
 
+    // 2. Notify frontend to pause and suppress auto-advance
+    let _ = app_handle.emit("external-pause", ());
+
     let (server_host, server_port) = {
         let config = state.config.lock();
         (config.server.host.clone(), config.server.port)
@@ -651,13 +685,13 @@ async fn switch_to_web(
 
     let target_url = format!("http://{}:{}", server_host, server_port);
 
-    // 2. Ensure server is running in the background
+    // 3. Ensure server is running in the background
     ensure_server_running(&server_host, server_port);
 
-    // 3. Launch browser to target url
+    // 4. Launch browser to target url
     let _ = open_browser_url(&target_url);
 
-    // 4. Hide desktop window so the System Tray icon stays alive in the panel!
+    // 5. Hide desktop window so the System Tray icon stays alive in the panel!
     if let Some(window) = app_handle.get_webview_window("main") {
         let _ = window.hide();
     }
@@ -923,6 +957,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             let _ = player.stop();
                                         }
                                     }
+                                    let _ = app_clone.emit("external-pause", ());
                                     let (server_host, server_port) = {
                                         let cfg = state_clone.config.lock();
                                         (cfg.server.host.clone(), cfg.server.port)

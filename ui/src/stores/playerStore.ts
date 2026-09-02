@@ -152,6 +152,8 @@ export interface PlayerStoreState {
   seek: (seconds: number) => void;
   /** Set volume (0–1). */
   setVolume: (volume: number) => void;
+  /** Switch to the web client: pauses local playback, saves session, and launches browser. */
+  switchToWeb: () => Promise<void>;
   /**
    * Restore the last session from localStorage.
    * Loads queue + track + position back into state, seeks to saved position,
@@ -191,6 +193,23 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
           }
         })
       : () => {};
+
+    let unsubExternalPause = () => {};
+    if (playerAdapter.isTauri()) {
+      import("@tauri-apps/api/event")
+        .then(({ listen }) => {
+          return listen("external-pause", () => {
+            set((state) => ({
+              isManualStop: true,
+              status: { ...state.status, state: "Paused" },
+            }));
+          });
+        })
+        .then((u) => {
+          if (u) unsubExternalPause = u;
+        })
+        .catch(() => {});
+    }
 
     // Throttle position saves: write at most every 5 seconds
     let lastSaveTime = 0;
@@ -301,6 +320,7 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
 
     return () => {
       unsubEnded();
+      unsubExternalPause();
       clearInterval(interval);
     };
   },
@@ -702,11 +722,18 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
   },
 
   pause: () => {
+    set((state) => ({
+      isManualStop: true,
+      status: { ...state.status, state: "Paused" },
+    }));
     playerAdapter.pause();
   },
 
   stop: () => {
-    set({ isManualStop: true });
+    set((state) => ({
+      isManualStop: true,
+      status: { ...state.status, state: "Stopped", position_secs: 0 },
+    }));
     playerAdapter.stop();
   },
 
@@ -716,6 +743,41 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
 
   setVolume: (volume: number) => {
     playerAdapter.setVolume(volume);
+  },
+
+  switchToWeb: async () => {
+    // 1. Immediately flag manual stop and pause status so the polling loop will never auto-advance
+    set((state) => ({
+      isManualStop: true,
+      status: { ...state.status, state: "Paused" },
+    }));
+
+    // 2. Pause audio playback engine
+    try {
+      await playerAdapter.pause();
+    } catch {
+      // Ignore audio pause errors
+    }
+
+    // 3. Persist and synchronize the current playback session for the browser
+    const s = get();
+    saveSession({
+      queue: s.queue,
+      queueIndex: s.queueIndex,
+      currentTrackId: s.currentTrackId,
+      playbackContext: s.playbackContext,
+      isShuffle: s.isShuffle,
+      isAutoplay: s.isAutoplay,
+      loopMode: s.status.loop_mode,
+      positionSecs: s.status.position_secs,
+    });
+
+    // 4. Delegate to the platform adapter to launch the browser and switch mode
+    try {
+      await playerAdapter.switchToWeb();
+    } catch (err) {
+      console.error("Failed to switch to web client:", err);
+    }
   },
 
   restoreSession: async () => {

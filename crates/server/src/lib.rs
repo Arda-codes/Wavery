@@ -934,7 +934,7 @@ pub fn open_browser_url(url: &str) -> Result<(), std::io::Error> {
     #[cfg(target_os = "windows")]
     {
         std::process::Command::new("cmd")
-            .args(["/c", "start", url])
+            .args(["/c", "start", "", url])
             .spawn()?;
     }
     #[cfg(target_os = "macos")]
@@ -945,8 +945,33 @@ pub fn open_browser_url(url: &str) -> Result<(), std::io::Error> {
     }
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
-        if std::process::Command::new("xdg-open").arg(url).spawn().is_err() {
-            let _ = std::process::Command::new("gio").args(["open", url]).spawn();
+        let success = std::process::Command::new("xdg-open")
+            .arg(url)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+
+        if !success {
+            let gio_success = std::process::Command::new("gio")
+                .args(["open", url])
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
+
+            if !gio_success {
+                let _ = std::process::Command::new("python3")
+                    .args(["-m", "webbrowser", url])
+                    .stdin(std::process::Stdio::null())
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .spawn();
+            }
         }
     }
     Ok(())

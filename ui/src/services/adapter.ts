@@ -406,7 +406,10 @@ class BrowserAudioPlayer implements AudioPlayerAdapter {
   }
 
   async switchToWeb(): Promise<void> {
-    return Promise.resolve();
+    this.pause();
+    if (typeof window !== "undefined") {
+      window.open(window.location.origin, "_blank");
+    }
   }
 
   async switchToNative(): Promise<void> {
@@ -698,6 +701,7 @@ class TauriAudioPlayer implements AudioPlayerAdapter {
   }
 
   async switchToWeb(): Promise<void> {
+    this.pause();
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke("switch_to_web");
   }

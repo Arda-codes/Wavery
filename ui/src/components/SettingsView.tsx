@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { usePlayerStore } from "../stores/playerStore";
 import { useLibraryStore } from "../stores/libraryStore";
 import {
   useSettingsStore,
@@ -1075,7 +1076,9 @@ export const SettingsView: React.FC = () => {
                   <div className="flex items-center space-x-2">
                     <ModeSwitcher />
                     <button
-                      onClick={() => window.open("http://127.0.0.1:4242", "_blank")}
+                      onClick={() => {
+                        usePlayerStore.getState().switchToWeb();
+                      }}
                       className="px-3 py-1.5 bg-[#FA586A]/20 hover:bg-[#FA586A]/30 text-[#FA586A] border border-[#FA586A]/30 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition"
                       title="Open in default browser"
                     >

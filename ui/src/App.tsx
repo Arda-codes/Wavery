@@ -501,7 +501,9 @@ export const App: React.FC = () => {
           </div>
           <div className="flex items-center space-x-2.5 flex-shrink-0 ml-4">
             <button
-              onClick={() => window.open("http://127.0.0.1:4242", "_blank")}
+              onClick={() => {
+                usePlayerStore.getState().switchToWeb();
+              }}
               className="px-2.5 py-1 bg-[#24242C] hover:bg-[#30303A] text-white rounded-md font-semibold text-[11px] flex items-center space-x-1 transition border border-white/[0.08]"
               title="Open in default browser"
             >

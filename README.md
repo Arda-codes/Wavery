@@ -1,6 +1,6 @@
 # Wavery
 
-Wavery is a local-first music player built in Rust and TypeScript. It runs either as a native Tauri desktop app or as a standalone HTTP streaming server with a web UI.`
+Wavery is a local-first music player built in Rust and TypeScript. It runs either as a native Tauri desktop app or as a standalone HTTP streaming server with a web UI.
 
 ## Architecture
 

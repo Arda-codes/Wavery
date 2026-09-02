@@ -1,0 +1,35 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/core",
+    "crates/config",
+    "crates/audio",
+    "crates/library",
+    "crates/mpris",
+    "crates/server",
+    "ui/src-tauri",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Wavery Contributors"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/wavery-player/wavery"
+
+[workspace.dependencies]
+wavery-core = { path = "crates/core" }
+wavery-config = { path = "crates/config" }
+wavery-audio = { path = "crates/audio" }
+wavery-library = { path = "crates/library" }
+wavery-mpris = { path = "crates/mpris" }
+wavery-server = { path = "crates/server" }
+
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+async-trait = "0.1"
+tokio = { version = "1.43", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1.15", features = ["v4", "serde"] }

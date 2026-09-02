@@ -1,0 +1,14 @@
+[package]
+name = "wavery-mpris"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Linux MPRIS D-Bus integration for Wavery using zbus"
+
+[dependencies]
+wavery-core = { workspace = true }
+zbus = { version = "5.5", default-features = false, features = ["tokio"] }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }

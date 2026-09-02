@@ -1,0 +1,37 @@
+# Rust build artifacts
+/target/
+crates/**/target/
+ui/src-tauri/target/
+**/*.rs.bk
+Cargo.lock.bak
+
+# Node / Frontend
+/ui/node_modules/
+/ui/dist/
+/ui/dist-ssr/
+*.local
+
+# SQLite & Runtime Storage
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# System scratch & binaries
+.agents/
+.gemini/
+.idea/
+.vscode/
+*.log
+*.zip
+dist-windows-beta/
+
+# OS Generated
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

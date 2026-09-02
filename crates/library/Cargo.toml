@@ -1,0 +1,17 @@
+[package]
+name = "wavery-library"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "File scanning, tag reading (lofty), and SQLite database for Wavery"
+
+[dependencies]
+wavery-core = { workspace = true }
+rusqlite = { version = "0.33", features = ["bundled"] }
+lofty = "0.21"
+uuid = { workspace = true }
+async-trait = { workspace = true }
+walkdir = "2.5"
+sha2 = "0.10"
+tokio = { workspace = true }

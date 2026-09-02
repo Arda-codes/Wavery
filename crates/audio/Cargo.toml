@@ -1,0 +1,18 @@
+[package]
+name = "wavery-audio"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Concrete audio playback engine implementing PlayerEngine using Rodio"
+
+[dependencies]
+wavery-core = { workspace = true }
+rodio = { version = "0.20", default-features = false, features = ["symphonia-all"] }
+async-trait = { workspace = true }
+parking_lot = "0.12"
+rand = "0.8"
+tokio = { workspace = true }
+
+[dev-dependencies]
+uuid = { workspace = true }

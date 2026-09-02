@@ -1,0 +1,19 @@
+[package]
+name = "wavery-config"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Configuration management, defaults, and persistent TOML serialization for Wavery"
+
+[dependencies]
+wavery-core = { workspace = true }
+serde = { workspace = true }
+toml = "0.8"
+directories = "5.0"
+thiserror = { workspace = true }
+
+[dev-dependencies]
+uuid = { workspace = true }
+serde_json = { workspace = true }
+

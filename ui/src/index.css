@@ -1,0 +1,498 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-bg: #0D0D10;
+  --color-surface: #16161A;
+  --color-surface-hover: #222228;
+  --color-surface-active: #2A2A32;
+  --color-deck: rgba(18, 18, 22, 0.92);
+  --color-sidebar: rgba(15, 15, 18, 0.96);
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-border-subtle: rgba(255, 255, 255, 0.04);
+  --color-primary: #FA586A;
+  --color-spotify: #1DB954;
+  --color-accent: #FA586A;
+  --accent-color: #FA586A;
+  --color-accent-hover: #E04859;
+  --color-text-primary: #FFFFFF;
+  --color-text-secondary: #A1A1AA;
+  --color-text-muted: #71717A;
+  --color-danger: #FF453A;
+}
+
+[data-theme="dark"] {
+  --color-bg: #0D0D10;
+  --color-surface: #16161A;
+  --color-surface-hover: #222228;
+  --color-surface-active: #2A2A32;
+  --color-deck: rgba(18, 18, 22, 0.94);
+  --color-sidebar: rgba(15, 15, 19, 0.96);
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-border-subtle: rgba(255, 255, 255, 0.04);
+  --color-text-primary: #FFFFFF;
+  --color-text-secondary: #A1A1AA;
+  --color-text-muted: #71717A;
+}
+
+[data-theme="oled"] {
+  --color-bg: #000000;
+  --color-surface: #0A0A0C;
+  --color-surface-hover: #141418;
+  --color-surface-active: #1C1C22;
+  --color-deck: rgba(5, 5, 6, 0.96);
+  --color-sidebar: #000000;
+  --color-border: rgba(255, 255, 255, 0.12);
+  --color-border-subtle: rgba(255, 255, 255, 0.06);
+  --color-text-primary: #FFFFFF;
+  --color-text-secondary: #B4B4BC;
+  --color-text-muted: #80808C;
+}
+
+[data-theme="midnight"] {
+  --color-bg: #080C14;
+  --color-surface: #0F172A;
+  --color-surface-hover: #1E293B;
+  --color-surface-active: #334155;
+  --color-deck: rgba(13, 20, 36, 0.94);
+  --color-sidebar: rgba(11, 16, 28, 0.96);
+  --color-border: rgba(99, 102, 241, 0.16);
+  --color-border-subtle: rgba(255, 255, 255, 0.04);
+  --color-text-primary: #F1F5F9;
+  --color-text-secondary: #94A3B8;
+  --color-text-muted: #64748B;
+}
+
+[data-theme="light"] {
+  --color-bg: #F4F4F6;
+  --color-surface: #FFFFFF;
+  --color-surface-hover: #ECECF0;
+  --color-surface-active: #E2E2E8;
+  --color-deck: rgba(235, 236, 240, 0.96);
+  --color-sidebar: rgba(240, 241, 245, 0.98);
+  --color-border: rgba(0, 0, 0, 0.09);
+  --color-border-subtle: rgba(0, 0, 0, 0.04);
+  --color-text-primary: #18181B;
+  --color-text-secondary: #52525B;
+  --color-text-muted: #71717A;
+}
+
+[data-theme="light"] input[type="text"],
+[data-theme="light"] textarea {
+  background-color: #FFFFFF !important;
+  color: #18181B !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.28);
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--color-bg);
+  color: var(--color-text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  user-select: none;
+  overflow: hidden;
+}
+
+/* Custom Sleek Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+/* GPU hardware accelerated scrolling and containment */
+.overflow-y-auto {
+  overscroll-behavior: contain;
+  transform: translateZ(0);
+  -webkit-overflow-scrolling: touch;
+}
+
+img {
+  content-visibility: auto;
+}
+
+/* Custom Spotify / Apple Music Range Slider */
+input[type="range"].wavery-slider {
+  --slider-progress: 0%;
+  --track-color: rgba(255, 255, 255, 0.12);
+  --track-active: var(--accent-color, #FA586A);
+  -webkit-appearance: none;
+  appearance: none;
+  background: linear-gradient(
+    to right,
+    var(--track-active) 0%,
+    var(--track-active) var(--slider-progress),
+    var(--track-color) var(--slider-progress),
+    var(--track-color) 100%
+  );
+  height: 4px;
+  border-radius: 9999px;
+  outline: none;
+  cursor: pointer;
+  transition: height 120ms ease;
+}
+
+.group\/scrubber:hover input[type="range"].wavery-slider,
+input[type="range"].wavery-slider:hover {
+  height: 5px;
+}
+
+input[type="range"].wavery-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(0, 0, 0, 0.08);
+  opacity: 0;
+  transform: scale(0.7);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.group\/scrubber:hover input[type="range"].wavery-slider::-webkit-slider-thumb,
+input[type="range"].wavery-slider:hover::-webkit-slider-thumb,
+input[type="range"].wavery-slider:active::-webkit-slider-thumb {
+  opacity: 1;
+  transform: scale(1);
+}
+
+input[type="range"].wavery-slider::-moz-range-track {
+  background: var(--track-color);
+  height: 4px;
+  border-radius: 9999px;
+  border: none;
+}
+
+input[type="range"].wavery-slider::-moz-range-progress {
+  background: var(--track-active);
+  height: 4px;
+  border-radius: 9999px;
+}
+
+input[type="range"].wavery-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: none;
+  border-radius: 50%;
+  background: #FFFFFF;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(0, 0, 0, 0.08);
+  opacity: 0;
+  transform: scale(0.7);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.group\/scrubber:hover input[type="range"].wavery-slider::-moz-range-thumb,
+input[type="range"].wavery-slider:hover::-moz-range-thumb,
+input[type="range"].wavery-slider:active::-moz-range-thumb {
+  opacity: 1;
+  transform: scale(1);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 150ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes tooltipFadeIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 4px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+.animate-tooltip {
+  animation: tooltipFadeIn 120ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* =========================================================
+   APPLE MUSIC / SPOTIFY HARDWARE-ACCELERATED EQUALIZER WAVES
+   Uses scaleY with origin-bottom for 0-reflow 144Hz animation
+   ========================================================= */
+@keyframes wavery-eq-1 {
+  0%, 100% { transform: scaleY(0.25); }
+  50% { transform: scaleY(1.0); }
+}
+
+@keyframes wavery-eq-2 {
+  0%, 100% { transform: scaleY(0.85); }
+  35% { transform: scaleY(0.25); }
+  75% { transform: scaleY(1.0); }
+}
+
+@keyframes wavery-eq-3 {
+  0%, 100% { transform: scaleY(0.45); }
+  45% { transform: scaleY(1.0); }
+  80% { transform: scaleY(0.2); }
+}
+
+@keyframes wavery-eq-4 {
+  0%, 100% { transform: scaleY(0.95); }
+  30% { transform: scaleY(0.25); }
+  70% { transform: scaleY(0.75); }
+}
+
+.animate-wavery-eq-1 {
+  animation: wavery-eq-1 1.2s ease-in-out infinite;
+  transform-origin: bottom;
+  will-change: transform;
+}
+
+.animate-wavery-eq-2 {
+  animation: wavery-eq-2 1.05s ease-in-out infinite;
+  transform-origin: bottom;
+  will-change: transform;
+}
+
+.animate-wavery-eq-3 {
+  animation: wavery-eq-3 1.35s ease-in-out infinite;
+  transform-origin: bottom;
+  will-change: transform;
+}
+
+.animate-wavery-eq-4 {
+  animation: wavery-eq-4 1.15s ease-in-out infinite;
+  transform-origin: bottom;
+  will-change: transform;
+}
+
+/* =========================================================
+   SIMPLIFY / BAREBONES HARDWARE MODE
+   Strips all animations, transitions, rounded borders,
+   gradients, blurs, shadows, and images for maximum FPS
+   ========================================================= */
+.simplify-mode,
+.simplify-mode body {
+  text-rendering: optimizeSpeed !important;
+  image-rendering: pixelated !important;
+}
+
+.simplify-mode *,
+.simplify-mode *::before,
+.simplify-mode *::after {
+  transition: none !important;
+  transition-property: none !important;
+  transition-duration: 0s !important;
+  transition-delay: 0s !important;
+  animation: none !important;
+  animation-duration: 0s !important;
+  box-shadow: none !important;
+  filter: none !important;
+  backdrop-filter: none !important;
+  text-shadow: none !important;
+  will-change: auto !important;
+  border-radius: 0px !important;
+}
+
+.simplify-mode .rounded-full,
+.simplify-mode .rounded-2xl,
+.simplify-mode .rounded-xl,
+.simplify-mode .rounded-lg,
+.simplify-mode .rounded-md,
+.simplify-mode .rounded {
+  border-radius: 2px !important;
+}
+
+.simplify-mode img {
+  display: none !important;
+}
+
+.simplify-mode .bg-gradient-to-r,
+.simplify-mode .bg-gradient-to-b,
+.simplify-mode .bg-gradient-to-t {
+  background-image: none !important;
+  background-color: #1a1a1e !important;
+}
+
+.simplify-mode .hover\:scale-105:hover,
+.simplify-mode .hover\:scale-110:hover,
+.simplify-mode .group-hover\:scale-105,
+.simplify-mode .group-hover\:scale-110 {
+  transform: none !important;
+}
+
+.simplify-mode .animate-pulse,
+.simplify-mode .animate-bounce,
+.simplify-mode .animate-spin,
+.simplify-mode .animate-wavery-eq-1,
+.simplify-mode .animate-wavery-eq-2,
+.simplify-mode .animate-wavery-eq-3,
+.simplify-mode .animate-wavery-eq-4 {
+  animation: none !important;
+}
+
+/* =========================================================
+   DYNAMIC ACCENT COLOR OVERRIDES
+   Maps all hardcoded #FA586A (default accent) classes to
+   var(--accent-color) so accent picker works globally.
+   ========================================================= */
+
+/* --- Text accent --- */
+.text-\[\#FA586A\] { color: var(--accent-color) !important; }
+.text-\[\#FA586A\]\/70 { color: color-mix(in srgb, var(--accent-color) 70%, transparent) !important; }
+.text-\[\#FF7A8A\] { color: color-mix(in srgb, var(--accent-color) 90%, white) !important; }
+
+/* --- Background accent --- */
+.bg-\[\#FA586A\] { background-color: var(--accent-color) !important; }
+.bg-\[\#FA586A\]\/10 { background-color: color-mix(in srgb, var(--accent-color) 10%, transparent) !important; }
+.bg-\[\#FA586A\]\/15 { background-color: color-mix(in srgb, var(--accent-color) 15%, transparent) !important; }
+.bg-\[\#FA586A\]\/20 { background-color: color-mix(in srgb, var(--accent-color) 20%, transparent) !important; }
+.bg-\[\#FA586A\]\/30 { background-color: color-mix(in srgb, var(--accent-color) 30%, transparent) !important; }
+
+/* --- Background accent hover --- */
+.bg-\[\#E04859\] { background-color: var(--color-accent-hover) !important; }
+
+/* --- Border accent --- */
+.border-\[\#FA586A\] { border-color: var(--accent-color) !important; }
+.border-\[\#FA586A\]\/20 { border-color: color-mix(in srgb, var(--accent-color) 20%, transparent) !important; }
+.border-\[\#FA586A\]\/30 { border-color: color-mix(in srgb, var(--accent-color) 30%, transparent) !important; }
+.border-\[\#FA586A\]\/40 { border-color: color-mix(in srgb, var(--accent-color) 40%, transparent) !important; }
+.border-\[\#FA586A\]\/50 { border-color: color-mix(in srgb, var(--accent-color) 50%, transparent) !important; }
+.border-\[\#FA586A\]\/60 { border-color: color-mix(in srgb, var(--accent-color) 60%, transparent) !important; }
+
+/* --- Fill accent --- */
+.fill-\[\#FA586A\] { fill: var(--accent-color) !important; }
+
+/* --- Ring accent --- */
+.ring-\[\#FA586A\]\/20 { --tw-ring-color: color-mix(in srgb, var(--accent-color) 20%, transparent) !important; }
+.ring-\[\#FA586A\]\/30 { --tw-ring-color: color-mix(in srgb, var(--accent-color) 30%, transparent) !important; }
+.ring-\[\#FA586A\]\/40 { --tw-ring-color: color-mix(in srgb, var(--accent-color) 40%, transparent) !important; }
+
+/* --- Shadow accent --- */
+.shadow-\[\#FA586A\]\/10 { --tw-shadow-color: color-mix(in srgb, var(--accent-color) 10%, transparent) !important; }
+.shadow-\[\#FA586A\]\/15 { --tw-shadow-color: color-mix(in srgb, var(--accent-color) 15%, transparent) !important; }
+.shadow-\[\#FA586A\]\/20 { --tw-shadow-color: color-mix(in srgb, var(--accent-color) 20%, transparent) !important; }
+.shadow-\[\#FA586A\]\/25 { --tw-shadow-color: color-mix(in srgb, var(--accent-color) 25%, transparent) !important; }
+.shadow-\[\#FA586A\]\/30 { --tw-shadow-color: color-mix(in srgb, var(--accent-color) 30%, transparent) !important; }
+.shadow-\[\#FA586A\]\/50 { --tw-shadow-color: color-mix(in srgb, var(--accent-color) 50%, transparent) !important; }
+
+/* --- Gradient from-accent (used in sidebar active items) --- */
+.from-\[\#FA586A\]\/15 { --tw-gradient-from: color-mix(in srgb, var(--accent-color) 15%, transparent) !important; }
+
+/* --- Hover-prefixed accent variants (Tailwind hover: prefix) --- */
+.hover\:bg-\[\#E04859\]:hover { background-color: var(--color-accent-hover) !important; }
+.hover\:text-\[\#FA586A\]:hover { color: var(--accent-color) !important; }
+.group-hover\:text-\[\#FA586A\]:is(:where(.group):hover *) { color: var(--accent-color) !important; }
+
+/* =========================================================
+   DYNAMIC THEME SURFACE COLOR OVERRIDES
+   Maps hardcoded dark-theme hex backgrounds to CSS variables
+   so OLED / Midnight / Light themes can override them.
+   ========================================================= */
+
+/* --- Primary background (#0D0D10 = --color-bg) --- */
+.bg-\[\#0D0D10\] { background-color: var(--color-bg) !important; }
+.bg-\[\#0D0D10\]\/80 { background-color: color-mix(in srgb, var(--color-bg) 80%, transparent) !important; }
+.bg-\[\#0D0D10\]\/95 { background-color: color-mix(in srgb, var(--color-bg) 95%, transparent) !important; }
+.bg-\[\#0A0A0D\] { background-color: var(--color-bg) !important; }
+
+/* --- Sidebar (#0F0F12 / #0F0F13 = --color-sidebar) --- */
+.bg-\[\#0F0F13\]\/95 { background-color: var(--color-sidebar) !important; }
+.bg-\[\#0F0F13\]\/60 { background-color: color-mix(in srgb, var(--color-sidebar) 60%, transparent) !important; }
+
+/* --- Deck (#121216 = --color-deck) --- */
+.bg-\[\#121216\] { background-color: var(--color-deck) !important; }
+.bg-\[\#121216\]\/50 { background-color: color-mix(in srgb, var(--color-deck) 50%, transparent) !important; }
+.bg-\[\#121216\]\/60 { background-color: color-mix(in srgb, var(--color-deck) 60%, transparent) !important; }
+.bg-\[\#121216\]\/95 { background-color: var(--color-deck) !important; }
+.bg-\[\#101014\]\/95 { background-color: var(--color-deck) !important; }
+
+/* --- Surface (#16161A = --color-surface) --- */
+.bg-\[\#16161A\] { background-color: var(--color-surface) !important; }
+.bg-\[\#16161A\]\/60 { background-color: color-mix(in srgb, var(--color-surface) 60%, transparent) !important; }
+.bg-\[\#16161A\]\/80 { background-color: color-mix(in srgb, var(--color-surface) 80%, transparent) !important; }
+.bg-\[\#16161C\]\/95 { background-color: color-mix(in srgb, var(--color-surface) 95%, transparent) !important; }
+
+/* --- Surface variants (slightly elevated surfaces) --- */
+.bg-\[\#18181D\] { background-color: var(--color-surface) !important; }
+.bg-\[\#18181F\] { background-color: var(--color-surface) !important; }
+.bg-\[\#1C1C22\] { background-color: var(--color-surface-hover) !important; }
+.bg-\[\#1C1C22\]\/95 { background-color: color-mix(in srgb, var(--color-surface-hover) 95%, transparent) !important; }
+.bg-\[\#202026\] { background-color: var(--color-surface-hover) !important; }
+.bg-\[\#202028\] { background-color: var(--color-surface-hover) !important; }
+.bg-\[\#222228\] { background-color: var(--color-surface-hover) !important; }
+.bg-\[\#24242C\] { background-color: var(--color-surface-active) !important; }
+.bg-\[\#30303A\] { background-color: var(--color-surface-active) !important; }
+
+/* --- Text colors mapped to CSS variables --- */
+.text-\[\#71717A\] { color: var(--color-text-muted) !important; }
+.text-\[\#71717A\]\/40 { color: color-mix(in srgb, var(--color-text-muted) 40%, transparent) !important; }
+.text-\[\#71717A\]\/50 { color: color-mix(in srgb, var(--color-text-muted) 50%, transparent) !important; }
+.text-\[\#71717A\]\/60 { color: color-mix(in srgb, var(--color-text-muted) 60%, transparent) !important; }
+.text-\[\#A1A1AA\] { color: var(--color-text-secondary) !important; }
+.text-\[\#E4E4E7\] { color: var(--color-text-primary) !important; }
+.text-\[\#FFFFFF\] { color: var(--color-text-primary) !important; }
+
+/* --- Hover-prefixed text variants --- */
+.hover\:text-\[\#A1A1AA\]:hover { color: var(--color-text-secondary) !important; }
+.group-hover\:text-\[\#A1A1AA\]:is(:where(.group):hover *) { color: var(--color-text-secondary) !important; }
+.group-hover\:text-white:is(:where(.group):hover *) { color: var(--color-text-primary) !important; }
+
+/* --- Light theme: special text-white override since white text is invisible on light bg --- */
+[data-theme="light"] .text-white { color: var(--color-text-primary) !important; }
+[data-theme="light"] .hover\:text-white:hover { color: var(--color-text-primary) !important; }
+[data-theme="light"] .group-hover\:text-white:is(:where(.group):hover *) { color: var(--color-text-primary) !important; }
+
+/* --- Light theme: border & bg white overrides --- */
+[data-theme="light"] .border-white\/\[0\.04\] { border-color: var(--color-border-subtle) !important; }
+[data-theme="light"] .border-white\/\[0\.06\] { border-color: var(--color-border) !important; }
+[data-theme="light"] .border-white\/\[0\.07\] { border-color: var(--color-border) !important; }
+[data-theme="light"] .border-white\/\[0\.08\] { border-color: var(--color-border) !important; }
+[data-theme="light"] .border-white\/5 { border-color: var(--color-border-subtle) !important; }
+[data-theme="light"] .border-white\/10 { border-color: var(--color-border) !important; }
+[data-theme="light"] .bg-white\/\[0\.04\] { background-color: rgba(0, 0, 0, 0.04) !important; }
+[data-theme="light"] .bg-white\/\[0\.06\] { background-color: rgba(0, 0, 0, 0.05) !important; }
+[data-theme="light"] .bg-white\/\[0\.08\] { background-color: rgba(0, 0, 0, 0.06) !important; }
+[data-theme="light"] .hover\:bg-white\/\[0\.04\]:hover { background-color: rgba(0, 0, 0, 0.04) !important; }
+[data-theme="light"] .hover\:bg-white\/\[0\.08\]:hover { background-color: rgba(0, 0, 0, 0.06) !important; }
+[data-theme="light"] .hover\:bg-white\/5:hover { background-color: rgba(0, 0, 0, 0.04) !important; }
+[data-theme="light"] .hover\:bg-white\/10:hover { background-color: rgba(0, 0, 0, 0.08) !important; }
+
+/* --- Light theme: slider track color --- */
+[data-theme="light"] .wavery-slider { --track-color: rgba(0, 0, 0, 0.12) !important; }
+
+/* --- Light theme: placeholder text --- */
+[data-theme="light"] ::placeholder { color: rgba(0, 0, 0, 0.35) !important; }
+
+/* --- Danger color is not theme-dependent but stays consistent --- */
+.text-\[\#FF453A\] { color: var(--color-danger) !important; }
+.bg-\[\#FF453A\] { background-color: var(--color-danger) !important; }
+.shadow-\[\#FF453A\]\/25 { --tw-shadow-color: color-mix(in srgb, var(--color-danger) 25%, transparent) !important; }

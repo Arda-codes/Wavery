@@ -1,29 +1,6 @@
 # Wavery
 
-Wavery is a local-first music player built in Rust and TypeScript. It runs either as a native Tauri desktop app or as a standalone HTTP streaming server with a web UI.
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                       wavery-ui                             │
-│       React 18 · TypeScript · Zustand · TanStack Virtual    │
-└──────────────┬───────────────────────────────┬──────────────┘
-               │ IPC                           │ HTTP / REST
-┌──────────────▼──────────────┐ ┌──────────────▼──────────────┐
-│        wavery-tauri         │ │        wavery-server        │
-│    Tauri v2 Desktop Shell   │ │    Axum RFC 7233 Streamer   │
-└──────────────┬──────────────┘ └──────────────┬──────────────┘
-               │                               │
-┌──────────────▼───────────────────────────────▼──────────────┐
-│  wavery-audio   │  wavery-library  │  wavery-mpris          │
-│  Rodio + CPAL   │  SQLite FTS5+WAL │  Linux D-Bus (zbus)    │
-│  64KB Buffering │  Lofty Metadata  │                        │
-└─────────────────┴──────────────────┴────────────────────────┘
-               │                               │
-┌──────────────▼───────────────────────────────▼──────────────┐
-│            wavery-core          │       wavery-config       │
-│     Domain Models & Traits      │    XDG Atomic TOML Config │
-└─────────────────────────────────┴───────────────────────────┘
-```
+Wavery is a local-first music player built in Rust and TypeScript. It runs either as a native Tauri desktop app or as a standalone HTTP streaming server with a web UI.`
 
 ## Architecture
 

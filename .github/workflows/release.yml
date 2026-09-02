@@ -84,10 +84,10 @@ jobs:
         with:
           projectPath: './ui'
           tagName: ${{ github.ref_name }}
-          releaseName: 'Wavery v__VERSION__'
-          releaseBody: 'See changelog for release details.'
-          releaseDraft: ${{ github.event.inputs.release_draft || true }}
-          prerelease: false
+          releaseName: 'Wavery ${{ github.ref_name }}'
+          releaseBody: 'Wavery Alpha/Pre-Release Preview Build.'
+          releaseDraft: false
+          prerelease: true
           args: ${{ matrix.args }}
 
       - name: Upload Artifacts (Fallback if not tagged)

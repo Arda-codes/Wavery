@@ -538,7 +538,7 @@ export const App: React.FC = () => {
         />
 
         {/* Center Content Pane */}
-        <main className="flex-1 flex flex-col bg-[#0D0D10] overflow-hidden">
+        <main className="flex-1 flex flex-col bg-[#0D0D10] overflow-hidden min-h-0">
           {/* Breadcrumb Navigation Trail */}
           <Breadcrumbs
             items={breadcrumbItems}

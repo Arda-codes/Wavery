@@ -241,7 +241,7 @@ export const SettingsView: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-[#0D0D10] animate-fade-in">
+    <div className="flex-1 flex flex-col overflow-hidden bg-[#0D0D10] animate-fade-in min-h-0 w-full h-full">
       {/* Top Header */}
       <div className="px-8 pt-7 pb-5 border-b border-white/[0.06] flex items-center justify-between flex-shrink-0">
         <div className="flex items-center space-x-3.5">
@@ -250,10 +250,10 @@ export const SettingsView: React.FC = () => {
           </div>
           <div>
             <h1 className="text-xl font-extrabold text-white tracking-tight">
-              Settings
+              Settings & Preferences
             </h1>
             <p className="text-xs text-[#71717A] mt-0.5">
-              Audio playback, interface themes, hotkeys, and database maintenance.
+              Customize playback, audio pipeline, appearance themes, keybindings, and database maintenance.
             </p>
           </div>
         </div>
@@ -312,9 +312,9 @@ export const SettingsView: React.FC = () => {
       )}
 
       {/* Main Settings Navigation & Content Layout */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden min-h-0">
         {/* Left Settings Tabs Navigation */}
-        <aside className="w-56 border-r border-white/[0.06] p-4 flex flex-col space-y-1 flex-shrink-0 overflow-y-auto select-none bg-[#0F0F13]/60">
+        <aside className="w-56 border-r border-white/[0.06] p-4 flex flex-col space-y-1 flex-shrink-0 overflow-y-auto select-none bg-[#0F0F13]/60 min-h-0">
           {[
             { id: "general" as const, label: "General", icon: Settings, desc: "App & startup behavior" },
             { id: "audio" as const, label: "Audio & Playback", icon: Volume2, desc: "Volume, crossfade & gain" },
@@ -346,7 +346,7 @@ export const SettingsView: React.FC = () => {
         </aside>
 
         {/* Right Settings Pane Content */}
-        <div className="flex-1 overflow-y-auto p-8 space-y-6">
+        <div className="flex-1 overflow-y-auto p-8 space-y-6 min-h-0">
           {/* TAB 1: GENERAL */}
           {activeTab === "general" && (
             <div className="space-y-6 animate-fade-in max-w-3xl">

@@ -483,7 +483,7 @@ export const App: React.FC = () => {
                 ? "bg-[#FA586A]/20 text-[#FA586A] border-[#FA586A]/40 shadow-sm"
                 : "bg-white/[0.06] hover:bg-white/[0.12] text-[#A1A1AA] hover:text-white border-white/[0.06]"
             }`}
-            title="Settings & Preferences"
+            title="Settings"
           >
             <Settings className="w-4 h-4" />
           </button>
@@ -496,14 +496,14 @@ export const App: React.FC = () => {
           <div className="flex items-center space-x-2.5 min-w-0">
             <span className="flex h-2 w-2 rounded-full bg-[#FA586A] flex-shrink-0" />
             <p className="truncate">
-              <span className="font-semibold text-white">Linux Tip:</span> For 144Hz hardware-accelerated Chromium rendering, you can switch to the web client.
+              <span className="font-semibold text-white">Linux note:</span> Open in your browser for smoother rendering if needed.
             </p>
           </div>
           <div className="flex items-center space-x-2.5 flex-shrink-0 ml-4">
             <button
               onClick={() => window.open("http://127.0.0.1:4242", "_blank")}
               className="px-2.5 py-1 bg-[#24242C] hover:bg-[#30303A] text-white rounded-md font-semibold text-[11px] flex items-center space-x-1 transition border border-white/[0.08]"
-              title="Open http://127.0.0.1:4242 in default browser"
+              title="Open in default browser"
             >
               <span>Open in Browser</span>
               <ExternalLink className="w-3 h-3 ml-0.5 text-[#A1A1AA]" />

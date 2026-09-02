@@ -74,28 +74,28 @@ const THEME_OPTIONS: Array<{
   {
     id: "dark",
     name: "Obsidian Dark",
-    desc: "Apple Music inspired dark interface",
+    desc: "Dark gray interface with soft contrast",
     bg: "#121216",
     border: "border-white/[0.12]",
   },
   {
     id: "oled",
     name: "Pure OLED Black",
-    desc: "Maximum contrast #000000 for OLED screens",
+    desc: "True black background for OLED screens",
     bg: "#000000",
     border: "border-white/[0.16]",
   },
   {
     id: "midnight",
     name: "Midnight Indigo",
-    desc: "Deep navy blue palette with soft ambient glow",
+    desc: "Deep navy blue palette",
     bg: "#0B0F19",
     border: "border-blue-500/20",
   },
   {
     id: "light",
     name: "Frost Light",
-    desc: "High clarity crisp bright theme",
+    desc: "Crisp, high-contrast light theme",
     bg: "#F4F4F6",
     border: "border-black/[0.10]",
   },
@@ -250,10 +250,10 @@ export const SettingsView: React.FC = () => {
           </div>
           <div>
             <h1 className="text-xl font-extrabold text-white tracking-tight">
-              Settings & Preferences
+              Settings
             </h1>
             <p className="text-xs text-[#71717A] mt-0.5">
-              Customize playback, audio pipeline, appearance themes, keybindings, and database maintenance.
+              Audio playback, interface themes, hotkeys, and database maintenance.
             </p>
           </div>
         </div>
@@ -353,7 +353,7 @@ export const SettingsView: React.FC = () => {
               <div>
                 <h2 className="text-base font-bold text-white">General Preferences</h2>
                 <p className="text-xs text-[#71717A] mt-0.5">
-                  Application startup, desktop integration, and system notification settings.
+                  Startup behavior, notifications, and desktop integration.
                 </p>
               </div>
 
@@ -363,10 +363,10 @@ export const SettingsView: React.FC = () => {
                   <div className="space-y-0.5 pr-4">
                     <div className="text-xs font-bold text-white flex items-center space-x-2">
                       <Monitor className="w-3.5 h-3.5 text-[#FA586A]" />
-                      <span>Application Runtime Mode</span>
+                      <span>Application Mode</span>
                     </div>
                     <p className="text-[11px] text-[#71717A] leading-relaxed">
-                      Switch between Native Desktop (Rodio low-latency audio engine, MPRIS & system integrations) and Web Browser Client (144Hz Chromium rendering, web audio streaming & remote access).
+                      Switch between the native desktop window and a web browser session.
                     </p>
                   </div>
                   <ModeSwitcher />
@@ -377,10 +377,10 @@ export const SettingsView: React.FC = () => {
                   <div className="space-y-0.5 pr-4">
                     <div className="text-xs font-bold text-white flex items-center space-x-2">
                       <Zap className="w-3.5 h-3.5 text-[#00D2D3]" />
-                      <span>Simplify & Low-Resource Mode (Fast Mode)</span>
+                      <span>Low-Resource Mode</span>
                     </div>
                     <p className="text-[11px] text-[#71717A] leading-relaxed">
-                      Disables backdrop blurs and heavy animations for ultra-low CPU/GPU resource usage and maximum responsiveness.
+                      Turns off blur effects and heavy animations to save CPU and GPU power.
                     </p>
                   </div>
                   <ToggleSwitch
@@ -397,7 +397,7 @@ export const SettingsView: React.FC = () => {
                       <span>Scan Library on Startup</span>
                     </div>
                     <p className="text-[11px] text-[#71717A] leading-relaxed">
-                      Automatically check your managed music folder for newly added tracks and tag modifications when Wavery opens.
+                      Check your music folder for new files and tag changes on launch.
                     </p>
                   </div>
                   <ToggleSwitch
@@ -414,7 +414,7 @@ export const SettingsView: React.FC = () => {
                       <span>Track Change Notifications</span>
                     </div>
                     <p className="text-[11px] text-[#71717A] leading-relaxed">
-                      Display desktop system notifications with album art, song title, and artist whenever the track changes.
+                      Show a desktop alert with track title and artwork when songs change.
                     </p>
                     {settings.notificationsEnabled && (
                       <div className="pt-1.5">
@@ -428,7 +428,7 @@ export const SettingsView: React.FC = () => {
                                 source: { Managed: "/dummy/path" },
                                 metadata: {
                                   title: "Wavery Notification Test",
-                                  artist: "Wavery Desktop Music Player",
+                                  artist: "Wavery Audio Engine",
                                   album: "Audio Engine",
                                   format: "FLAC",
                                   duration: { secs: 180, nanos: 0 },
@@ -437,12 +437,12 @@ export const SettingsView: React.FC = () => {
                               });
                               setFeedbackMessage({
                                 type: "success",
-                                text: "Desktop test notification dispatched successfully!",
+                                text: "Desktop test notification sent.",
                               });
                             } else {
                               setFeedbackMessage({
                                 type: "error",
-                                text: "Desktop notifications permission was blocked or denied by your browser/system.",
+                                text: "Desktop notifications permission was blocked by your browser or system.",
                               });
                             }
                           }}
@@ -469,10 +469,10 @@ export const SettingsView: React.FC = () => {
                   <div className="space-y-0.5 pr-4">
                     <div className="text-xs font-bold text-white flex items-center space-x-2">
                       <Tv className="w-3.5 h-3.5 text-[#FA586A]" />
-                      <span>Linux MPRIS & Media Keys Integration</span>
+                      <span>Linux MPRIS Integration</span>
                     </div>
                     <p className="text-[11px] text-[#71717A] leading-relaxed">
-                      Expose D-Bus MPRIS `org.mpris.MediaPlayer2.wavery` interface for hardware media keys and desktop widgets.
+                      Control playback through keyboard media keys, lock screen widgets, and desktop sound applets.
                     </p>
                   </div>
                   <ToggleSwitch
@@ -486,10 +486,10 @@ export const SettingsView: React.FC = () => {
                   <div className="space-y-0.5 pr-4">
                     <div className="text-xs font-bold text-white flex items-center space-x-2">
                       <Activity className="w-3.5 h-3.5 text-[#FA586A]" />
-                      <span>Auto-Resume Playback Position</span>
+                      <span>Resume Playback on Launch</span>
                     </div>
                     <p className="text-[11px] text-[#71717A] leading-relaxed">
-                      Restore and resume the last active track and timestamp when reopening the player.
+                      Restore your last played song and position when opening the app.
                     </p>
                   </div>
                   <ToggleSwitch
@@ -506,7 +506,7 @@ export const SettingsView: React.FC = () => {
                       <span>Minimize to System Tray</span>
                     </div>
                     <p className="text-[11px] text-[#71717A] leading-relaxed">
-                      Keep audio playback running in the background when closing the main window.
+                      Keep audio playing in the background when closing the main window.
                     </p>
                   </div>
                   <ToggleSwitch
@@ -522,9 +522,9 @@ export const SettingsView: React.FC = () => {
           {activeTab === "audio" && (
             <div className="space-y-6 animate-fade-in max-w-3xl">
               <div>
-                <h2 className="text-base font-bold text-white">Audio Engine & Playback</h2>
+                <h2 className="text-base font-bold text-white">Audio & Playback</h2>
                 <p className="text-xs text-[#71717A] mt-0.5">
-                  Configure volume dynamics, transitions, ReplayGain, and bit-perfect audio delivery.
+                  Volume settings, crossfade transitions, and loudness normalization.
                 </p>
               </div>
 
@@ -533,9 +533,9 @@ export const SettingsView: React.FC = () => {
                 <div className="p-5 space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="space-y-0.5">
-                      <div className="text-xs font-bold text-white">Default Initial Volume</div>
+                      <div className="text-xs font-bold text-white">Default Volume</div>
                       <p className="text-[11px] text-[#71717A]">
-                        Master volume level applied when initializing audio playback.
+                        Starting volume level when the app opens.
                       </p>
                     </div>
                     <span className="font-mono text-xs text-white font-bold bg-white/[0.06] px-2.5 py-1 rounded-lg border border-white/[0.08]">
@@ -558,9 +558,9 @@ export const SettingsView: React.FC = () => {
                 <div className="p-5 space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="space-y-0.5">
-                      <div className="text-xs font-bold text-white">Volume Scroll & Key Step</div>
+                      <div className="text-xs font-bold text-white">Volume Step</div>
                       <p className="text-[11px] text-[#71717A]">
-                        Percentage change per mouse scroll tick or keyboard arrow press.
+                        Volume adjustment per scroll wheel step or arrow key press.
                       </p>
                     </div>
                     <span className="font-mono text-xs text-white font-bold bg-white/[0.06] px-2.5 py-1 rounded-lg border border-white/[0.08]">
@@ -583,9 +583,9 @@ export const SettingsView: React.FC = () => {
                 <div className="p-5 space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="space-y-0.5">
-                      <div className="text-xs font-bold text-white">Track Crossfade Transition</div>
+                      <div className="text-xs font-bold text-white">Crossfade</div>
                       <p className="text-[11px] text-[#71717A]">
-                        Smoothly blend consecutive songs into each other. Set to 0s for instant cut.
+                        Fade time between consecutive songs. Set to 0s to cut directly.
                       </p>
                     </div>
                     <span className="font-mono text-xs text-white font-bold bg-white/[0.06] px-2.5 py-1 rounded-lg border border-white/[0.08]">
@@ -614,7 +614,7 @@ export const SettingsView: React.FC = () => {
                       <span>Gapless Playback</span>
                     </div>
                     <p className="text-[11px] text-[#71717A] leading-relaxed">
-                      Pre-buffer incoming audio samples to eliminate silence between live concert or classical tracks.
+                      Preloads the upcoming audio stream to eliminate silence between tracks.
                     </p>
                   </div>
                   <ToggleSwitch
@@ -628,10 +628,10 @@ export const SettingsView: React.FC = () => {
                   <div className="space-y-0.5 pr-4">
                     <div className="text-xs font-bold text-white flex items-center space-x-2">
                       <Sliders className="w-3.5 h-3.5 text-[#FA586A]" />
-                      <span>ReplayGain Volume Normalization</span>
+                      <span>ReplayGain Normalization</span>
                     </div>
                     <p className="text-[11px] text-[#71717A] leading-relaxed">
-                      Automatically balance perceived loudness across tracks from different albums.
+                      Balance track loudness automatically using embedded ReplayGain tags.
                     </p>
                   </div>
                   <div className="flex items-center space-x-1 bg-[#121216] p-1 rounded-xl border border-white/[0.08]">
@@ -655,10 +655,10 @@ export const SettingsView: React.FC = () => {
                 <div className="p-5 bg-[#121216]/50 space-y-2">
                   <div className="flex items-center space-x-2 text-xs font-bold text-white">
                     <Cpu className="w-3.5 h-3.5 text-green-400" />
-                    <span>Low-Latency Core Audio Backend</span>
+                    <span>Native Audio Engine</span>
                   </div>
                   <p className="text-[11px] text-[#71717A] leading-relaxed">
-                    Native driver: <strong>Rodio / cpal</strong> with 2048-frame ring buffer, 32-bit Float bit-perfect audio stream, and direct ALSA/PulseAudio/PipeWire sink passthrough.
+                    Rodio backend on CPAL with a 2048-sample ring buffer, streaming 32-bit float audio directly to your audio sink.
                   </p>
                 </div>
               </div>
@@ -669,16 +669,16 @@ export const SettingsView: React.FC = () => {
           {activeTab === "appearance" && (
             <div className="space-y-6 animate-fade-in max-w-3xl">
               <div>
-                <h2 className="text-base font-bold text-white">Appearance & Theme</h2>
+                <h2 className="text-base font-bold text-white">Appearance</h2>
                 <p className="text-xs text-[#71717A] mt-0.5">
-                  Personalize themes, accent colors, visual density, and GPU performance modes.
+                  Theme selection, accent color, and layout density.
                 </p>
               </div>
 
               {/* Theme Mode Selector Cards */}
               <div className="space-y-3">
                 <div className="text-xs font-bold text-white uppercase tracking-wider text-[#71717A]">
-                  Color Theme Palette
+                  Theme
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {THEME_OPTIONS.map((theme) => {
@@ -714,9 +714,9 @@ export const SettingsView: React.FC = () => {
               {/* Accent Color Picker */}
               <div className="bg-[#16161A]/80 border border-white/[0.06] rounded-2xl p-5 space-y-4 shadow-xl">
                 <div className="space-y-0.5">
-                  <div className="text-xs font-bold text-white">Primary Accent Tint</div>
+                  <div className="text-xs font-bold text-white">Accent Color</div>
                   <p className="text-[11px] text-[#71717A]">
-                    Select the dominant color for buttons, active navigation states, and audio scrubbers.
+                    Color used for active buttons, sliders, and selection highlights.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-3 pt-1">
@@ -746,9 +746,9 @@ export const SettingsView: React.FC = () => {
                 {/* Album Grid Card Size */}
                 <div className="p-5 flex items-center justify-between">
                   <div className="space-y-0.5 pr-4">
-                    <div className="text-xs font-bold text-white">Album Artwork Grid Size</div>
+                    <div className="text-xs font-bold text-white">Album Grid Size</div>
                     <p className="text-[11px] text-[#71717A]">
-                      Card dimension scaling in Albums and Artists gallery views.
+                      Card dimension scaling in album and artist views.
                     </p>
                   </div>
                   <div className="flex items-center space-x-1 bg-[#121216] p-1 rounded-xl border border-white/[0.08]">
@@ -771,9 +771,9 @@ export const SettingsView: React.FC = () => {
                 {/* Track Row Density */}
                 <div className="p-5 flex items-center justify-between">
                   <div className="space-y-0.5 pr-4">
-                    <div className="text-xs font-bold text-white">Track List Row Density</div>
+                    <div className="text-xs font-bold text-white">Track List Density</div>
                     <p className="text-[11px] text-[#71717A]">
-                      Compact mode allows fitting more tracks per screen height.
+                      Controls vertical spacing in track tables.
                     </p>
                   </div>
                   <div className="flex items-center space-x-1 bg-[#121216] p-1 rounded-xl border border-white/[0.08]">
@@ -798,10 +798,10 @@ export const SettingsView: React.FC = () => {
                   <div className="space-y-0.5 pr-4">
                     <div className="text-xs font-bold text-white flex items-center space-x-2">
                       <Activity className="w-3.5 h-3.5 text-[#FA586A]" />
-                      <span>Animated Waveform Visualizer</span>
+                      <span>Playing Waveform Animation</span>
                     </div>
                     <p className="text-[11px] text-[#71717A]">
-                      Render dynamic animated audio visualizer waves during active playback.
+                      Show small animated waveform bars next to playing songs.
                     </p>
                   </div>
                   <ToggleSwitch
@@ -815,10 +815,10 @@ export const SettingsView: React.FC = () => {
                   <div className="space-y-0.5 pr-4">
                     <div className="text-xs font-bold text-white flex items-center space-x-2">
                       <Music className="w-3.5 h-3.5 text-[#FA586A]" />
-                      <span>Synchronized Karaoke Lyrics Motion</span>
+                      <span>Smooth Lyrics Auto-Scroll</span>
                     </div>
                     <p className="text-[11px] text-[#71717A]">
-                      Smooth auto-scroll and highlight dynamic lyrics lines in fullscreen mode.
+                      Center the active line smoothly as songs progress in fullscreen.
                     </p>
                   </div>
                   <ToggleSwitch
@@ -832,10 +832,10 @@ export const SettingsView: React.FC = () => {
                   <div className="space-y-0.5 pr-4">
                     <div className="text-xs font-bold text-white flex items-center space-x-2">
                       <Zap className="w-3.5 h-3.5 text-[#00D2D3]" />
-                      <span>Simplify & Low-Resource Mode (Fast Mode)</span>
+                      <span>Low-Resource Mode</span>
                     </div>
                     <p className="text-[11px] text-[#71717A]">
-                      Disables backdrop blurs and heavy animations for maximum frame rates on low-end hardware or battery saving.
+                      Disables glass blur and transition effects for better battery life or slower GPUs.
                     </p>
                   </div>
                   <ToggleSwitch
@@ -853,23 +853,23 @@ export const SettingsView: React.FC = () => {
               <div>
                 <h2 className="text-base font-bold text-white">Keyboard Shortcuts</h2>
                 <p className="text-xs text-[#71717A] mt-0.5">
-                  Global desktop hotkeys for quick playback control, search, and navigation.
+                  Hotkeys for playback, search, and window navigation.
                 </p>
               </div>
 
               <div className="bg-[#16161A]/80 border border-white/[0.06] rounded-2xl divide-y divide-white/[0.06] shadow-xl overflow-hidden">
                 {[
-                  { label: "Play / Pause Toggle", key: settings.keybindings?.togglePlay || "Space", desc: "Resume or pause playback immediately" },
-                  { label: "Next Track", key: settings.keybindings?.nextTrack || "Ctrl+Right", desc: "Skip to following song in queue" },
-                  { label: "Previous Track", key: settings.keybindings?.prevTrack || "Ctrl+Left", desc: "Restart song or return to previous track" },
-                  { label: "Volume Increase", key: settings.keybindings?.volumeUp || "Up", desc: "Increase playback volume by configured step" },
-                  { label: "Volume Decrease", key: settings.keybindings?.volumeDown || "Down", desc: "Decrease playback volume by configured step" },
-                  { label: "Seek Forward (+5s)", key: settings.keybindings?.seekForward || "Right", desc: "Jump forward 5 seconds in current track" },
-                  { label: "Seek Backward (-5s)", key: settings.keybindings?.seekBackward || "Left", desc: "Rewind 5 seconds in current track" },
-                  { label: "Global Search & Find", key: settings.keybindings?.openSearch || "Ctrl+K", desc: "Focus top search bar across all entities" },
-                  { label: "Mute / Unmute Audio", key: settings.keybindings?.toggleMute || "M", desc: "Toggle audio output mute state" },
-                  { label: "Fullscreen Player", key: settings.keybindings?.toggleFullscreen || "F", desc: "Open immersive full-window visualizer" },
-                  { label: "Synchronized Lyrics", key: settings.keybindings?.toggleLyrics || "L", desc: "Toggle live karaoke lyrics display" },
+                  { label: "Play / Pause", key: settings.keybindings?.togglePlay || "Space", desc: "Toggle playback" },
+                  { label: "Next Track", key: settings.keybindings?.nextTrack || "Ctrl+Right", desc: "Skip to next song in queue" },
+                  { label: "Previous Track", key: settings.keybindings?.prevTrack || "Ctrl+Left", desc: "Restart song or jump to previous" },
+                  { label: "Volume Up", key: settings.keybindings?.volumeUp || "Up", desc: "Raise volume by step amount" },
+                  { label: "Volume Down", key: settings.keybindings?.volumeDown || "Down", desc: "Lower volume by step amount" },
+                  { label: "Seek Forward (+5s)", key: settings.keybindings?.seekForward || "Right", desc: "Jump 5 seconds ahead" },
+                  { label: "Seek Backward (-5s)", key: settings.keybindings?.seekBackward || "Left", desc: "Rewind 5 seconds" },
+                  { label: "Search", key: settings.keybindings?.openSearch || "Ctrl+K", desc: "Focus top search bar" },
+                  { label: "Mute", key: settings.keybindings?.toggleMute || "M", desc: "Mute or unmute audio" },
+                  { label: "Fullscreen Player", key: settings.keybindings?.toggleFullscreen || "F", desc: "Toggle fullscreen view" },
+                  { label: "Lyrics Panel", key: settings.keybindings?.toggleLyrics || "L", desc: "Open or close drawer lyrics" },
                 ].map((item, idx) => (
                   <div key={idx} className="p-4 flex items-center justify-between hover:bg-white/[0.02] transition">
                     <div>
@@ -889,9 +889,9 @@ export const SettingsView: React.FC = () => {
           {activeTab === "storage" && (
             <div className="space-y-6 animate-fade-in max-w-3xl">
               <div>
-                <h2 className="text-base font-bold text-white">Library Storage & Maintenance</h2>
+                <h2 className="text-base font-bold text-white">Library & Storage</h2>
                 <p className="text-xs text-[#71717A]">
-                  Inspect directory indices, vacuum SQLite tables, and manage artwork caches.
+                  Folder locations, database indexing, and artwork cache maintenance.
                 </p>
               </div>
 
@@ -899,12 +899,10 @@ export const SettingsView: React.FC = () => {
               <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex items-start space-x-3 text-xs">
                 <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
                 <div className="space-y-1">
-                  <p className="font-bold text-amber-300">Important Warning Regarding Custom Tag Edits:</p>
+                  <p className="font-bold text-amber-300">Note on tag edits:</p>
                   <p className="text-amber-200/80 leading-relaxed text-[11px]">
-                    Rebuilding the database resets SQLite indices, clears orphaned records, and rescans all audio files directly from disk.
-                    <strong>
-                      Any custom metadata changes not written directly to audio file tags (ID3v2 / FLAC comments) will be refreshed from original embedded tags.
-                    </strong>
+                    Rebuilding clears database caches and rescans all audio files directly from disk.
+                    <strong> If you edited metadata without writing changes back to the audio file tags (ID3/FLAC), those changes will be replaced by what is currently on disk.</strong>
                   </p>
                 </div>
               </div>
@@ -913,25 +911,25 @@ export const SettingsView: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="p-4 bg-[#16161A]/80 border border-white/[0.06] rounded-2xl space-y-1 shadow-md">
                   <p className="text-[10px] font-bold text-[#71717A] uppercase tracking-wider">
-                    Managed Music Directory
+                    Music Folder
                   </p>
                   <p className="font-mono text-white text-xs select-all truncate">
                     ~/.local/share/wavery/library
                   </p>
                   <p className="text-[11px] text-[#71717A] pt-1">
-                    Indexed <strong>{tracks.length}</strong> songs across <strong>{albums.length}</strong> albums and <strong>{artists.length}</strong> artists.
+                    {tracks.length} songs in {albums.length} albums, {artists.length} artists.
                   </p>
                 </div>
 
                 <div className="p-4 bg-[#16161A]/80 border border-white/[0.06] rounded-2xl space-y-1 shadow-md">
                   <p className="text-[10px] font-bold text-[#71717A] uppercase tracking-wider">
-                    SQLite Database File
+                    Database File
                   </p>
                   <p className="font-mono text-white text-xs select-all truncate">
                     ~/.local/share/wavery/library.db
                   </p>
                   <p className="text-[11px] text-[#71717A] pt-1">
-                    WAL Journal Mode & FTS5 unicode61 tokenizer.
+                    SQLite WAL mode with FTS5 search index.
                   </p>
                 </div>
               </div>
@@ -946,7 +944,7 @@ export const SettingsView: React.FC = () => {
                       <span>Rebuild Database</span>
                     </h3>
                     <p className="text-[11px] text-[#71717A] mt-1 leading-relaxed">
-                      Wipes cache, purges orphaned records, and re-indexes the music directory.
+                      Clears SQLite tables and indexes your music folder from scratch.
                     </p>
                   </div>
                   <button
@@ -976,7 +974,7 @@ export const SettingsView: React.FC = () => {
                       <span>Optimize SQLite</span>
                     </h3>
                     <p className="text-[11px] text-[#71717A] mt-1 leading-relaxed">
-                      Reclaims free database pages, checkpoints WAL log, and rebuilds FTS5 indexes.
+                      Reclaims unused disk space, checkpoints WAL log, and cleans search tables.
                     </p>
                   </div>
                   <button
@@ -1006,7 +1004,7 @@ export const SettingsView: React.FC = () => {
                       <span>Purge Art Cache</span>
                     </h3>
                     <p className="text-[11px] text-[#71717A] mt-1 leading-relaxed">
-                      Clears memory and disk artwork cache, forcing fresh extraction on next view.
+                      Deletes cached covers so they get extracted fresh from audio files.
                     </p>
                   </div>
                   <button
@@ -1035,18 +1033,18 @@ export const SettingsView: React.FC = () => {
           {activeTab === "network" && (
             <div className="space-y-6 animate-fade-in max-w-3xl">
               <div>
-                <h2 className="text-base font-bold text-white">Local Streaming & Remote Web Server</h2>
+                <h2 className="text-base font-bold text-white">Local Web Server</h2>
                 <p className="text-xs text-[#71717A] mt-0.5">
-                  High-performance RFC 7233 partial content HTTP audio server configuration.
+                  Stream audio and load the web client through the built-in HTTP server.
                 </p>
               </div>
 
               <div className="bg-[#16161A]/80 border border-white/[0.06] rounded-2xl divide-y divide-white/[0.06] shadow-xl overflow-hidden">
                 <div className="p-5 flex items-center justify-between">
                   <div>
-                    <div className="text-xs font-bold text-white">Local Server Endpoint</div>
+                    <div className="text-xs font-bold text-white">Server Address</div>
                     <p className="text-[11px] text-[#71717A] mt-0.5">
-                      Embedded zero-overhead streaming daemon for UI audio and album cover delivery.
+                      Local endpoint for web playback and cover art streaming.
                     </p>
                   </div>
                   <div className="flex items-center space-x-2 bg-white/[0.06] px-3 py-1.5 rounded-xl border border-white/[0.08]">
@@ -1057,9 +1055,9 @@ export const SettingsView: React.FC = () => {
 
                 <div className="p-5 flex items-center justify-between">
                   <div>
-                    <div className="text-xs font-bold text-white">RFC 7233 Range Audio Streaming</div>
+                    <div className="text-xs font-bold text-white">HTTP Range Requests</div>
                     <p className="text-[11px] text-[#71717A] mt-0.5">
-                      Zero-copy streaming with `206 Partial Content` support for instant seeking.
+                      Supports partial content requests (HTTP 206) for instant seeking in browsers.
                     </p>
                   </div>
                   <span className="px-2.5 py-1 bg-green-500/10 text-green-400 border border-green-500/20 text-[11px] font-bold rounded-lg">
@@ -1069,9 +1067,9 @@ export const SettingsView: React.FC = () => {
 
                 <div className="p-5 flex items-center justify-between">
                   <div className="space-y-0.5 pr-4">
-                    <div className="text-xs font-bold text-white">Browser Client Access & Mode Switch</div>
+                    <div className="text-xs font-bold text-white">Browser Client</div>
                     <p className="text-[11px] text-[#71717A] mt-0.5">
-                      Open Wavery directly in Google Chrome, Brave, Firefox, or Safari with 144Hz acceleration, or switch runtime modes.
+                      Open Wavery directly in your default web browser.
                     </p>
                   </div>
                   <div className="flex items-center space-x-2">
@@ -1079,7 +1077,7 @@ export const SettingsView: React.FC = () => {
                     <button
                       onClick={() => window.open("http://127.0.0.1:4242", "_blank")}
                       className="px-3 py-1.5 bg-[#FA586A]/20 hover:bg-[#FA586A]/30 text-[#FA586A] border border-[#FA586A]/30 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition"
-                      title="Open http://127.0.0.1:4242 in default browser"
+                      title="Open in default browser"
                     >
                       <span>Open Browser</span>
                       <ExternalLink className="w-3.5 h-3.5" />
@@ -1096,7 +1094,7 @@ export const SettingsView: React.FC = () => {
               <div>
                 <h2 className="text-base font-bold text-white">About Wavery</h2>
                 <p className="text-xs text-[#71717A] mt-0.5">
-                  System architecture, runtime environment, and build specifications.
+                  Version, dependencies, and subsystem components.
                 </p>
               </div>
 
@@ -1106,10 +1104,10 @@ export const SettingsView: React.FC = () => {
                     W
                   </div>
                   <div>
-                    <h3 className="text-lg font-black text-white tracking-tight">Wavery Desktop</h3>
+                    <h3 className="text-lg font-black text-white tracking-tight">Wavery</h3>
                     <p className="text-xs text-[#FA586A] font-semibold">Version 0.1.0 • Release Build</p>
                     <p className="text-[11px] text-[#71717A] mt-0.5">
-                      Modern, high-fidelity modular music player written in Rust & TypeScript.
+                      Music player built with Rust, Tauri, and React.
                     </p>
                   </div>
                 </div>
@@ -1134,9 +1132,9 @@ export const SettingsView: React.FC = () => {
                 </div>
 
                 <div className="p-4 bg-[#121216] border border-white/[0.06] rounded-xl space-y-1.5 text-xs text-[#A1A1AA]">
-                  <p className="font-bold text-white">Hard Modular Architecture Enforcement:</p>
+                  <p className="font-bold text-white">Architecture & Boundaries:</p>
                   <p className="text-[11px] leading-relaxed text-[#71717A]">
-                    Designed with strict trait boundaries separating `wavery-core`, `wavery-audio`, `wavery-library`, `wavery-server`, `wavery-mpris`, and `wavery-ui`. Zero concrete driver leakage across architectural layers.
+                    Modular workspace separating core models, audio playback, database storage, and network streaming through trait contracts.
                   </p>
                 </div>
               </div>
@@ -1154,16 +1152,16 @@ export const SettingsView: React.FC = () => {
                 <AlertTriangle className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-white">Rebuild Entire Database?</h3>
+                <h3 className="text-sm font-bold text-white">Rebuild Database?</h3>
                 <p className="text-xs text-[#71717A]">This action cannot be undone.</p>
               </div>
             </div>
 
             <p className="text-xs text-[#A1A1AA] leading-relaxed">
-              This will clear the SQLite tracks index, purge all orphaned records, and rescan all audio files directly from your library folder.
+              This clears the database index and rescans all audio files directly from your music folder.
               <br /><br />
               <span className="text-amber-300 font-semibold">
-                ⚠️ Any metadata edits that were NOT saved directly to physical audio file tags (ID3v2 / FLAC tags) may disappear.
+                ⚠️ Metadata edits that were not saved to audio file tags (ID3/FLAC) will be reset.
               </span>
             </p>
 
@@ -1179,7 +1177,7 @@ export const SettingsView: React.FC = () => {
                 className="inline-flex items-center space-x-2 px-5 py-2 bg-[#FF453A] hover:bg-[#E03A30] active:scale-95 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-[#FF453A]/25"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
-                <span>Confirm & Rebuild</span>
+                <span>Rebuild</span>
               </button>
             </div>
           </div>
@@ -1195,13 +1193,13 @@ export const SettingsView: React.FC = () => {
                 <RotateCcw className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-white">Reset All Settings?</h3>
-                <p className="text-xs text-[#71717A]">Restore factory default configuration.</p>
+                <h3 className="text-sm font-bold text-white">Reset Settings?</h3>
+                <p className="text-xs text-[#71717A]">Restore default configuration.</p>
               </div>
             </div>
 
             <p className="text-xs text-[#A1A1AA] leading-relaxed">
-              Are you sure you want to reset all audio, appearance, theme, and keybinding preferences to their factory defaults?
+              Reset audio, appearance, theme, and keyboard shortcuts back to default values?
             </p>
 
             <div className="flex items-center justify-end space-x-3 pt-2">

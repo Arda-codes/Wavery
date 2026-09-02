@@ -1,14 +1,21 @@
-//! System tray application for `wavery-server` using native StatusNotifierItem protocol.
+//! System tray application for `wavery-server` using native StatusNotifierItem protocol on Linux.
 //!
 //! Provides a system tray icon with interactive menu controls for choosing between
 //! different display targets (Web Browser client or Tauri Native Desktop window),
 //! triggering background library scans, and managing server lifecycle.
 
-use crate::{open_browser_url, spawn_native_process, AppState};
-use ksni::{menu::StandardItem, Handle, MenuItem, Tray, TrayService};
+#[cfg(target_os = "linux")]
+use crate::{open_browser_url, spawn_native_process};
+use crate::AppState;
 use std::sync::Arc;
+
+#[cfg(target_os = "linux")]
+use ksni::{menu::StandardItem, Handle, MenuItem, Tray, TrayService};
+#[cfg(target_os = "linux")]
 use tracing::{error, info};
+#[cfg(target_os = "linux")]
 use wavery_core::models::ImportStrategy;
+#[cfg(target_os = "linux")]
 use wavery_core::traits::LibraryManager;
 
 /// Wavery Server StatusNotifierItem tray implementation.
@@ -21,8 +28,21 @@ impl WaveryServerTray {
     pub fn new(state: Arc<AppState>) -> Self {
         Self { state }
     }
+
+    /// System tray identifier.
+    #[must_use]
+    pub fn id(&self) -> String {
+        "wavery-server".into()
+    }
+
+    /// System tray title.
+    #[must_use]
+    pub fn title(&self) -> String {
+        "Wavery".into()
+    }
 }
 
+#[cfg(target_os = "linux")]
 impl Tray for WaveryServerTray {
     fn id(&self) -> String {
         "wavery-server".into()
@@ -165,10 +185,12 @@ impl Tray for WaveryServerTray {
 }
 
 /// Controller handle for the Wavery server tray service.
+#[cfg(target_os = "linux")]
 pub struct ServerTrayManager {
     _handle: Handle<WaveryServerTray>,
 }
 
+#[cfg(target_os = "linux")]
 impl ServerTrayManager {
     /// Spawns the background system tray service.
     /// Returns `None` if running in a headless environment without D-Bus / display server.
@@ -189,5 +211,18 @@ impl ServerTrayManager {
 
         info!("Wavery Server Native System Tray spawned successfully.");
         Some(Self { _handle: handle })
+    }
+}
+
+/// Controller handle for the Wavery server tray service (no-op on non-Linux platforms).
+#[cfg(not(target_os = "linux"))]
+pub struct ServerTrayManager;
+
+#[cfg(not(target_os = "linux"))]
+impl ServerTrayManager {
+    /// Spawns the background system tray service.
+    /// Returns `None` on non-Linux platforms where tray management is provided by Tauri desktop shell.
+    pub fn try_new(_state: Arc<AppState>) -> Option<Self> {
+        None
     }
 }

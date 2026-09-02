@@ -228,7 +228,7 @@ export const AlbumMetadataModal: React.FC<AlbumMetadataModalProps> = ({
                   Album Tracks ({trackRows.length})
                 </h3>
                 <span className="text-[11px] text-[#71717A]">
-                  Edit song titles or featured artists
+                  Edit song titles and artists
                 </span>
               </div>
 
@@ -275,7 +275,7 @@ export const AlbumMetadataModal: React.FC<AlbumMetadataModalProps> = ({
                 htmlFor="writeTagsCheckbox"
                 className="text-xs text-white cursor-pointer select-none font-medium"
               >
-                Write updated metadata directly to audio files on disk (ID3 / FLAC / Vorbis tags)
+                Save tag changes to audio files on disk (ID3, Vorbis, FLAC)
               </label>
             </div>
           </div>
@@ -298,17 +298,17 @@ export const AlbumMetadataModal: React.FC<AlbumMetadataModalProps> = ({
               {isSaving ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Saving Changes...</span>
+                  <span>Saving...</span>
                 </>
               ) : success ? (
                 <>
                   <Check className="w-3.5 h-3.5 text-green-300" />
-                  <span>Saved!</span>
+                  <span>Saved</span>
                 </>
               ) : (
                 <>
                   <Save className="w-3.5 h-3.5" />
-                  <span>Save Metadata</span>
+                  <span>Save Changes</span>
                 </>
               )}
             </button>

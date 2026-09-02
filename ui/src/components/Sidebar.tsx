@@ -491,7 +491,7 @@ const SidebarInner: React.FC<SidebarProps> = ({
                   isSettingsActive ? "text-[#FA586A]" : "text-[#71717A] group-hover:text-white"
                 }`}
               />
-              <span>Settings & Maintenance</span>
+              <span>Settings</span>
             </button>
           </nav>
         </div>
@@ -500,7 +500,7 @@ const SidebarInner: React.FC<SidebarProps> = ({
       <div className="p-3 bg-[#16161A] border border-white/[0.07] rounded-xl flex items-center gap-2.5 shadow-sm mt-4">
         <HardDrive className="w-4 h-4 text-[#FA586A] flex-shrink-0" />
         <div className="min-w-0">
-          <p className="text-[11px] font-bold text-white">Managed Store</p>
+          <p className="text-[11px] font-bold text-white">Music Folder</p>
           <p className="text-[10px] text-[#71717A] truncate font-mono">
             ~/.local/share/wavery/library
           </p>

@@ -147,10 +147,10 @@ const TrackTableInner: React.FC<TrackTableProps> = ({
           <Music className="w-8 h-8 text-[#71717A]" />
         </div>
         <h3 className="text-sm font-bold text-white mb-1">
-          No tracks to display
+          No songs found
         </h3>
         <p className="text-xs text-[#71717A] max-w-sm">
-          Import music files using the Import button to populate your library.
+          Click Import to add music files from your computer.
         </p>
       </div>
     );
@@ -184,7 +184,7 @@ const TrackTableInner: React.FC<TrackTableProps> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Filter tracks in view..."
+              placeholder="Filter songs..."
               className="w-full bg-[#18181D] border border-white/[0.08] hover:border-white/[0.15] focus:border-[#FA586A]/60 rounded-full pl-8 pr-4 py-1.5 text-xs text-white placeholder-[#71717A] focus:outline-none focus:ring-1 focus:ring-[#FA586A]/30 transition"
             />
           </div>
@@ -201,8 +201,8 @@ const TrackTableInner: React.FC<TrackTableProps> = ({
                 }`}
                 title={
                   isAutoplay
-                    ? "Autoplay is ON (Continuous playback from All Songs)"
-                    : "Autoplay is OFF (Play only selected song)"
+                    ? "Autoplay is on (continues playing after queue finishes)"
+                    : "Autoplay is off"
                 }
               >
                 <Infinity className="w-3.5 h-3.5" />

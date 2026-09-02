@@ -212,7 +212,7 @@ const TrackInfoInner: React.FC = () => {
         },
         {
           id: "open-fullscreen",
-          label: "Fullscreen Live Lyrics",
+          label: "Fullscreen Lyrics",
           icon: Mic2,
           onClick: toggleFullscreen,
         },
@@ -704,7 +704,7 @@ const ScrubberInner: React.FC = () => {
         onClick={() => setShowRemaining((prev) => !prev)}
         disabled={!hasTrack}
         className="w-10 sm:w-11 text-left font-mono text-[11px] text-[#71717A] hover:text-[#A1A1AA] tabular-nums flex-shrink-0 cursor-pointer select-none transition-colors disabled:cursor-not-allowed disabled:hover:text-[#71717A]"
-        title={showRemaining ? "Showing remaining time (Click for total duration)" : "Showing total duration (Click for remaining time)"}
+        title={showRemaining ? "Remaining time (click for total)" : "Total duration (click for remaining)"}
       >
         {hasTrack
           ? showRemaining
@@ -770,7 +770,7 @@ const VolumeControlInner: React.FC = () => {
       {/* Lyrics Toggle Button */}
       <button
         type="button"
-        aria-label="Live Lyrics"
+        aria-label="Lyrics"
         disabled={!hasTrack}
         onClick={() => toggleDrawer("lyrics")}
         className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-150 flex-shrink-0 focus-visible:ring-2 focus-visible:ring-accent focus:outline-none disabled:opacity-20 disabled:cursor-not-allowed disabled:hover:bg-transparent ${
@@ -778,7 +778,7 @@ const VolumeControlInner: React.FC = () => {
             ? "bg-[#FA586A]/20 text-[#FA586A] border border-[#FA586A]/30 shadow-sm"
             : "text-[#A1A1AA] hover:text-white hover:bg-white/[0.06] active:scale-95"
         }`}
-        title={hasTrack ? "Live Synchronized Lyrics" : "Lyrics disabled (no track)"}
+        title={hasTrack ? "Synchronized Lyrics" : "Lyrics unavailable"}
       >
         <Mic2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
       </button>
@@ -786,14 +786,14 @@ const VolumeControlInner: React.FC = () => {
       {/* Queue Drawer Trigger */}
       <button
         type="button"
-        aria-label="Playback Queue"
+        aria-label="Queue"
         onClick={() => toggleDrawer("queue")}
         className={`relative w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-150 flex-shrink-0 focus-visible:ring-2 focus-visible:ring-accent focus:outline-none ${
           isQueueActive
             ? "bg-[#FA586A]/20 text-[#FA586A] border border-[#FA586A]/30 shadow-sm"
             : "text-[#A1A1AA] hover:text-white hover:bg-white/[0.06] active:scale-95"
         }`}
-        title="Playback Queue"
+        title="Queue"
       >
         <ListMusic className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
         {queueLength > 0 && !isQueueActive && (
@@ -806,11 +806,11 @@ const VolumeControlInner: React.FC = () => {
       {/* Fullscreen Player Trigger */}
       <button
         type="button"
-        aria-label="Fullscreen Player"
+        aria-label="Fullscreen"
         disabled={!hasTrack}
         onClick={toggleFullscreen}
         className="w-8 h-8 rounded-lg items-center justify-center text-[#A1A1AA] hover:text-white hover:bg-white/[0.06] active:scale-95 transition-all duration-150 flex-shrink-0 hidden sm:inline-flex focus-visible:ring-2 focus-visible:ring-accent focus:outline-none disabled:opacity-20 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-        title={hasTrack ? "Fullscreen Immersive Player" : "Fullscreen disabled (no track)"}
+        title={hasTrack ? "Fullscreen Player" : "Fullscreen unavailable"}
       >
         <Maximize2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
       </button>

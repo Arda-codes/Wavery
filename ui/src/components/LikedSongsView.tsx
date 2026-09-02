@@ -60,9 +60,9 @@ export const LikedSongsView: React.FC<LikedSongsViewProps> = ({
         <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-[#FA586A]/20 to-[#7928CA]/20 border border-[#FA586A]/30 flex items-center justify-center mb-5 shadow-2xl shadow-[#FA586A]/10">
           <Heart className="w-10 h-10 text-[#FA586A]" />
         </div>
-        <h2 className="text-lg font-bold text-white mb-1.5">No Liked Songs Yet</h2>
+        <h2 className="text-lg font-bold text-white mb-1.5">No Liked Songs</h2>
         <p className="text-xs text-[#A1A1AA] max-w-sm leading-relaxed mb-6">
-          Tap the heart icon next to any song in your library or now playing bar to save your favorite tracks here.
+          Click the heart icon on any song to save your favorites here.
         </p>
       </div>
     );
@@ -70,7 +70,7 @@ export const LikedSongsView: React.FC<LikedSongsViewProps> = ({
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-[#0D0D10]">
-      {/* Hero Banner with Vibrant Glass Glow */}
+      {/* Hero Header */}
       <div className="p-8 pb-6 flex items-end gap-6 bg-gradient-to-b from-[#FA586A]/15 via-[#FA586A]/5 to-transparent border-b border-white/[0.06] flex-shrink-0">
         {/* Large Heart Art Card */}
         <div className="w-36 h-36 rounded-2xl bg-gradient-to-br from-[#FA586A] via-[#E0284F] to-[#7928CA] flex items-center justify-center shadow-2xl shadow-[#FA586A]/30 border border-white/20 flex-shrink-0">
@@ -81,7 +81,7 @@ export const LikedSongsView: React.FC<LikedSongsViewProps> = ({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <p className="text-[11px] font-bold text-[#FA586A] uppercase tracking-widest">
-              Auto Playlist
+              Favorites
             </p>
             {isLikedPlaying && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#FA586A]/15 border border-[#FA586A]/30 text-[10px] font-bold text-[#FA586A] shadow-sm animate-fade-in">

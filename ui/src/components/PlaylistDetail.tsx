@@ -90,7 +90,7 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <p className="text-[11px] font-bold text-[#71717A] uppercase tracking-widest">
-              User Playlist
+              Playlist
             </p>
             {isThisPlaylistPlaying && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#FA586A]/15 border border-[#FA586A]/30 text-[10px] font-bold text-[#FA586A] shadow-sm animate-fade-in">

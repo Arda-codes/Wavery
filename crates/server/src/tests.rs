@@ -602,12 +602,22 @@ async fn test_server_tray_initialization_and_display_urls() {
     assert!(root.exists(), "Project root directory must exist");
 
     // Verify WaveryServerTray menu item generation
-    let tray = crate::tray::WaveryServerTray::new(state);
-    use ksni::Tray;
+    let tray = crate::tray::WaveryServerTray::new(state.clone());
     assert_eq!(tray.id(), "wavery-server");
     assert_eq!(tray.title(), "Wavery");
-    let menu_items = tray.menu();
-    assert!(!menu_items.is_empty(), "Tray menu items must not be empty");
+
+    #[cfg(target_os = "linux")]
+    {
+        use ksni::Tray;
+        let menu_items = tray.menu();
+        assert!(!menu_items.is_empty(), "Tray menu items must not be empty");
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let manager = crate::tray::ServerTrayManager::try_new(state);
+        assert!(manager.is_none());
+    }
 
     let _ = fs::remove_dir_all(&temp_dir);
 }

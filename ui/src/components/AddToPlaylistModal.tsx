@@ -81,8 +81,8 @@ export const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
         {/* Existing Playlists List */}
         <div className="p-4 max-h-60 overflow-y-auto space-y-1">
           {playlists.length === 0 ? (
-            <p className="text-xs text-[#71717A] text-center py-4 italic">
-              No playlists found. Create one below!
+            <p className="text-xs text-[#71717A] text-center py-4">
+              No playlists found. Create one below to add this track.
             </p>
           ) : (
             playlists.map((pl) => {

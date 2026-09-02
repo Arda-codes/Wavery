@@ -76,10 +76,10 @@ export const ImportModal: React.FC<ImportModalProps> = ({
           <FolderOpen className="w-5 h-5 text-[#FA586A]" /> Import Music
         </h2>
         <p className="text-xs text-[#71717A] mb-5">
-          Choose a file or entire directory from your file manager to ingest into Wavery.
+          Select a folder or audio file to add to your library.
         </p>
 
-        {/* Mode Selector: Single File vs Entire Directory */}
+        {/* Mode Selector: Single File vs Folder */}
         <div className="flex bg-[#121216] p-1 rounded-full border border-white/[0.08] mb-5">
           <button
             type="button"
@@ -91,7 +91,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
             }`}
           >
             <Folder className="w-3.5 h-3.5" />
-            <span>Entire Music Directory</span>
+            <span>Music Folder</span>
           </button>
           <button
             type="button"
@@ -103,7 +103,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
             }`}
           >
             <FileAudio className="w-3.5 h-3.5" />
-            <span>Single Audio File</span>
+            <span>Audio File</span>
           </button>
         </div>
 
@@ -117,7 +117,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
           {/* File Manager Picker Button & Input */}
           <div>
             <label className="block text-xs font-semibold text-[#A1A1AA] mb-1.5">
-              {mode === "folder" ? "Selected Directory" : "Selected Audio File"}
+              {mode === "folder" ? "Selected Folder" : "Selected Audio File"}
             </label>
             <div className="flex gap-2">
               <input
@@ -143,10 +143,10 @@ export const ImportModal: React.FC<ImportModalProps> = ({
             </div>
           </div>
 
-          {/* Ingestion Strategy (Copy vs Move) */}
+          {/* Import Method (Copy vs Move) */}
           <div>
             <label className="block text-xs font-semibold text-[#A1A1AA] mb-2">
-              Ingestion Strategy
+              Import Method
             </label>
             <div className="grid grid-cols-2 gap-3">
               <button
@@ -159,10 +159,10 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                 }`}
               >
                 <div className="flex items-center gap-2 font-bold text-xs text-white">
-                  <Copy className="w-4 h-4 text-[#FA586A]" /> Copy Strategy
+                  <Copy className="w-4 h-4 text-[#FA586A]" /> Copy
                 </div>
                 <span className="text-[10.5px] text-[#71717A] text-left leading-relaxed">
-                  Duplicate {mode === "folder" ? "all tracks" : "file"} into managed library store. Originals remain untouched.
+                  Copies {mode === "folder" ? "all tracks" : "the file"} into your library folder. Source files stay where they are.
                 </span>
               </button>
 
@@ -176,10 +176,10 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                 }`}
               >
                 <div className="flex items-center gap-2 font-bold text-xs text-white">
-                  <ArrowRightLeft className="w-4 h-4 text-[#FA586A]" /> Move Strategy
+                  <ArrowRightLeft className="w-4 h-4 text-[#FA586A]" /> Move
                 </div>
                 <span className="text-[10.5px] text-[#71717A] text-left leading-relaxed">
-                  Relocate into managed library store. Originals are moved and removed from source.
+                  Moves {mode === "folder" ? "all tracks" : "the file"} into your library folder and removes them from the source location.
                 </span>
               </button>
             </div>
@@ -200,11 +200,11 @@ export const ImportModal: React.FC<ImportModalProps> = ({
             >
               {loading
                 ? mode === "folder"
-                  ? "Scanning & Ingesting..."
-                  : "Ingesting Track..."
+                  ? "Scanning and importing..."
+                  : "Importing track..."
                 : mode === "folder"
-                ? "Ingest Entire Directory"
-                : "Ingest Track"}
+                ? "Import Folder"
+                : "Import Track"}
             </button>
           </div>
         </form>

@@ -325,8 +325,8 @@ export const FullscreenPlayer: React.FC = () => {
                 <span>
                   {currentTrack.metadata.format.toUpperCase() === "FLAC" ||
                   currentTrack.metadata.format.toUpperCase() === "WAV"
-                    ? "Lossless Audio"
-                    : "High Fidelity"}
+                    ? "Lossless"
+                    : "High Quality"}
                 </span>
                 <span className="text-[#A1A1AA]">
                   • {currentTrack.metadata.format.toUpperCase()}
@@ -340,7 +340,7 @@ export const FullscreenPlayer: React.FC = () => {
         <div className="flex-1 w-full h-80 sm:h-96 lg:h-[500px] flex flex-col overflow-hidden relative">
           <div className="flex items-center justify-between pb-3 border-b border-white/10 flex-shrink-0">
             <span className="text-xs font-bold uppercase tracking-wider text-[#FA586A] flex items-center gap-2">
-              <Mic2 className="w-4 h-4" /> Live Lyrics
+              <Mic2 className="w-4 h-4" /> Lyrics
             </span>
             {lyrics.length > 0 && (
               <span className="text-xs text-[#71717A]">Click any line to jump</span>
@@ -353,10 +353,10 @@ export const FullscreenPlayer: React.FC = () => {
                 <Mic2 className="w-7 h-7 text-[#71717A]/50" />
               </div>
               <p className="text-sm font-bold text-[#A1A1AA]">
-                Lyrics aren't available for this song
+                No lyrics found for this song
               </p>
               <p className="text-xs text-[#71717A] max-w-xs">
-                When embedded LRC or synchronized lyrics are included in your audio files, they will appear here live.
+                Embedded LRC or tag lyrics will show up here during playback.
               </p>
             </div>
           ) : (
@@ -514,10 +514,8 @@ export const FullscreenPlayer: React.FC = () => {
               }`}
               title={
                 isAutoplay
-                  ? playbackContext?.type === "tracks"
-                    ? "Autoplay is ON (Continuous playback from All Songs)"
-                    : "Autoplay is ON"
-                  : "Autoplay is OFF (Play only current track/queue)"
+                  ? "Autoplay is on (continues playing after queue finishes)"
+                  : "Autoplay is off"
               }
             >
               <Infinity className="w-4 h-4" />

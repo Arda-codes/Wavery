@@ -1,5 +1,5 @@
 //! Universal API and Audio Adapter for Wavery.
-//! Seamlessly abstracts Tauri IPC and Browser HTTP Streaming under a single contract.
+//! Abstracts Tauri IPC and Browser HTTP Streaming under a single contract.
 
 import { Track, PlayerStatus, ImportStrategy, Playlist } from "../types";
 import { useSettingsStore } from "../stores/settingsStore";

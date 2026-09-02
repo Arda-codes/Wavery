@@ -41,7 +41,7 @@ export const ModeSwitcher: React.FC<ModeSwitcherProps> = ({ onSwitchStart }) => 
     <div
       className="inline-flex items-center p-0.5 bg-[#18181D] border border-white/[0.08] rounded-full shadow-inner select-none ml-2"
       role="radiogroup"
-      aria-label="Application Mode Switcher"
+      aria-label="Application Mode"
     >
       {/* Native Desktop Option */}
       <button
@@ -50,7 +50,7 @@ export const ModeSwitcher: React.FC<ModeSwitcherProps> = ({ onSwitchStart }) => 
         aria-checked={isNative}
         disabled={isSwitching}
         onClick={() => handleSwitch("native")}
-        title="Native Desktop App: Direct Rodio low-latency audio engine, MPRIS & system integrations"
+        title="Desktop App: Native Rodio audio engine with system tray and media keys"
         className={`relative flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs transition-all duration-200 focus:outline-none ${
           isNative
             ? "bg-white/[0.12] text-white font-bold shadow-sm border border-white/[0.12]"
@@ -75,7 +75,7 @@ export const ModeSwitcher: React.FC<ModeSwitcherProps> = ({ onSwitchStart }) => 
         aria-checked={!isNative}
         disabled={isSwitching}
         onClick={() => handleSwitch("web")}
-        title="Web Browser Client: 144Hz Chromium rendering, web audio streaming & remote access"
+        title="Web Client: In-browser streaming from the local server"
         className={`relative flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs transition-all duration-200 focus:outline-none ${
           !isNative
             ? "bg-white/[0.12] text-white font-bold shadow-sm border border-white/[0.12]"

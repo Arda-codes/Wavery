@@ -19,7 +19,6 @@ import {
   Trash2,
   Play,
   Pause,
-  Volume2,
   Sparkles,
   Mic2,
   Maximize2,
@@ -437,7 +436,7 @@ export const NowPlayingDrawer: React.FC = () => {
 
   return (
     <aside
-      aria-label="Now Playing and Queue Drawer"
+      aria-label="Now Playing and Queue"
       className="w-80 lg:w-96 bg-[#121216]/95 border-l border-white/[0.08] backdrop-blur-2xl flex flex-col justify-between select-none z-20 flex-shrink-0 shadow-2xl animate-fade-in"
     >
       {/* Drawer Header & Tab Selector */}
@@ -471,7 +470,7 @@ export const NowPlayingDrawer: React.FC = () => {
           <button
             onClick={openFullscreen}
             className="w-7 h-7 rounded-full bg-white/[0.06] hover:bg-white/[0.12] text-[#A1A1AA] hover:text-white flex items-center justify-center transition"
-            title="Expand Fullscreen Experience"
+            title="Open Fullscreen"
           >
             <Maximize2 className="w-3.5 h-3.5" />
           </button>
@@ -582,7 +581,7 @@ export const NowPlayingDrawer: React.FC = () => {
                 <span>
                   {currentTrack.metadata.format.toUpperCase() === "FLAC" ||
                   currentTrack.metadata.format.toUpperCase() === "WAV"
-                    ? "Lossless Audio"
+                    ? "Lossless"
                     : "High Quality"}
                 </span>
                 <span className="text-[#71717A]">
@@ -600,7 +599,7 @@ export const NowPlayingDrawer: React.FC = () => {
                 className="flex items-center justify-center space-x-1.5 px-3 py-2 bg-white/[0.06] hover:bg-white/[0.12] text-white rounded-xl text-xs font-semibold border border-white/[0.06] transition"
               >
                 <User className="w-3.5 h-3.5 text-[#FA586A]" />
-                <span className="truncate">Go to Artist</span>
+                <span className="truncate">View Artist</span>
               </button>
               {currentTrack.metadata.album ? (
                 <button
@@ -613,47 +612,59 @@ export const NowPlayingDrawer: React.FC = () => {
                   className="flex items-center justify-center space-x-1.5 px-3 py-2 bg-white/[0.06] hover:bg-white/[0.12] text-white rounded-xl text-xs font-semibold border border-white/[0.06] transition"
                 >
                   <Disc className="w-3.5 h-3.5 text-[#FA586A]" />
-                  <span className="truncate">Go to Album</span>
+                  <span className="truncate">View Album</span>
                 </button>
-              ) : null}
+              ) : (
+                <button
+                  onClick={openFullscreen}
+                  className="flex items-center justify-center space-x-1.5 px-3 py-2 bg-white/[0.06] hover:bg-white/[0.12] text-white rounded-xl text-xs font-semibold border border-white/[0.06] transition"
+                >
+                  <Maximize2 className="w-3.5 h-3.5 text-[#FA586A]" />
+                  <span>Fullscreen</span>
+                </button>
+              )}
             </div>
           </div>
         ) : (
-          <div className="text-center py-10 text-[#71717A] space-y-2">
-            <Volume2 className="w-10 h-10 mx-auto opacity-30" />
-            <p className="text-xs">No track currently playing</p>
+          <div className="py-12 text-center text-[#71717A] space-y-3">
+            <Music className="w-12 h-12 mx-auto opacity-20" />
+            <p className="text-xs font-semibold text-[#A1A1AA]">
+              No song selected
+            </p>
+            <p className="text-[11px] text-[#71717A]">
+              Choose a track from your library to start playback.
+            </p>
           </div>
         )}
 
-        {/* Tab 1: Up Next / Queue Section */}
+        {/* Tab 1: Queue Section */}
         {activeTab === "queue" && (
           <div className="pt-4 border-t border-white/[0.06] space-y-3">
             <div className="flex items-center justify-between">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-1.5">
-                <span>Up Next</span>
-                <span className="text-[#71717A] font-normal font-mono">
-                  ({upcomingQueue.length})
+              <div className="flex items-center space-x-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-white">
+                  Next In Queue
+                </h4>
+                <span className="text-[10px] font-bold text-[#71717A] bg-white/[0.06] px-2 py-0.5 rounded-full">
+                  {upcomingQueue.length}
                 </span>
-              </h4>
+              </div>
               <div className="flex items-center space-x-2">
                 <button
-                  type="button"
                   onClick={toggleAutoplay}
-                  className={`flex items-center space-x-1 px-2 py-0.5 rounded-lg text-[11px] font-semibold transition-all ${
+                  className={`text-[11px] font-semibold flex items-center space-x-1 px-2 py-0.5 rounded-md transition ${
                     isAutoplay
-                      ? "bg-[#FA586A]/15 text-[#FA586A] border border-[#FA586A]/30 shadow-sm"
-                      : "text-[#71717A] hover:text-white hover:bg-white/[0.06] border border-transparent"
+                      ? "text-[#FA586A] bg-[#FA586A]/10 border border-[#FA586A]/20"
+                      : "text-[#71717A] hover:text-white"
                   }`}
                   title={
                     isAutoplay
-                      ? playbackContext?.type === "tracks"
-                        ? "Autoplay is ON (Continuous playback from All Songs)"
-                        : "Autoplay is ON"
-                      : "Autoplay is OFF (Play only current track/queue)"
+                      ? "Autoplay is on (continues playing after queue finishes)"
+                      : "Autoplay is off"
                   }
                 >
-                  <Infinity className="w-3.5 h-3.5" />
-                  <span className="text-[10px]">Autoplay</span>
+                  <Infinity className="w-3 h-3" />
+                  <span>Autoplay</span>
                 </button>
                 {upcomingQueue.length > 0 && (
                   <button
@@ -672,7 +683,7 @@ export const NowPlayingDrawer: React.FC = () => {
               <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-[#FA586A]/10 border border-[#FA586A]/20 text-[11px]">
                 <div className="flex items-center space-x-1.5 text-[#FA586A] font-medium">
                   <Infinity className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span>Autoplay from All Songs enabled</span>
+                  <span>Autoplay enabled</span>
                 </div>
                 <span className="text-[10px] text-[#71717A]">Infinite</span>
               </div>
@@ -725,10 +736,10 @@ export const NowPlayingDrawer: React.FC = () => {
               <div className="py-12 text-center text-[#71717A] space-y-2">
                 <Mic2 className="w-8 h-8 mx-auto opacity-30" />
                 <p className="text-xs font-semibold text-[#A1A1AA]">
-                  Lyrics aren't available for this song
+                  No lyrics found for this song
                 </p>
                 <p className="text-[11px] text-[#71717A] max-w-xs mx-auto">
-                  When embedded LRC or metadata lyrics are included in your audio files, they will appear here.
+                  Embedded LRC or tag lyrics will show up here during playback.
                 </p>
               </div>
             ) : (

@@ -20,6 +20,7 @@ use wavery_core::traits::LibraryManager;
 
 /// Wavery Server StatusNotifierItem tray implementation.
 pub struct WaveryServerTray {
+    #[allow(dead_code)]
     state: Arc<AppState>,
 }
 

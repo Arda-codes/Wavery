@@ -536,7 +536,9 @@ fn find_server_executable() -> Option<PathBuf> {
     let root = find_project_root();
     let candidates = [
         root.join("target/release/wavery-server"),
+        root.join("target/release/wavery-server.exe"),
         root.join("target/debug/wavery-server"),
+        root.join("target/debug/wavery-server.exe"),
     ];
 
     for p in &candidates {
@@ -563,9 +565,12 @@ fn find_server_executable() -> Option<PathBuf> {
 fn open_browser_url(url: &str) -> Result<(), std::io::Error> {
     #[cfg(target_os = "windows")]
     {
-        std::process::Command::new("cmd")
-            .args(["/c", "start", "", url])
-            .spawn()?;
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        let mut cmd = std::process::Command::new("cmd");
+        cmd.args(["/c", "start", "", url]);
+        cmd.creation_flags(CREATE_NO_WINDOW);
+        cmd.spawn()?;
     }
     #[cfg(target_os = "macos")]
     {
@@ -620,6 +625,13 @@ fn spawn_server_process() -> Result<(), std::io::Error> {
         c
     };
 
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
@@ -647,19 +659,60 @@ fn ensure_server_running(host: &str, port: u16) {
     }
 }
 
-async fn check_session_active_client(url: &str) -> Option<String> {
-    let output = std::process::Command::new("curl")
-        .args(["-s", "--max-time", "1", url])
-        .output()
+async fn check_session_active_client(host: &str, port: u16) -> Option<String> {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let addr = format!("{}:{}", host, port);
+    let connect_res = tokio::time::timeout(
+        Duration::from_millis(300),
+        tokio::net::TcpStream::connect(&addr),
+    )
+    .await
+    .ok()?
+    .ok()?;
+
+    let (mut reader, mut writer) = connect_res.into_split();
+    let req = format!(
+        "GET /api/session HTTP/1.1\r\nHost: {}:{}\r\nConnection: close\r\n\r\n",
+        host, port
+    );
+    tokio::time::timeout(Duration::from_millis(300), writer.write_all(req.as_bytes()))
+        .await
+        .ok()?
         .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let body = String::from_utf8(output.stdout).ok()?;
-    let val: serde_json::Value = serde_json::from_str(&body).ok()?;
+    let _ = writer.shutdown().await;
+
+    let mut buf = Vec::new();
+    tokio::time::timeout(Duration::from_millis(300), reader.read_to_end(&mut buf))
+        .await
+        .ok()?
+        .ok()?;
+
+    let response_str = String::from_utf8_lossy(&buf);
+    let body = response_str.split("\r\n\r\n").nth(1)?;
+    let val: serde_json::Value = serde_json::from_str(body).ok()?;
     val.get("active_client")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
+}
+
+async fn notify_server_quit(host: &str, port: u16) {
+    use tokio::io::AsyncWriteExt;
+
+    let addr = format!("{}:{}", host, port);
+    if let Ok(Ok(mut stream)) = tokio::time::timeout(
+        Duration::from_millis(300),
+        tokio::net::TcpStream::connect(&addr),
+    )
+    .await
+    {
+        let req = format!(
+            "POST /api/app/quit HTTP/1.1\r\nHost: {}:{}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            host, port
+        );
+        let _ = stream.write_all(req.as_bytes()).await;
+        let _ = stream.shutdown().await;
+    }
 }
 
 #[tauri::command]
@@ -1037,10 +1090,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         let cfg = state_clone.config.lock();
                                         (cfg.server.host.clone(), cfg.server.port)
                                     };
-                                    let quit_url = format!("http://{}:{}/api/app/quit", server_host, server_port);
-                                    let _ = std::process::Command::new("curl")
-                                        .args(["-s", "-X", "POST", &quit_url])
-                                        .spawn();
+                                    notify_server_quit(&server_host, server_port).await;
                                     app_clone.exit(0);
                                 });
                             }
@@ -1090,11 +1140,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let monitor_host = config.server.host.clone();
             let monitor_port = config.server.port;
             tauri::async_runtime::spawn(async move {
-                let session_url = format!("http://{}:{}/api/session", monitor_host, monitor_port);
                 let mut last_client = String::from("native");
                 loop {
                     tokio::time::sleep(tokio::time::Duration::from_millis(350)).await;
-                    if let Some(active) = check_session_active_client(&session_url).await {
+                    if let Some(active) = check_session_active_client(&monitor_host, monitor_port).await {
                         if active == "native" && last_client == "web" {
                             if let Some(window) = app_monitor_handle.get_webview_window("main") {
                                 let _ = window.show();

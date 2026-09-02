@@ -903,9 +903,13 @@ pub fn find_native_desktop_executable() -> Option<PathBuf> {
     let root = find_project_root();
     let candidates = [
         root.join("target/debug/wavery-tauri"),
+        root.join("target/debug/wavery-tauri.exe"),
         root.join("target/release/wavery-tauri"),
+        root.join("target/release/wavery-tauri.exe"),
         root.join("target/debug/wavery"),
+        root.join("target/debug/wavery.exe"),
         root.join("target/release/wavery"),
+        root.join("target/release/wavery.exe"),
     ];
 
     for p in &candidates {
@@ -933,9 +937,12 @@ pub fn find_native_desktop_executable() -> Option<PathBuf> {
 pub fn open_browser_url(url: &str) -> Result<(), std::io::Error> {
     #[cfg(target_os = "windows")]
     {
-        std::process::Command::new("cmd")
-            .args(["/c", "start", "", url])
-            .spawn()?;
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        let mut cmd = std::process::Command::new("cmd");
+        cmd.args(["/c", "start", "", url]);
+        cmd.creation_flags(CREATE_NO_WINDOW);
+        cmd.spawn()?;
     }
     #[cfg(target_os = "macos")]
     {
@@ -990,6 +997,13 @@ pub fn spawn_native_process() -> Result<(), std::io::Error> {
         c.args(["run", "-p", "wavery-tauri"]);
         c
     };
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
 
     #[cfg(target_os = "linux")]
     {

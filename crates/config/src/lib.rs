@@ -384,9 +384,14 @@ pub fn save(path: &Path, config: &Config) -> Result<(), ConfigError> {
         let mut replaced = false;
         let mut last_err = None;
         for _ in 0..25 {
-            if fs::rename(&tmp_path, path).is_ok() {
-                replaced = true;
-                break;
+            match fs::rename(&tmp_path, path) {
+                Ok(_) => {
+                    replaced = true;
+                    break;
+                }
+                Err(e) => {
+                    last_err = Some(e);
+                }
             }
             if fs::copy(&tmp_path, path).is_ok() {
                 let _ = fs::remove_file(&tmp_path);

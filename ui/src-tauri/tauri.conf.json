@@ -32,7 +32,7 @@
       "icons/icon.png",
       "icons/icon.ico"
     ],
-    "category": "AudioVideo",
+    "category": "Music",
     "shortDescription": "High-performance modular music player",
     "longDescription": "Wavery is a modular, high-performance desktop and browser music player with SQLite FTS5 search, gapless audio playback, and Apple HIG aesthetic.",
     "linux": {

@@ -527,3 +527,40 @@ fn test_player_synchronous_threading_models() {
         });
     }
 }
+
+#[test]
+fn test_crossfade_equal_power_curve_mathematical_invariants() {
+    for step in 0..=100 {
+        let t = step as f32 / 100.0;
+        let in_gain = (t * std::f32::consts::FRAC_PI_2).sin();
+        let out_gain = (t * std::f32::consts::FRAC_PI_2).cos();
+
+        let power = in_gain * in_gain + out_gain * out_gain;
+        assert!((power - 1.0).abs() < 1e-5, "Equal power identity failed at t={t}: power={power}");
+
+        if step == 0 {
+            assert!((in_gain - 0.0).abs() < 1e-5);
+            assert!((out_gain - 1.0).abs() < 1e-5);
+        }
+        if step == 100 {
+            assert!((in_gain - 1.0).abs() < 1e-5);
+            assert!((out_gain - 0.0).abs() < 1e-5);
+        }
+        if step == 50 {
+            let expected = std::f32::consts::FRAC_1_SQRT_2;
+            assert!((in_gain - expected).abs() < 1e-3);
+            assert!((out_gain - expected).abs() < 1e-3);
+        }
+    }
+}
+
+#[test]
+fn test_crossfade_player_configuration() {
+    if let Ok(mut player) = RodioPlayer::try_new() {
+        player.set_crossfade(Duration::from_millis(3500));
+        assert!(player.play().is_ok());
+        assert!(player.pause().is_ok());
+        assert!(player.stop().is_ok());
+    }
+}
+

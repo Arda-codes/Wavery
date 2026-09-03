@@ -42,6 +42,9 @@ pub trait PlayerEngine: Send + Sync {
 
     /// Total duration of current loaded track.
     fn duration(&self) -> Option<Duration>;
+
+    /// Set crossfade transition duration.
+    fn set_crossfade(&mut self, _duration: Duration) {}
 }
 
 /// Library & Storage Trait (LibraryManager)
@@ -149,6 +152,16 @@ pub trait QueueManager: Send + Sync {
 
     /// View entire linear queue.
     fn queue(&self) -> &[Track];
+
+    /// Whether shuffle is enabled.
+    fn is_shuffle(&self) -> bool {
+        false
+    }
+
+    /// Current loop mode.
+    fn loop_mode(&self) -> LoopMode {
+        LoopMode::Off
+    }
 }
 
 /// Linux Integration Trait (MprisBridge)

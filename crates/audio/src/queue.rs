@@ -207,4 +207,12 @@ impl QueueManager for StandardQueueManager {
     fn queue(&self) -> &[Track] {
         &self.queue
     }
+
+    fn is_shuffle(&self) -> bool {
+        self.shuffle
+    }
+
+    fn loop_mode(&self) -> LoopMode {
+        self.loop_mode
+    }
 }

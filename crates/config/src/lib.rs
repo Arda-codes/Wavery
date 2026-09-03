@@ -16,6 +16,8 @@ pub enum ConfigError {
     Toml(#[from] toml::de::Error),
     #[error("TOML string conversion error: {0}")]
     TomlSerialize(#[from] toml::ser::Error),
+    #[error("JSON serialization/deserialization failed: {0}")]
+    Json(#[from] serde_json::Error),
     #[error("Failed to determine user home or config directories")]
     DirectoryResolutionFailed,
 }
@@ -376,6 +378,90 @@ pub fn save(path: &Path, config: &Config) -> Result<(), ConfigError> {
     {
         let mut file = File::create(&tmp_path)?;
         file.write_all(toml_str.as_bytes())?;
+        file.sync_all()?;
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let mut replaced = false;
+        let mut last_err = None;
+        for _ in 0..25 {
+            match fs::rename(&tmp_path, path) {
+                Ok(_) => {
+                    replaced = true;
+                    break;
+                }
+                Err(e) => {
+                    last_err = Some(e);
+                }
+            }
+            if fs::copy(&tmp_path, path).is_ok() {
+                let _ = fs::remove_file(&tmp_path);
+                replaced = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        if !replaced {
+            let _ = fs::remove_file(&tmp_path);
+            if let Some(err) = last_err {
+                return Err(ConfigError::Io(err));
+            }
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        fs::rename(&tmp_path, path)?;
+    }
+    Ok(())
+}
+
+/// Resolves standard XDG session file path `~/.config/wavery/session.json`.
+pub fn default_session_path() -> Result<PathBuf, ConfigError> {
+    if let Some(proj_dirs) = ProjectDirs::from("org", "wavery", "wavery") {
+        let config_dir = proj_dirs.config_dir();
+        fs::create_dir_all(config_dir)?;
+        Ok(config_dir.join("session.json"))
+    } else {
+        Err(ConfigError::DirectoryResolutionFailed)
+    }
+}
+
+/// Loads playback session from the specified path. Returns None if file does not exist.
+pub fn load_session(path: &Path) -> Result<Option<wavery_core::models::PlaybackSession>, ConfigError> {
+    if path.exists() {
+        let contents = fs::read_to_string(path)?;
+        if contents.trim().is_empty() {
+            return Ok(None);
+        }
+        let session: wavery_core::models::PlaybackSession = serde_json::from_str(&contents)?;
+        Ok(Some(session))
+    } else {
+        Ok(None)
+    }
+}
+
+/// Persists playback session to file atomically.
+pub fn save_session_atomic(
+    path: &Path,
+    session: &wavery_core::models::PlaybackSession,
+) -> Result<(), ConfigError> {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(parent)?;
+
+    let json_str = serde_json::to_string_pretty(session)?;
+    let count = TMP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let pid = std::process::id();
+    let file_stem = path.file_name().and_then(|n| n.to_str()).unwrap_or("session.json");
+    let tmp_path = parent.join(format!(".{file_stem}.tmp.{pid}_{count}_{nanos}"));
+
+    {
+        let mut file = File::create(&tmp_path)?;
+        file.write_all(json_str.as_bytes())?;
         file.sync_all()?;
     }
 

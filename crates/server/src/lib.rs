@@ -229,6 +229,10 @@ impl AppState {
     ) -> Self {
         let config_path = wavery_config::default_config_path().unwrap_or_else(|_| PathBuf::from("config.toml"));
         let config = wavery_config::load_or_create(&config_path).unwrap_or_default();
+        let session = wavery_config::default_session_path()
+            .ok()
+            .and_then(|p| wavery_config::load_session(&p).ok())
+            .flatten();
         Self {
             library,
             reader,
@@ -236,7 +240,7 @@ impl AppState {
             artwork_cache: Arc::new(tokio::sync::RwLock::new(ArtworkCache::with_default_capacity())),
             config: Arc::new(tokio::sync::RwLock::new(config)),
             config_path,
-            session: Arc::new(tokio::sync::RwLock::new(None)),
+            session: Arc::new(tokio::sync::RwLock::new(session)),
         }
     }
 
@@ -249,6 +253,10 @@ impl AppState {
         config: wavery_config::Config,
         config_path: PathBuf,
     ) -> Self {
+        let session = wavery_config::default_session_path()
+            .ok()
+            .and_then(|p| wavery_config::load_session(&p).ok())
+            .flatten();
         Self {
             library,
             reader,
@@ -256,7 +264,7 @@ impl AppState {
             artwork_cache: Arc::new(tokio::sync::RwLock::new(ArtworkCache::with_default_capacity())),
             config: Arc::new(tokio::sync::RwLock::new(config)),
             config_path,
-            session: Arc::new(tokio::sync::RwLock::new(None)),
+            session: Arc::new(tokio::sync::RwLock::new(session)),
         }
     }
 }
@@ -933,7 +941,7 @@ pub fn find_native_desktop_executable() -> Option<PathBuf> {
     None
 }
 
-/// Opens a URL in the user's default browser.
+/// Opens a URL in the user's default browser across Windows, macOS, and Linux.
 pub fn open_browser_url(url: &str) -> Result<(), std::io::Error> {
     #[cfg(target_os = "windows")]
     {
@@ -942,43 +950,79 @@ pub fn open_browser_url(url: &str) -> Result<(), std::io::Error> {
         let mut cmd = std::process::Command::new("cmd");
         cmd.args(["/c", "start", "", url]);
         cmd.creation_flags(CREATE_NO_WINDOW);
-        cmd.spawn()?;
+        let _ = cmd.spawn();
     }
     #[cfg(target_os = "macos")]
     {
-        std::process::Command::new("open")
+        let _ = std::process::Command::new("open")
             .arg(url)
-            .spawn()?;
+            .spawn();
     }
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
-        let success = std::process::Command::new("xdg-open")
+        let mut spawned = false;
+
+        if std::process::Command::new("xdg-open")
             .arg(url)
+            .env_remove("GDK_BACKEND")
+            .env_remove("WEBKIT_DISABLE_COMPOSITING_MODE")
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false);
+            .spawn()
+            .is_ok()
+        {
+            spawned = true;
+        }
 
-        if !success {
-            let gio_success = std::process::Command::new("gio")
+        if !spawned
+            && std::process::Command::new("gio")
                 .args(["open", url])
+                .env_remove("GDK_BACKEND")
+                .env_remove("WEBKIT_DISABLE_COMPOSITING_MODE")
                 .stdin(std::process::Stdio::null())
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null())
-                .status()
-                .map(|s| s.success())
-                .unwrap_or(false);
+                .spawn()
+                .is_ok()
+        {
+            spawned = true;
+        }
 
-            if !gio_success {
-                let _ = std::process::Command::new("python3")
-                    .args(["-m", "webbrowser", url])
+        if !spawned {
+            for browser in [
+                "firefox",
+                "google-chrome",
+                "chromium",
+                "brave-browser",
+                "x-www-browser",
+                "sensible-browser",
+            ] {
+                if std::process::Command::new(browser)
+                    .arg(url)
+                    .env_remove("GDK_BACKEND")
+                    .env_remove("WEBKIT_DISABLE_COMPOSITING_MODE")
                     .stdin(std::process::Stdio::null())
                     .stdout(std::process::Stdio::null())
                     .stderr(std::process::Stdio::null())
-                    .spawn();
+                    .spawn()
+                    .is_ok()
+                {
+                    spawned = true;
+                    break;
+                }
             }
+        }
+
+        if !spawned {
+            let _ = std::process::Command::new("python3")
+                .args(["-m", "webbrowser", url])
+                .env_remove("GDK_BACKEND")
+                .env_remove("WEBKIT_DISABLE_COMPOSITING_MODE")
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn();
         }
     }
     Ok(())
@@ -1114,8 +1158,13 @@ async fn save_session_handler(
     State(state): State<Arc<AppState>>,
     Json(session): Json<wavery_core::models::PlaybackSession>,
 ) -> Result<Json<StatusResponse>, ServerError> {
-    let mut guard = state.session.write().await;
-    *guard = Some(session);
+    {
+        let mut guard = state.session.write().await;
+        *guard = Some(session.clone());
+    }
+    if let Ok(sess_path) = wavery_config::default_session_path() {
+        let _ = wavery_config::save_session_atomic(&sess_path, &session);
+    }
     Ok(Json(StatusResponse {
         ok: true,
         message: "Session saved successfully".to_string(),
@@ -1134,11 +1183,18 @@ async fn claim_playback_handler(
     let mut guard = state.session.write().await;
     if let Some(s) = guard.as_mut() {
         s.active_client = Some(req.client.clone());
+        if let Ok(sess_path) = wavery_config::default_session_path() {
+            let _ = wavery_config::save_session_atomic(&sess_path, s);
+        }
     } else {
-        *guard = Some(wavery_core::models::PlaybackSession {
+        let s = wavery_core::models::PlaybackSession {
             active_client: Some(req.client.clone()),
             ..Default::default()
-        });
+        };
+        if let Ok(sess_path) = wavery_config::default_session_path() {
+            let _ = wavery_config::save_session_atomic(&sess_path, &s);
+        }
+        *guard = Some(s);
     }
     Ok(Json(StatusResponse {
         ok: true,
@@ -1155,14 +1211,24 @@ async fn switch_to_native_handler(
         let mut guard = state.session.write().await;
         if let Some(s) = guard.as_mut() {
             s.active_client = Some("native".to_string());
+            if let Ok(sess_path) = wavery_config::default_session_path() {
+                let _ = wavery_config::save_session_atomic(&sess_path, s);
+            }
         }
     }
 
     match spawn_native_process() {
-        Ok(_) => Ok(Json(StatusResponse {
-            ok: true,
-            message: "Native desktop display launched successfully.".to_string(),
-        })),
+        Ok(_) => {
+            // Strict mutual exclusivity: Terminate the web server process so only Tauri runs
+            tokio::spawn(async {
+                tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
+                std::process::exit(0);
+            });
+            Ok(Json(StatusResponse {
+                ok: true,
+                message: "Native desktop display launched successfully.".to_string(),
+            }))
+        }
         Err(e) => {
             tracing::error!("Failed to launch native desktop display: {}", e);
             Err(ServerError::Internal(format!(

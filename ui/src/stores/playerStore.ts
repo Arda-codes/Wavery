@@ -45,6 +45,18 @@ interface PlayerSession {
   positionSecs: number;
 }
 
+interface BackendSessionPayload {
+  current_track_id?: string;
+  queue: Track[];
+  queue_index?: number;
+  position_secs?: number;
+  is_playing?: boolean;
+  is_shuffle?: boolean;
+  is_autoplay?: boolean;
+  loop_mode?: string;
+  active_client?: string;
+}
+
 function saveSession(session: PlayerSession): void {
   if (typeof localStorage !== "undefined") {
     try {
@@ -53,9 +65,10 @@ function saveSession(session: PlayerSession): void {
       // Ignore quota or security errors
     }
   }
-  // Synchronize session to backend so Web client and Tauri client share the exact same state
+  // Synchronize session to backend/disk so Web client and Tauri client share the exact same state
   try {
-    const payload = {
+    const isTauri = typeof window !== "undefined" && Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__);
+    const payload: BackendSessionPayload = {
       current_track_id: session.currentTrackId,
       queue: session.queue,
       queue_index: session.queueIndex,
@@ -64,15 +77,21 @@ function saveSession(session: PlayerSession): void {
       is_shuffle: session.isShuffle,
       is_autoplay: session.isAutoplay,
       loop_mode: session.loopMode,
-      active_client: typeof window !== "undefined" && Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) ? "native" : "web",
+      active_client: isTauri ? "native" : "web",
     };
-    fetch("/api/session", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    }).catch(() => {});
+    if (isTauri) {
+      import("@tauri-apps/api/core").then(({ invoke }) => {
+        invoke("save_session_state", { session: payload }).catch(() => {});
+      }).catch(() => {});
+    } else {
+      fetch("/api/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }).catch(() => {});
+    }
   } catch {
-    // Ignore fetch errors
+    // Ignore fetch/IPC errors
   }
 }
 
@@ -226,8 +245,11 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
         const trackChanged = prev.currentTrackId !== newTrackId;
 
         if (trackChanged || currentPollingTrackId !== newTrackId) {
-          autoCrossfadeTriggered = false;
           currentPollingTrackId = newTrackId;
+          // Only reset autoCrossfadeTriggered once the incoming track is playing or not in transient stopped state
+          if (s.position_secs > 0 || s.state === "Playing") {
+            autoCrossfadeTriggered = false;
+          }
         }
 
         // Check if any status field changed (preserving client-side loop_mode)
@@ -783,21 +805,29 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
   restoreSession: async () => {
     let session = loadSession();
     try {
-      const res = await fetch("/api/session");
-      if (res.ok) {
-        const backendSession = await res.json();
-        if (backendSession && backendSession.queue && backendSession.queue.length > 0) {
-          session = {
-            queue: backendSession.queue,
-            queueIndex: backendSession.queue_index ?? 0,
-            currentTrackId: backendSession.current_track_id,
-            playbackContext: null,
-            isShuffle: backendSession.is_shuffle ?? false,
-            isAutoplay: backendSession.is_autoplay ?? true,
-            loopMode: backendSession.loop_mode ?? "Off",
-            positionSecs: backendSession.position_secs ?? 0,
-          };
+      const isTauri = typeof window !== "undefined" && Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__);
+      let backendSession: BackendSessionPayload | null = null;
+      if (isTauri) {
+        const { invoke } = await import("@tauri-apps/api/core");
+        backendSession = await invoke<BackendSessionPayload | null>("get_saved_session");
+      } else {
+        const res = await fetch("/api/session");
+        if (res.ok) {
+          backendSession = (await res.json()) as BackendSessionPayload;
         }
+      }
+
+      if (backendSession && backendSession.queue && backendSession.queue.length > 0) {
+        session = {
+          queue: backendSession.queue,
+          queueIndex: backendSession.queue_index ?? 0,
+          currentTrackId: backendSession.current_track_id,
+          playbackContext: null,
+          isShuffle: backendSession.is_shuffle ?? false,
+          isAutoplay: backendSession.is_autoplay ?? true,
+          loopMode: backendSession.loop_mode ?? "Off",
+          positionSecs: backendSession.position_secs ?? 0,
+        };
       }
     } catch {
       // Fall back to localStorage session

@@ -141,6 +141,7 @@ struct AppState {
     queue: SyncMutex<StandardQueueManager>,
     config: SyncMutex<Config>,
     artwork_cache: SyncMutex<ArtworkCache>,
+    server_process: SyncMutex<Option<std::process::Child>>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -473,7 +474,13 @@ async fn save_config(
     save_config_file(&cfg_path, &config)?;
     {
         let mut guard = state.config.lock();
-        *guard = config;
+        *guard = config.clone();
+    }
+    {
+        let mut player_guard = state.player.lock().await;
+        if let Some(player) = player_guard.as_mut() {
+            player.set_crossfade(Duration::from_millis(config.audio.crossfade_duration_ms as u64));
+        }
     }
     Ok(())
 }
@@ -490,6 +497,12 @@ async fn import_config_json(
     {
         let mut guard = state.config.lock();
         *guard = imported_config.clone();
+    }
+    {
+        let mut player_guard = state.player.lock().await;
+        if let Some(player) = player_guard.as_mut() {
+            player.set_crossfade(Duration::from_millis(imported_config.audio.crossfade_duration_ms as u64));
+        }
     }
     Ok(imported_config)
 }
@@ -534,12 +547,21 @@ fn find_project_root() -> PathBuf {
 
 fn find_server_executable() -> Option<PathBuf> {
     let root = find_project_root();
-    let candidates = [
-        root.join("target/release/wavery-server"),
-        root.join("target/release/wavery-server.exe"),
-        root.join("target/debug/wavery-server"),
-        root.join("target/debug/wavery-server.exe"),
-    ];
+    let candidates = if cfg!(debug_assertions) {
+        [
+            root.join("target/debug/wavery-server"),
+            root.join("target/debug/wavery-server.exe"),
+            root.join("target/release/wavery-server"),
+            root.join("target/release/wavery-server.exe"),
+        ]
+    } else {
+        [
+            root.join("target/release/wavery-server"),
+            root.join("target/release/wavery-server.exe"),
+            root.join("target/debug/wavery-server"),
+            root.join("target/debug/wavery-server.exe"),
+        ]
+    };
 
     for p in &candidates {
         if p.is_file() {
@@ -570,49 +592,104 @@ fn open_browser_url(url: &str) -> Result<(), std::io::Error> {
         let mut cmd = std::process::Command::new("cmd");
         cmd.args(["/c", "start", "", url]);
         cmd.creation_flags(CREATE_NO_WINDOW);
-        cmd.spawn()?;
+        let _ = cmd.spawn();
     }
     #[cfg(target_os = "macos")]
     {
-        std::process::Command::new("open")
+        let _ = std::process::Command::new("open")
             .arg(url)
-            .spawn()?;
+            .spawn();
     }
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
-        let success = std::process::Command::new("xdg-open")
+        let mut spawned = false;
+
+        if std::process::Command::new("xdg-open")
             .arg(url)
+            .env_remove("GDK_BACKEND")
+            .env_remove("WEBKIT_DISABLE_COMPOSITING_MODE")
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false);
+            .spawn()
+            .is_ok()
+        {
+            spawned = true;
+        }
 
-        if !success {
-            let gio_success = std::process::Command::new("gio")
+        if !spawned
+            && std::process::Command::new("gio")
                 .args(["open", url])
+                .env_remove("GDK_BACKEND")
+                .env_remove("WEBKIT_DISABLE_COMPOSITING_MODE")
                 .stdin(std::process::Stdio::null())
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null())
-                .status()
-                .map(|s| s.success())
-                .unwrap_or(false);
+                .spawn()
+                .is_ok()
+        {
+            spawned = true;
+        }
 
-            if !gio_success {
-                let _ = std::process::Command::new("python3")
-                    .args(["-m", "webbrowser", url])
+        if !spawned {
+            for browser in [
+                "firefox",
+                "google-chrome",
+                "chromium",
+                "brave-browser",
+                "x-www-browser",
+                "sensible-browser",
+            ] {
+                if std::process::Command::new(browser)
+                    .arg(url)
+                    .env_remove("GDK_BACKEND")
+                    .env_remove("WEBKIT_DISABLE_COMPOSITING_MODE")
                     .stdin(std::process::Stdio::null())
                     .stdout(std::process::Stdio::null())
                     .stderr(std::process::Stdio::null())
-                    .spawn();
+                    .spawn()
+                    .is_ok()
+                {
+                    spawned = true;
+                    break;
+                }
             }
+        }
+
+        if !spawned {
+            let _ = std::process::Command::new("python3")
+                .args(["-m", "webbrowser", url])
+                .env_remove("GDK_BACKEND")
+                .env_remove("WEBKIT_DISABLE_COMPOSITING_MODE")
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn();
         }
     }
     Ok(())
 }
 
-fn spawn_server_process() -> Result<(), std::io::Error> {
+/// Terminates any existing wavery-server processes to guarantee mutual exclusivity.
+fn terminate_server_instances() {
+    #[cfg(unix)]
+    {
+        let _ = std::process::Command::new("pkill")
+            .args(["-f", "wavery-server"])
+            .status();
+    }
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        let mut kill_cmd = std::process::Command::new("taskkill");
+        kill_cmd.args(["/F", "/IM", "wavery-server.exe"]);
+        kill_cmd.creation_flags(CREATE_NO_WINDOW);
+        let _ = kill_cmd.status();
+    }
+}
+
+fn spawn_detached_server_process() -> Result<(), std::io::Error> {
     let root = find_project_root();
     let mut cmd = if let Some(exe) = find_server_executable() {
         let mut c = std::process::Command::new(&exe);
@@ -646,73 +723,51 @@ fn spawn_server_process() -> Result<(), std::io::Error> {
     Ok(())
 }
 
-fn ensure_server_running(host: &str, port: u16) {
-    let addr = format!("{}:{}", host, port);
-    if std::net::TcpStream::connect(&addr).is_err() {
-        let _ = spawn_server_process();
-        for _ in 0..15 {
-            std::thread::sleep(std::time::Duration::from_millis(100));
-            if std::net::TcpStream::connect(&addr).is_ok() {
-                break;
-            }
+/// Forcefully terminates all spawned background child processes and subprocess trees.
+fn kill_all_subprocesses(state: &AppState) {
+    // 1. Terminate tracked server child process and its child tree
+    let mut proc_guard = state.server_process.lock();
+    if let Some(mut child) = proc_guard.take() {
+        let pid = child.id();
+        let _ = child.kill();
+        let _ = child.wait();
+
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            let mut kill_cmd = std::process::Command::new("taskkill");
+            kill_cmd.args(["/F", "/T", "/PID", &pid.to_string()]);
+            kill_cmd.creation_flags(CREATE_NO_WINDOW);
+            let _ = kill_cmd.status();
+        }
+
+        #[cfg(unix)]
+        {
+            let _ = std::process::Command::new("pkill")
+                .args(["-P", &pid.to_string()])
+                .status();
         }
     }
+
+    // 2. Clean up any remaining background server processes
+    terminate_server_instances();
 }
 
-async fn check_session_active_client(host: &str, port: u16) -> Option<String> {
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
-    let addr = format!("{}:{}", host, port);
-    let connect_res = tokio::time::timeout(
-        Duration::from_millis(300),
-        tokio::net::TcpStream::connect(&addr),
-    )
-    .await
-    .ok()?
-    .ok()?;
-
-    let (mut reader, mut writer) = connect_res.into_split();
-    let req = format!(
-        "GET /api/session HTTP/1.1\r\nHost: {}:{}\r\nConnection: close\r\n\r\n",
-        host, port
-    );
-    tokio::time::timeout(Duration::from_millis(300), writer.write_all(req.as_bytes()))
-        .await
-        .ok()?
-        .ok()?;
-    let _ = writer.shutdown().await;
-
-    let mut buf = Vec::new();
-    tokio::time::timeout(Duration::from_millis(300), reader.read_to_end(&mut buf))
-        .await
-        .ok()?
-        .ok()?;
-
-    let response_str = String::from_utf8_lossy(&buf);
-    let body = response_str.split("\r\n\r\n").nth(1)?;
-    let val: serde_json::Value = serde_json::from_str(body).ok()?;
-    val.get("active_client")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
+#[tauri::command]
+async fn get_saved_session() -> Result<Option<wavery_core::models::PlaybackSession>, IpcError> {
+    let path = wavery_config::default_session_path()?;
+    let session = wavery_config::load_session(&path)?;
+    Ok(session)
 }
 
-async fn notify_server_quit(host: &str, port: u16) {
-    use tokio::io::AsyncWriteExt;
-
-    let addr = format!("{}:{}", host, port);
-    if let Ok(Ok(mut stream)) = tokio::time::timeout(
-        Duration::from_millis(300),
-        tokio::net::TcpStream::connect(&addr),
-    )
-    .await
-    {
-        let req = format!(
-            "POST /api/app/quit HTTP/1.1\r\nHost: {}:{}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
-            host, port
-        );
-        let _ = stream.write_all(req.as_bytes()).await;
-        let _ = stream.shutdown().await;
-    }
+#[tauri::command]
+async fn save_session_state(
+    session: wavery_core::models::PlaybackSession,
+) -> Result<(), IpcError> {
+    let path = wavery_config::default_session_path()?;
+    wavery_config::save_session_atomic(&path, &session)?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -731,6 +786,32 @@ async fn switch_to_web(
     // 2. Notify frontend to pause and suppress auto-advance
     let _ = app_handle.emit("external-pause", ());
 
+    // 3. Save current playback session to session.json
+    let current_session = {
+        let queue_guard = state.queue.lock();
+        let loop_mode = match queue_guard.loop_mode() {
+            LoopMode::Off => "Off",
+            LoopMode::Queue => "Queue",
+            LoopMode::Track => "Track",
+        };
+        wavery_core::models::PlaybackSession {
+            current_track_id: queue_guard.current_track().map(|t| t.id.clone()),
+            queue: queue_guard.queue().to_vec(),
+            queue_index: queue_guard.current_index().unwrap_or(0),
+            position_secs: 0.0,
+            is_playing: false,
+            volume: None,
+            is_shuffle: queue_guard.is_shuffle(),
+            is_autoplay: true,
+            loop_mode: Some(loop_mode.to_string()),
+            active_client: Some("web".to_string()),
+        }
+    };
+
+    if let Ok(sess_path) = wavery_config::default_session_path() {
+        let _ = wavery_config::save_session_atomic(&sess_path, &current_session);
+    }
+
     let (server_host, server_port) = {
         let config = state.config.lock();
         (config.server.host.clone(), config.server.port)
@@ -738,13 +819,22 @@ async fn switch_to_web(
 
     let target_url = format!("http://{}:{}", server_host, server_port);
 
-    // 3. Ensure server is running in the background
-    ensure_server_running(&server_host, server_port);
+    // 4. Launch wavery-server detached in the background
+    let _ = spawn_detached_server_process();
 
-    // 4. Launch browser to target url
+    // 5. Wait briefly for server to bind port
+    let addr = format!("{}:{}", server_host, server_port);
+    for _ in 0..20 {
+        if std::net::TcpStream::connect(&addr).is_ok() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+
+    // 6. Launch browser to target url
     let _ = open_browser_url(&target_url);
 
-    // 5. Hide desktop window so the System Tray icon stays alive in the panel!
+    // 7. Hide the window (music already stopped) — Tauri stays alive in the tray.
     if let Some(window) = app_handle.get_webview_window("main") {
         let _ = window.hide();
     }
@@ -911,9 +1001,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cfg_path = default_config_path().unwrap_or_else(|_| PathBuf::from("config.toml"));
     let config = load_or_create(&cfg_path).unwrap_or_default();
 
-    ensure_server_running(&config.server.host, config.server.port);
-
-    let player = RodioPlayer::try_new().ok();
+    let mut player = RodioPlayer::try_new().ok();
+    if let Some(ref mut p) = player {
+        p.set_crossfade(Duration::from_millis(config.audio.crossfade_duration_ms as u64));
+        p.set_volume(config.audio.default_volume);
+    }
     let library_res = SqliteLibraryManager::new(
         config.library.managed_directory.clone(),
         config.library.database_path.clone(),
@@ -954,9 +1046,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         queue: SyncMutex::new(StandardQueueManager::new()),
         config: SyncMutex::new(config.clone()),
         artwork_cache: SyncMutex::new(ArtworkCache::new(MAX_ARTWORK_CACHE_ENTRIES)),
+        server_process: SyncMutex::new(None),
     });
 
-    let res = tauri::Builder::default()
+    // Strict mutual exclusivity: Terminate any lingering server instances so only Tauri runs!
+    terminate_server_instances();
+
+    let app = tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }))
         .manage(state.clone())
         .setup(move |app| {
             let tray_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> Result<(), Box<dyn std::error::Error>> {
@@ -1011,12 +1114,45 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         }
                                     }
                                     let _ = app_clone.emit("external-pause", ());
+
+                                    // Save current playback session
+                                    let current_session = {
+                                        let queue_guard = state_clone.queue.lock();
+                                        let loop_mode = match queue_guard.loop_mode() {
+                                            LoopMode::Off => "Off",
+                                            LoopMode::Queue => "Queue",
+                                            LoopMode::Track => "Track",
+                                        };
+                                        wavery_core::models::PlaybackSession {
+                                            current_track_id: queue_guard.current_track().map(|t| t.id.clone()),
+                                            queue: queue_guard.queue().to_vec(),
+                                            queue_index: queue_guard.current_index().unwrap_or(0),
+                                            position_secs: 0.0,
+                                            is_playing: false,
+                                            volume: None,
+                                            is_shuffle: queue_guard.is_shuffle(),
+                                            is_autoplay: true,
+                                            loop_mode: Some(loop_mode.to_string()),
+                                            active_client: Some("web".to_string()),
+                                        }
+                                    };
+                                    if let Ok(sess_path) = wavery_config::default_session_path() {
+                                        let _ = wavery_config::save_session_atomic(&sess_path, &current_session);
+                                    }
+
                                     let (server_host, server_port) = {
                                         let cfg = state_clone.config.lock();
                                         (cfg.server.host.clone(), cfg.server.port)
                                     };
                                     let url = format!("http://{}:{}", server_host, server_port);
-                                    ensure_server_running(&server_host, server_port);
+                                    let _ = spawn_detached_server_process();
+                                    let addr = format!("{}:{}", server_host, server_port);
+                                    for _ in 0..20 {
+                                        if std::net::TcpStream::connect(&addr).is_ok() {
+                                            break;
+                                        }
+                                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                                    }
                                     let _ = open_browser_url(&url);
                                     if let Some(window) = app_clone.get_webview_window("main") {
                                         let _ = window.hide();
@@ -1085,12 +1221,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             let _ = player.stop();
                                         }
                                     }
-                                    // Clean up background server on full application quit
-                                    let (server_host, server_port) = {
-                                        let cfg = state_clone.config.lock();
-                                        (cfg.server.host.clone(), cfg.server.port)
-                                    };
-                                    notify_server_quit(&server_host, server_port).await;
+                                    kill_all_subprocesses(&state_clone);
+                                    terminate_server_instances();
                                     app_clone.exit(0);
                                 });
                             }
@@ -1135,27 +1267,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 eprintln!("[Wavery] System tray initialization warning: {e}");
             }
 
-            // Background monitor: unhides desktop window when switching to Native from Web
-            let app_monitor_handle = app.handle().clone();
-            let monitor_host = config.server.host.clone();
-            let monitor_port = config.server.port;
-            tauri::async_runtime::spawn(async move {
-                let mut last_client = String::from("native");
-                loop {
-                    tokio::time::sleep(tokio::time::Duration::from_millis(350)).await;
-                    if let Some(active) = check_session_active_client(&monitor_host, monitor_port).await {
-                        if active == "native" && last_client == "web" {
-                            if let Some(window) = app_monitor_handle.get_webview_window("main") {
-                                let _ = window.show();
-                                let _ = window.unminimize();
-                                let _ = window.set_focus();
-                            }
-                        }
-                        last_client = active;
-                    }
-                }
-            });
-
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -1169,6 +1280,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if minimize_to_tray {
                     api.prevent_close();
                     let _ = window.hide();
+                } else {
+                    kill_all_subprocesses(&state_handle);
+                    terminate_server_instances();
                 }
             }
         })
@@ -1196,6 +1310,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             vacuum_library,
             clear_artwork_cache,
             switch_to_web,
+            get_saved_session,
+            save_session_state,
             get_liked_tracks,
             get_liked_track_ids,
             toggle_like,
@@ -1211,13 +1327,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             remove_track_from_playlist,
             save_playlist
         ])
-        .run(tauri::generate_context!());
+        .build(tauri::generate_context!())?;
 
-
-    if let Err(e) = res {
-        eprintln!("TAURI RUN ERROR: {e:?}");
-        return Err(Box::new(e));
-    }
+    app.run(|app_handle, event| match event {
+        tauri::RunEvent::ExitRequested { api, code, .. } => {
+            // Only allow the process to exit when code is Some (explicit exit call, e.g. from
+            // the "Quit Wavery" tray action which uses app_handle.exit(0)).
+            // When code is None it means all windows were closed/hidden — keep alive in tray.
+            if code.is_none() {
+                api.prevent_exit();
+            }
+        }
+        tauri::RunEvent::Exit => {
+            if let Some(state) = app_handle.try_state::<Arc<AppState>>() {
+                kill_all_subprocesses(&state);
+            }
+        }
+        _ => {}
+    });
 
     Ok(())
 }
@@ -1652,6 +1779,7 @@ mod tests {
             queue: SyncMutex::new(StandardQueueManager::new()),
             config: SyncMutex::new(cfg),
             artwork_cache: SyncMutex::new(ArtworkCache::new(MAX_ARTWORK_CACHE_ENTRIES)),
+            server_process: SyncMutex::new(None),
         };
 
         let minimize = state.config.lock().general.minimize_to_tray;

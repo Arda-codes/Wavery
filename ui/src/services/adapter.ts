@@ -226,18 +226,18 @@ class BrowserAudioPlayer implements AudioPlayerAdapter {
 
     this.currentTrack = track;
 
-    if (crossfadeMs > 0) {
+    const outgoingIdx = this.activeIdx;
+    const incomingIdx = this.standbyIdx;
+    const outgoingEl = this.elements[outgoingIdx];
+    const incomingEl = this.elements[incomingIdx];
+
+    const isCurrentlyPlaying = !outgoingEl.paused && outgoingEl.currentTime > 0 && !!outgoingEl.src;
+
+    if (crossfadeMs > 0 && isCurrentlyPlaying) {
       // --- True dual-element crossfade ---
       // Block ended events from the outgoing element while we hand off to the
-      // incoming element. Without this guard the outgoing element's `ended`
-      // event would fire (if it finishes during the crossfade window) and call
-      // playNext() a second time, advancing the queue by two tracks.
+      // incoming element to avoid premature double-advancement.
       this.handoffActive = true;
-
-      const outgoingIdx = this.activeIdx;
-      const incomingIdx = this.standbyIdx;
-      const outgoingEl = this.elements[outgoingIdx];
-      const incomingEl = this.elements[incomingIdx];
 
       // Cancel any fade that was already running on either element.
       this.clearFade(outgoingIdx);
@@ -246,10 +246,13 @@ class BrowserAudioPlayer implements AudioPlayerAdapter {
       // Prepare the incoming element at volume 0.
       incomingEl.src = `/api/stream/${track.id}`;
       incomingEl.volume = 0;
-      await incomingEl.play();
+      try {
+        await incomingEl.play();
+      } catch (e) {
+        console.warn("Incoming crossfade track play postponed or interrupted:", e);
+      }
 
-      // Promote incoming to active before starting intervals so that getStatus()
-      // and `ended` events already reference the correct element.
+      // Promote incoming to active so that getStatus() and events reference the incoming element.
       this.activeIdx = incomingIdx;
       this.handoffActive = false;
 
@@ -268,8 +271,8 @@ class BrowserAudioPlayer implements AudioPlayerAdapter {
         const inGain = Math.sin(clampedFrac * (Math.PI / 2));
         const outGain = Math.cos(clampedFrac * (Math.PI / 2));
 
-        incomingEl.volume = Math.min(1, targetVolume * inGain);
-        outgoingEl.volume = Math.max(0, outgoingStartVolume * outGain);
+        incomingEl.volume = Math.max(0, Math.min(1, targetVolume * inGain));
+        outgoingEl.volume = Math.max(0, Math.min(1, outgoingStartVolume * outGain));
 
         if (step >= totalSteps) {
           clearInterval(crossInterval);
@@ -289,37 +292,41 @@ class BrowserAudioPlayer implements AudioPlayerAdapter {
       this.fadeIntervals[outgoingIdx] = crossInterval;
       this.fadeIntervals[incomingIdx] = crossInterval;
     } else {
-      // --- Instant switch (no crossfade) ---
-      // Stop and silence the standby element in case it was mid-crossfade.
-      const outgoingIdx = this.activeIdx;
+      // --- Instant switch (no crossfade or starting from stopped/paused state) ---
       this.clearFade(outgoingIdx);
-      this.clearFade(this.standbyIdx);
+      this.clearFade(incomingIdx);
 
       this.handoffActive = true;
-      const standby = this.standbyElement;
-      standby.pause();
-      standby.src = "";
-      standby.volume = this.volume;
+      outgoingEl.pause();
+      outgoingEl.src = "";
+      outgoingEl.volume = this.volume;
       this.handoffActive = false;
 
       const active = this.activeElement;
       active.src = `/api/stream/${track.id}`;
       active.volume = targetVolume;
-      await active.play();
+      try {
+        await active.play();
+      } catch (e) {
+        console.warn("Instant track play postponed or interrupted:", e);
+      }
     }
   }
 
   async pause(): Promise<void> {
     this.activeElement.pause();
+    this.standbyElement.pause();
   }
 
   async resume(): Promise<void> {
-    // If a fade-in is in progress, don't stomp the volume — the interval
-    // owns it. Only restore when no fade is running on the active element.
+    // If a fade-in is in progress, don't stomp the volume — the interval owns it.
     if (this.fadeIntervals[this.activeIdx] === null) {
       this.activeElement.volume = this.computeEffectiveVolume(this.currentTrack);
     }
     await this.activeElement.play();
+    if (this.fadeIntervals[this.standbyIdx] !== null) {
+      await this.standbyElement.play().catch(() => {});
+    }
   }
 
   async stop(): Promise<void> {
@@ -335,14 +342,16 @@ class BrowserAudioPlayer implements AudioPlayerAdapter {
   }
 
   async seek(seconds: number): Promise<void> {
+    // Seeking cancels any pending crossfade and locks to current volume
+    for (let i = 0; i < 2; i++) {
+      this.clearFade(i as 0 | 1);
+    }
+    this.activeElement.volume = this.computeEffectiveVolume(this.currentTrack);
     this.activeElement.currentTime = seconds;
   }
 
   async setVolume(volume: number): Promise<void> {
     this.volume = Math.max(0, Math.min(1, volume));
-    // Only update the active element's volume when no fade is in-flight.
-    // The fade interval already accounts for the target volume via
-    // computeEffectiveVolume, so changing it mid-fade would cause a jump.
     if (this.fadeIntervals[this.activeIdx] === null) {
       this.activeElement.volume = this.computeEffectiveVolume(this.currentTrack);
     }
@@ -350,12 +359,18 @@ class BrowserAudioPlayer implements AudioPlayerAdapter {
 
   async getStatus(): Promise<PlayerStatus> {
     const el = this.activeElement;
+    const isFading = this.fadeIntervals[0] !== null || this.fadeIntervals[1] !== null;
+    let state: "Playing" | "Paused" | "Stopped";
+    if (isFading || !el.paused) {
+      state = "Playing";
+    } else if (el.currentTime === 0) {
+      state = "Stopped";
+    } else {
+      state = "Paused";
+    }
+
     return {
-      state: el.paused
-        ? el.currentTime === 0
-          ? "Stopped"
-          : "Paused"
-        : "Playing",
+      state,
       volume: this.volume,
       position_secs: el.currentTime,
       duration_secs: isNaN(el.duration) ? undefined : el.duration,

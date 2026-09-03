@@ -1,4 +1,7 @@
-use crate::{load_or_create, save, AudioBackendKind, Config, ConfigError, ThemeMode};
+use crate::{
+    load_or_create, load_session, save, save_session_atomic, AudioBackendKind, Config, ConfigError,
+    ThemeMode,
+};
 use std::fs;
 use std::sync::Arc;
 use std::thread;
@@ -302,6 +305,38 @@ fn test_config_atomic_save_and_concurrency() {
     let final_cfg = load_or_create(&cfg_path).unwrap();
     assert!(final_cfg.server.port >= 4000);
     assert!(!tmp_path.exists());
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn test_session_atomic_save_and_load() {
+    let temp_dir = std::env::temp_dir().join(format!("wavery_sess_test_{}", uuid::Uuid::new_v4()));
+    let sess_path = temp_dir.join("session.json");
+    fs::create_dir_all(&temp_dir).unwrap();
+
+    // 1. Loading non-existent session returns None
+    assert_eq!(load_session(&sess_path).unwrap(), None);
+
+    // 2. Save session atomically
+    let session = wavery_core::models::PlaybackSession {
+        current_track_id: Some("track-123".into()),
+        queue_index: 2,
+        position_secs: 42.5,
+        is_playing: false,
+        active_client: Some("native".into()),
+        ..Default::default()
+    };
+
+    save_session_atomic(&sess_path, &session).expect("Session save must succeed");
+    assert!(sess_path.exists());
+
+    // 3. Load back and verify equality
+    let loaded = load_session(&sess_path).expect("Session load must succeed").expect("Session must exist");
+    assert_eq!(loaded.current_track_id, Some("track-123".into()));
+    assert_eq!(loaded.queue_index, 2);
+    assert!((loaded.position_secs - 42.5).abs() < f64::EPSILON);
+    assert_eq!(loaded.active_client, Some("native".into()));
 
     let _ = fs::remove_dir_all(&temp_dir);
 }

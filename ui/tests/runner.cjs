@@ -27,13 +27,42 @@ if (typeof global.Audio === "undefined") {
   };
 }
 
-if (typeof global.fetch === "undefined") {
-  global.fetch = async () => ({
+// Robust mock fetch for Node test harness to intercept relative /api/* requests
+const originalFetch = global.fetch;
+global.fetch = async (url, options) => {
+  const urlStr = typeof url === "string" ? url : (url && typeof url.href === "string" ? url.href : String(url || ""));
+  if (urlStr.startsWith("/api/") || urlStr.startsWith("http://127.0.0.1") || urlStr.startsWith("http://localhost")) {
+    return {
+      ok: true,
+      status: 200,
+      json: async () => {
+        if (urlStr.includes("/api/liked/ids")) return [];
+        if (urlStr.includes("/api/liked")) return [];
+        if (urlStr.includes("/api/playlists")) return [];
+        return [];
+      },
+      text: async () => "",
+    };
+  }
+  if (originalFetch) {
+    try {
+      return await originalFetch(url, options);
+    } catch {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ([]),
+        text: async () => "",
+      };
+    }
+  }
+  return {
     ok: true,
+    status: 200,
     json: async () => ([]),
     text: async () => "",
-  });
-}
+  };
+};
 
 const path = require("path");
 const createJITI = require("jiti");

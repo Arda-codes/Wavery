@@ -677,6 +677,9 @@ fn terminate_server_instances() {
         let _ = std::process::Command::new("pkill")
             .args(["-f", "wavery-server"])
             .status();
+        let _ = std::process::Command::new("pkill")
+            .args(["-9", "-f", "wavery-server"])
+            .status();
     }
     #[cfg(target_os = "windows")]
     {
@@ -689,7 +692,33 @@ fn terminate_server_instances() {
     }
 }
 
-fn spawn_detached_server_process() -> Result<(), std::io::Error> {
+fn notify_server_quit_sync(host: &str, port: u16) {
+    use std::io::Write;
+    use std::net::TcpStream;
+    let addr = format!("{}:{}", host, port);
+    if let Ok(addr_sock) = addr.parse() {
+        if let Ok(mut stream) = TcpStream::connect_timeout(&addr_sock, std::time::Duration::from_millis(300)) {
+            let req = format!(
+                "POST /api/app/quit HTTP/1.1\r\nHost: {}:{}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                host, port
+            );
+            let _ = stream.write_all(req.as_bytes());
+            let _ = stream.flush();
+        }
+    } else if let Ok(mut stream) = TcpStream::connect_timeout(
+        &std::net::SocketAddr::from(([127, 0, 0, 1], port)),
+        std::time::Duration::from_millis(300),
+    ) {
+        let req = format!(
+            "POST /api/app/quit HTTP/1.1\r\nHost: {}:{}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            host, port
+        );
+        let _ = stream.write_all(req.as_bytes());
+        let _ = stream.flush();
+    }
+}
+
+fn spawn_detached_server_process(state: &AppState) -> Result<(), std::io::Error> {
     let root = find_project_root();
     let mut cmd = if let Some(exe) = find_server_executable() {
         let mut c = std::process::Command::new(&exe);
@@ -701,6 +730,9 @@ fn spawn_detached_server_process() -> Result<(), std::io::Error> {
         c.args(["run", "-p", "wavery-server"]);
         c
     };
+
+    // Suppress secondary tray icon in wavery-server since Tauri provides the master desktop tray
+    cmd.env("WAVERY_NO_TRAY", "1");
 
     #[cfg(target_os = "windows")]
     {
@@ -719,12 +751,21 @@ fn spawn_detached_server_process() -> Result<(), std::io::Error> {
     cmd.stdout(std::process::Stdio::inherit());
     cmd.stderr(std::process::Stdio::inherit());
 
-    cmd.spawn()?;
+    let child = cmd.spawn()?;
+    let mut guard = state.server_process.lock();
+    *guard = Some(child);
     Ok(())
 }
 
 /// Forcefully terminates all spawned background child processes and subprocess trees.
 fn kill_all_subprocesses(state: &AppState) {
+    // 0. Gracefully notify wavery-server to exit
+    let (server_host, server_port) = {
+        let config = state.config.lock();
+        (config.server.host.clone(), config.server.port)
+    };
+    notify_server_quit_sync(&server_host, server_port);
+
     // 1. Terminate tracked server child process and its child tree
     let mut proc_guard = state.server_process.lock();
     if let Some(mut child) = proc_guard.take() {
@@ -745,7 +786,10 @@ fn kill_all_subprocesses(state: &AppState) {
         #[cfg(unix)]
         {
             let _ = std::process::Command::new("pkill")
-                .args(["-P", &pid.to_string()])
+                .args(["-9", "-P", &pid.to_string()])
+                .status();
+            let _ = std::process::Command::new("kill")
+                .args(["-9", &format!("-{}", pid)])
                 .status();
         }
     }
@@ -820,7 +864,7 @@ async fn switch_to_web(
     let target_url = format!("http://{}:{}", server_host, server_port);
 
     // 4. Launch wavery-server detached in the background
-    let _ = spawn_detached_server_process();
+    let _ = spawn_detached_server_process(&state);
 
     // 5. Wait briefly for server to bind port
     let addr = format!("{}:{}", server_host, server_port);
@@ -1145,7 +1189,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         (cfg.server.host.clone(), cfg.server.port)
                                     };
                                     let url = format!("http://{}:{}", server_host, server_port);
-                                    let _ = spawn_detached_server_process();
+                                    let _ = spawn_detached_server_process(&state_clone);
                                     let addr = format!("{}:{}", server_host, server_port);
                                     for _ in 0..20 {
                                         if std::net::TcpStream::connect(&addr).is_ok() {

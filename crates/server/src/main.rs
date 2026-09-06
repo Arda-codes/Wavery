@@ -94,17 +94,46 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("║                                                            ║");
     println!("╚════════════════════════════════════════════════════════════╝\n");
 
-    // Spawn the HTTP server on an asynchronous task
-    let server_handle = tokio::spawn(async move {
-        if let Err(e) = axum::serve(listener, router).await {
-            eprintln!("[wavery-server] Server error: {e}");
-        }
-    });
+    // Initialize Native System Tray if not suppressed by parent desktop process
+    let _tray = if std::env::var("WAVERY_NO_TRAY").is_ok() {
+        None
+    } else {
+        ServerTrayManager::try_new(app_state.clone())
+    };
 
-    // Initialize Native System Tray (supports Web/Desktop client switching)
-    let _tray = ServerTrayManager::try_new(app_state.clone());
-
-    let _ = server_handle.await;
+    // Serve HTTP requests with graceful termination signal handling
+    if let Err(e) = axum::serve(listener, router)
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+    {
+        eprintln!("[wavery-server] Server error: {e}");
+    }
 
     Ok(())
+}
+
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        let _ = tokio::signal::ctrl_c().await;
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut sig) => {
+                sig.recv().await;
+            }
+            Err(_) => {
+                std::future::pending::<()>().await;
+            }
+        }
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
 }

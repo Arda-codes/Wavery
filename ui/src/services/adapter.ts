@@ -244,7 +244,7 @@ class BrowserAudioPlayer implements AudioPlayerAdapter {
       this.clearFade(incomingIdx);
 
       // Prepare the incoming element at volume 0.
-      incomingEl.src = `/api/stream/${track.id}`;
+      incomingEl.src = `/api/stream/${encodeURIComponent(track.id)}`;
       incomingEl.volume = 0;
       try {
         await incomingEl.play();
@@ -303,7 +303,7 @@ class BrowserAudioPlayer implements AudioPlayerAdapter {
       this.handoffActive = false;
 
       const active = this.activeElement;
-      active.src = `/api/stream/${track.id}`;
+      active.src = `/api/stream/${encodeURIComponent(track.id)}`;
       active.volume = targetVolume;
       try {
         await active.play();
@@ -387,11 +387,12 @@ class BrowserAudioPlayer implements AudioPlayerAdapter {
 
   async getArtwork(trackId: string): Promise<string | null> {
     if (!trackId) return null;
-    return `http://127.0.0.1:4242/api/tracks/${trackId}/artwork`;
+    return `/api/tracks/${encodeURIComponent(trackId)}/artwork`;
   }
 
   getArtworkUrl(trackId: string): string {
-    return `http://127.0.0.1:4242/api/tracks/${trackId}/artwork`;
+    if (!trackId) return "";
+    return `/api/tracks/${encodeURIComponent(trackId)}/artwork`;
   }
 
   async updateAlbumMetadata(payload: UpdateAlbumMetadataPayload): Promise<Track[]> {
@@ -621,13 +622,42 @@ class TauriAudioPlayer implements AudioPlayerAdapter {
     };
   }
 
+  private artworkCache: Map<string, string | null> = new Map();
+  private pendingArtwork: Map<string, Promise<string | null>> = new Map();
+
   async getArtwork(trackId: string): Promise<string | null> {
     if (!trackId) return null;
-    return `http://127.0.0.1:4242/api/tracks/${trackId}/artwork`;
+    if (this.artworkCache.has(trackId)) {
+      return this.artworkCache.get(trackId) ?? null;
+    }
+    if (this.pendingArtwork.has(trackId)) {
+      return this.pendingArtwork.get(trackId)!;
+    }
+    const fetchPromise = (async () => {
+      try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        const base64Url = await invoke<string | null>("get_artwork", { trackId });
+        this.artworkCache.set(trackId, base64Url ?? null);
+        return base64Url ?? null;
+      } catch (err) {
+        console.error("Failed to fetch artwork from Tauri backend:", err);
+        this.artworkCache.set(trackId, null);
+        return null;
+      } finally {
+        this.pendingArtwork.delete(trackId);
+      }
+    })();
+    this.pendingArtwork.set(trackId, fetchPromise);
+    return fetchPromise;
   }
 
   getArtworkUrl(trackId: string): string {
-    return `http://127.0.0.1:4242/api/tracks/${trackId}/artwork`;
+    if (!trackId) return "";
+    const cached = this.artworkCache.get(trackId);
+    if (cached) return cached;
+    // Trigger background fetch so future renders can immediately use cached data
+    void this.getArtwork(trackId);
+    return "";
   }
 
   async getTracks(): Promise<Track[]> {
@@ -711,6 +741,7 @@ class TauriAudioPlayer implements AudioPlayerAdapter {
   }
 
   async clearArtworkCache(): Promise<void> {
+    this.artworkCache.clear();
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke("clear_artwork_cache");
   }

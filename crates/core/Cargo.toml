@@ -8,7 +8,6 @@ description = "Pure domain models, trait definitions, and error types for Wavery
 
 [dependencies]
 serde = { workspace = true }
-serde_json = { workspace = true }
 thiserror = { workspace = true }
 async-trait = { workspace = true }
 tokio = { workspace = true }

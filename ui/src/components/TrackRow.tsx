@@ -24,7 +24,7 @@ import { useContextMenuStore, ContextMenuItem } from "../stores/contextMenuStore
 import { EqualizerWave } from "./EqualizerWave";
 import { RowDensity } from "../stores/settingsStore";
 
-export interface TrackRowProps {
+interface TrackRowProps {
   track: Track;
   index: number;
   style: React.CSSProperties;

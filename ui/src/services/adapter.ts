@@ -49,7 +49,7 @@ export interface AudioPlayerAdapter {
 }
 
 
-export interface AlbumTrackUpdatePayload {
+interface AlbumTrackUpdatePayload {
   track_id: string;
   title?: string;
   artist?: string;
@@ -57,7 +57,7 @@ export interface AlbumTrackUpdatePayload {
   disc_number?: number;
 }
 
-export interface UpdateAlbumMetadataPayload {
+interface UpdateAlbumMetadataPayload {
   album?: string;
   album_artist?: string;
   year?: number;
@@ -676,7 +676,7 @@ class TauriAudioPlayer implements AudioPlayerAdapter {
 
   async importFolder(dirPath: string, strategy: ImportStrategy): Promise<Track[]> {
     const { invoke } = await import("@tauri-apps/api/core");
-    return invoke<Vec<Track>>("import_folder", { dirPath, strategy });
+    return invoke<Track[]>("import_folder", { dirPath, strategy });
   }
 
   async playTrack(track: Track): Promise<void> {
@@ -841,8 +841,6 @@ class TauriAudioPlayer implements AudioPlayerAdapter {
   }
 }
 
-
-type Vec<T> = T[];
 
 export const isTauri: boolean =
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;

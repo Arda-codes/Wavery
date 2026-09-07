@@ -5,7 +5,7 @@ import { useLibraryStore } from "../stores/libraryStore";
 import { useArtwork } from "../utils/useArtwork";
 import { X, Save, Disc, Check, AlertCircle, Loader2 } from "lucide-react";
 
-export interface AlbumMetadataModalProps {
+interface AlbumMetadataModalProps {
   album: AlbumInfo | null;
   isOpen: boolean;
   onClose: () => void;

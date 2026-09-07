@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { playerAdapter } from "../services/adapter";
 import { useSettingsStore } from "../stores/settingsStore";
 
-export function getCachedArtworkSync(trackId?: string): string | null {
+function getCachedArtworkSync(trackId?: string): string | null {
   const simplifyMode = useSettingsStore.getState().simplifyMode;
   if (simplifyMode || !trackId) return null;
   const url = playerAdapter.getArtworkUrl(trackId);

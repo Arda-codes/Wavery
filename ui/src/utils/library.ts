@@ -93,7 +93,7 @@ export function splitArtists(raw: string = ""): string[] {
  *   { text: "Nile Rodgers", isArtist: true }
  * ]
  */
-export interface ArtistToken {
+interface ArtistToken {
   text: string;
   isArtist: boolean;
 }

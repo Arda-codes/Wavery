@@ -7,7 +7,7 @@ import { useLibraryStore } from "../stores/libraryStore";
 import { usePlayerStore } from "../stores/playerStore";
 import { useContextMenuStore, ContextMenuItem } from "../stores/contextMenuStore";
 
-export interface AlbumCardProps {
+interface AlbumCardProps {
   album: AlbumInfo;
   onSelectAlbum: (albumTitle: string, artistName: string) => void;
   onSelectArtist: (artistName: string) => void;

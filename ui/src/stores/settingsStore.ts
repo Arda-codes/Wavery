@@ -20,7 +20,7 @@ export interface Keybindings {
   toggleLyrics: string;
 }
 
-export interface SettingsData {
+interface SettingsData {
   // General
   autoScanOnStartup: boolean;
   notificationsEnabled: boolean;
@@ -50,7 +50,7 @@ export interface SettingsData {
   keybindings: Keybindings;
 }
 
-export interface SettingsState extends SettingsData {
+interface SettingsState extends SettingsData {
   toggleSimplifyMode: () => void;
   setSimplifyMode: (enabled: boolean) => void;
   dismissLinuxBanner: () => void;
@@ -110,7 +110,7 @@ const STORAGE_KEY_LINUX_DISMISSED = "wavery_linux_banner_dismissed";
 
 let cachedBackendConfig: any = null;
 
-export function mapBackendConfigToSettings(backendCfg: any): Partial<SettingsData> {
+function mapBackendConfigToSettings(backendCfg: any): Partial<SettingsData> {
   if (!backendCfg || typeof backendCfg !== "object") return {};
   cachedBackendConfig = backendCfg;
   const s: Partial<SettingsData> = {};
@@ -213,7 +213,7 @@ export function mapBackendConfigToSettings(backendCfg: any): Partial<SettingsDat
   return s;
 }
 
-export function mapSettingsToBackendConfig(data: SettingsData): any {
+function mapSettingsToBackendConfig(data: SettingsData): any {
   return {
     general: {
       language: "en",

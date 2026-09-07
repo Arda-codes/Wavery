@@ -13,7 +13,7 @@ export interface ContextMenuItem {
   items?: ContextMenuItem[];
 }
 
-export interface ContextMenuState {
+interface ContextMenuState {
   isOpen: boolean;
   position: { x: number; y: number };
   items: ContextMenuItem[];

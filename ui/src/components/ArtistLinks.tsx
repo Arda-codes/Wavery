@@ -1,7 +1,7 @@
 import React from "react";
 import { parseArtistTokens } from "../utils/library";
 
-export interface ArtistLinksProps {
+interface ArtistLinksProps {
   artistName?: string;
   onSelectArtist?: (artistName: string) => void;
   className?: string;

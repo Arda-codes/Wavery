@@ -5,7 +5,7 @@
  * and matching incoming KeyboardEvent instances against configured shortcuts.
  */
 
-export interface ParsedKeyCombo {
+interface ParsedKeyCombo {
   ctrl: boolean;
   meta: boolean;
   alt: boolean;

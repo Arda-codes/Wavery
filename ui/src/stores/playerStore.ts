@@ -11,7 +11,7 @@
  */
 
 import { create } from "zustand";
-import { PlayerStatus, Track, PlaybackContext } from "../types";
+import { PlayerStatus, Track, PlaybackContext, PlayHistoryEntry } from "../types";
 import { playerAdapter } from "../services/adapter";
 import { useSettingsStore } from "./settingsStore";
 import { showTrackNotification } from "../utils/notifications";
@@ -108,10 +108,7 @@ function loadSession(): PlayerSession | null {
 
 const PLAY_HISTORY_KEY = "wavery_play_history";
 
-export interface PlayHistoryEntry {
-  trackId: string;
-  playedAt: number;
-}
+export type { PlayHistoryEntry };
 
 function loadPlayHistory(): PlayHistoryEntry[] {
   if (typeof localStorage === "undefined") return [];
@@ -149,7 +146,7 @@ function savePlayHistory(history: PlayHistoryEntry[]): void {
   }
 }
 
-export interface PlayerStoreState {
+interface PlayerStoreState {
   /** Current playback status from the backend. */
   status: PlayerStatus;
   /** Currently playing track (full object for PlayerBar display). */

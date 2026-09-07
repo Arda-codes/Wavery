@@ -42,14 +42,12 @@ export interface Track {
 
 export interface PlayerStatus {
   state: PlaybackState;
-  volume: f32;
+  volume: number;
   position_secs: number;
   duration_secs?: number;
   current_track?: Track;
   loop_mode: LoopMode;
 }
-
-export type f32 = number;
 
 // Navigation & Hierarchy Types
 export type ViewMode =

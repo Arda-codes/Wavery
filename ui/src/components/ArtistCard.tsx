@@ -5,7 +5,7 @@ import { useArtwork } from "../utils/useArtwork";
 import { usePlayerStore } from "../stores/playerStore";
 import { useContextMenuStore, ContextMenuItem } from "../stores/contextMenuStore";
 
-export interface ArtistCardProps {
+interface ArtistCardProps {
   artist: ArtistInfo;
   onSelectArtist: (artistName: string) => void;
   artworkUrl?: string;

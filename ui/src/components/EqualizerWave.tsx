@@ -1,7 +1,7 @@
 import React from "react";
 import { useSettingsStore } from "../stores/settingsStore";
 
-export interface EqualizerWaveProps {
+interface EqualizerWaveProps {
   isPlaying?: boolean;
   bars?: number;
   size?: "xs" | "sm" | "md" | "lg";

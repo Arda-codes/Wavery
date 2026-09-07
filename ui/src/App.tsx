@@ -32,7 +32,7 @@ import { NowPlayingDrawer } from "./components/NowPlayingDrawer";
 import { FullscreenPlayer } from "./components/FullscreenPlayer";
 import { ContextMenu } from "./components/ContextMenu";
 import { matchesKeyCombo, isEditableTarget } from "./utils/keybindings";
-import { Search, Settings, ExternalLink, ChevronLeft, Home, Menu, Library, ListMusic } from "lucide-react";
+import { Search, ExternalLink, Home, Menu, Library, ListMusic } from "lucide-react";
 
 export const App: React.FC = () => {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -503,9 +503,9 @@ export const App: React.FC = () => {
   return (
     <div className="flex flex-col h-screen w-screen bg-[#0D0D10] text-[#FFFFFF] font-sans antialiased selection:bg-[#FA586A]/30 selection:text-white">
       {/* Top Desktop Chrome / Header */}
-      <header className="h-14 bg-[#0F0F13]/95 backdrop-blur-xl border-b border-white/[0.06] px-3 sm:px-5 flex items-center justify-between flex-shrink-0 z-30 select-none gap-2 sm:gap-4">
-        {/* Left: Hamburger (mobile/tablet) + Brand + Navigation Chevrons */}
-        <div className="flex items-center space-x-2 sm:space-x-3 md:space-x-4 min-w-0 flex-shrink-0">
+      <header className="relative h-14 bg-[#0F0F13]/95 backdrop-blur-xl border-b border-white/[0.06] px-3 sm:px-5 flex items-center justify-between flex-shrink-0 z-30 select-none">
+        {/* Left: Hamburger (mobile/tablet) + Brand Text */}
+        <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-shrink-0 z-20">
           {/* Hamburger button on screens < lg */}
           <button
             type="button"
@@ -517,110 +517,65 @@ export const App: React.FC = () => {
             <Menu className="w-4 h-4" />
           </button>
 
-          <div
+          <button
+            type="button"
             onClick={() => navigate("home")}
-            className="flex items-center space-x-2 sm:space-x-2.5 cursor-pointer flex-shrink-0"
+            className="cursor-pointer flex-shrink-0 font-bold text-[15px] sm:text-base tracking-tight text-white hover:text-white/80 transition-colors focus:outline-none select-none"
           >
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#FA586A] to-[#E0284F] flex items-center justify-center font-bold text-white shadow-md shadow-[#FA586A]/20">
-              <span className="text-xs font-black tracking-tighter">W</span>
-            </div>
-            <span className="font-bold text-[15px] tracking-tight text-white hidden sm:inline">Wavery</span>
-          </div>
-
-          {/* History Back / Forward Controls */}
-          <div className="flex items-center space-x-1 pl-0.5 sm:pl-1">
-            <button
-              onClick={() => {
-                if (breadcrumbItems.length > 1) {
-                  const prev = breadcrumbItems[breadcrumbItems.length - 2];
-                  breadcrumbNavigate(prev.view, prev.targetId);
-                } else {
-                  navigate("home");
-                }
-              }}
-              disabled={viewMode === "home"}
-              className="w-7 h-7 rounded-full bg-white/[0.06] hover:bg-white/[0.12] disabled:opacity-30 disabled:hover:bg-white/[0.06] text-white flex items-center justify-center transition"
-              title="Go Back"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => navigate("home")}
-              className={`w-7 h-7 rounded-full text-white flex items-center justify-center transition ${
-                viewMode === "home"
-                  ? "bg-[#FA586A] text-white shadow-sm"
-                  : "bg-white/[0.06] hover:bg-white/[0.12]"
-              }`}
-              title="Home"
-            >
-              <Home className="w-3.5 h-3.5" />
-            </button>
-          </div>
+            Wavery
+          </button>
         </div>
 
-        {/* Center: Global Search Capsule (Responsive fluid width) */}
-        <div className="relative flex-1 max-w-xs md:max-w-sm group min-w-[120px]">
-          <Search
-            onClick={() => {
-              if (viewMode !== "search") navigate("search");
-              searchInputRef.current?.focus();
-              searchInputRef.current?.select();
-            }}
-            className="w-3.5 h-3.5 absolute left-3 top-2.5 text-[#71717A] group-focus-within:text-[#FA586A] transition-colors cursor-pointer"
-          />
-          <input
-            ref={searchInputRef}
-            type="text"
-            value={globalSearch}
-            onFocus={() => {
-              if (viewMode !== "search") navigate("search");
-            }}
-            onChange={(e) => {
-              setGlobalSearch(e.target.value);
-              if (viewMode !== "search") navigate("search");
-            }}
-            placeholder="Search songs, albums..."
-            className="w-full bg-[#16161A] border border-white/[0.08] hover:border-white/[0.15] focus:border-[#FA586A]/60 rounded-full pl-8 sm:pl-9 pr-7 sm:pr-9 py-1.5 text-xs text-white placeholder-[#71717A] focus:outline-none focus:ring-2 focus:ring-[#FA586A]/20 transition-all shadow-inner"
-          />
-          {globalSearch ? (
-            <button
-              type="button"
+        {/* Center: Global Search Capsule (Completely centered regardless of left/right elements) */}
+        <div className="absolute left-1/2 -translate-x-1/2 w-[calc(100%-140px)] max-w-xs md:max-w-sm pointer-events-auto z-10">
+          <div className="relative group">
+            <Search
               onClick={() => {
-                setGlobalSearch("");
-                searchInputRef.current?.focus();
-              }}
-              className="absolute right-2.5 top-2 text-[#71717A] hover:text-white text-xs transition"
-              title="Clear search"
-            >
-              ✕
-            </button>
-          ) : (
-            <span
-              onClick={() => {
+                if (viewMode !== "search") navigate("search");
                 searchInputRef.current?.focus();
                 searchInputRef.current?.select();
               }}
-              className="hidden md:inline-block cursor-pointer absolute right-3 top-1.5 text-[10px] font-mono text-[#71717A] bg-white/[0.06] hover:bg-white/[0.12] hover:text-white px-1.5 py-0.5 rounded border border-white/[0.06] transition select-none"
-              title={`Focus search (${isMac ? "⌘K" : "Ctrl+K"})`}
-            >
-              {isMac ? "⌘K" : "Ctrl+K"}
-            </span>
-          )}
-        </div>
-
-        {/* Right: Settings Quick Access */}
-        <div className="flex items-center space-x-2 flex-shrink-0">
-          <button
-            onClick={() => navigate("settings")}
-            className={`w-8 h-8 rounded-full flex items-center justify-center transition border ${
-              viewMode === "settings"
-                ? "bg-[#FA586A]/20 text-[#FA586A] border-[#FA586A]/40 shadow-sm"
-                : "bg-white/[0.06] hover:bg-white/[0.12] text-[#A1A1AA] hover:text-white border-white/[0.06]"
-            }`}
-            title="Settings"
-          >
-            <Settings className="w-4 h-4" />
-          </button>
+              className="w-3.5 h-3.5 absolute left-3 top-2.5 text-[#71717A] group-focus-within:text-[#FA586A] transition-colors cursor-pointer"
+            />
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={globalSearch}
+              onFocus={() => {
+                if (viewMode !== "search") navigate("search");
+              }}
+              onChange={(e) => {
+                setGlobalSearch(e.target.value);
+                if (viewMode !== "search") navigate("search");
+              }}
+              placeholder="Search songs, albums..."
+              className="w-full bg-[#16161A] border border-white/[0.08] hover:border-white/[0.15] focus:border-[#FA586A]/60 rounded-full pl-8 sm:pl-9 pr-7 sm:pr-9 py-1.5 text-xs text-white placeholder-[#71717A] focus:outline-none focus:ring-2 focus:ring-[#FA586A]/20 transition-all shadow-inner"
+            />
+            {globalSearch ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setGlobalSearch("");
+                  searchInputRef.current?.focus();
+                }}
+                className="absolute right-2.5 top-2 text-[#71717A] hover:text-white text-xs transition"
+                title="Clear search"
+              >
+                ✕
+              </button>
+            ) : (
+              <span
+                onClick={() => {
+                  searchInputRef.current?.focus();
+                  searchInputRef.current?.select();
+                }}
+                className="hidden md:inline-block cursor-pointer absolute right-3 top-1.5 text-[10px] font-mono text-[#71717A] bg-white/[0.06] hover:bg-white/[0.12] hover:text-white px-1.5 py-0.5 rounded border border-white/[0.06] transition select-none"
+                title={`Focus search (${isMac ? "⌘K" : "Ctrl+K"})`}
+              >
+                {isMac ? "⌘K" : "Ctrl+K"}
+              </span>
+            )}
+          </div>
         </div>
       </header>
 

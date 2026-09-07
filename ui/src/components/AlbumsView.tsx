@@ -14,9 +14,9 @@ interface AlbumsViewProps {
   getArtworkUrl?: (trackId: string) => string;
 }
 
-export type AlbumCategoryFilter = "all" | "albums" | "singles";
+type AlbumCategoryFilter = "all" | "albums" | "singles";
 
-export function isSingleOrEp(album: AlbumInfo): boolean {
+function isSingleOrEp(album: AlbumInfo): boolean {
   if (album.trackCount <= 3) return true;
   const title = album.title.toLowerCase();
   return (

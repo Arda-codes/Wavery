@@ -5381,7 +5381,6 @@ version = "0.1.3"
 dependencies = [
  "async-trait",
  "serde",
- "serde_json",
  "thiserror 2.0.20",
  "tokio",
 ]
@@ -5416,7 +5415,6 @@ name = "wavery-server"
 version = "0.1.3"
 dependencies = [
  "axum",
- "futures-util",
  "ksni",
  "serde",
  "serde_json",

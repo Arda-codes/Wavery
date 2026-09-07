@@ -38,6 +38,7 @@ export interface SettingsData {
   // Appearance & Theme
   themeMode: ThemeMode;
   accentColor: string;
+  customColors: string[];
   albumGridSize: AlbumGridSize;
   rowDensity: RowDensity;
   showVisualizer: boolean;
@@ -55,6 +56,8 @@ export interface SettingsState extends SettingsData {
   dismissLinuxBanner: () => void;
   setLinuxBannerDismissed: (dismissed: boolean) => void;
   setSetting: <K extends keyof SettingsData>(key: K, value: SettingsData[K]) => void;
+  addCustomColor: (color: string) => void;
+  removeCustomColor: (color: string) => void;
   resetToDefaults: () => void;
   exportConfigJson: () => string;
   importConfigJson: (jsonStr: string) => boolean;
@@ -90,6 +93,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
 
   themeMode: "dark",
   accentColor: "#FA586A",
+  customColors: [],
   albumGridSize: "medium",
   rowDensity: "comfortable",
   showVisualizer: true,
@@ -161,6 +165,11 @@ export function mapBackendConfigToSettings(backendCfg: any): Partial<SettingsDat
       s.accentColor = backendCfg.theme.accent;
     } else if (typeof backendCfg.theme.primary === "string" && backendCfg.theme.primary.length > 0) {
       s.accentColor = backendCfg.theme.primary;
+    }
+    if (Array.isArray(backendCfg.theme.custom_colors)) {
+      s.customColors = backendCfg.theme.custom_colors.filter(
+        (c: unknown) => typeof c === "string" && (c as string).startsWith("#")
+      );
     }
   }
 
@@ -269,6 +278,7 @@ export function mapSettingsToBackendConfig(data: SettingsData): any {
       text_primary: "#f4f4f5",
       text_muted: "#71717a",
       error: "#ef4444",
+      custom_colors: data.customColors || [],
     },
     keybinds: {
       toggle_play: data.keybindings.togglePlay,
@@ -423,6 +433,30 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
       set({ [key]: value } as unknown as Partial<SettingsState>);
     },
 
+    addCustomColor: (color: string) => {
+      const normalized = color.trim().toUpperCase();
+      if (!/^#[0-9A-F]{6}$/i.test(normalized)) return;
+      const current = get().customColors || [];
+      if (!current.includes(normalized)) {
+        const next = [...current, normalized];
+        const updated: SettingsData = { ...get(), customColors: next, accentColor: normalized };
+        persistSettings(updated);
+        applyDomClasses(updated.simplifyMode, updated.themeMode, normalized);
+        set({ customColors: next, accentColor: normalized });
+      } else {
+        get().setSetting("accentColor", normalized);
+      }
+    },
+
+    removeCustomColor: (color: string) => {
+      const normalized = color.trim().toUpperCase();
+      const current = get().customColors || [];
+      const next = current.filter((c) => c.toUpperCase() !== normalized);
+      const updated: SettingsData = { ...get(), customColors: next };
+      persistSettings(updated);
+      set({ customColors: next });
+    },
+
     resetToDefaults: () => {
       const reset = { ...DEFAULT_SETTINGS };
       persistSettings(reset);
@@ -445,6 +479,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
         replayGainMode: state.replayGainMode,
         themeMode: state.themeMode,
         accentColor: state.accentColor,
+        customColors: state.customColors || [],
         albumGridSize: state.albumGridSize,
         rowDensity: state.rowDensity,
         showVisualizer: state.showVisualizer,

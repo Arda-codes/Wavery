@@ -856,18 +856,158 @@ const VolumeControlInner: React.FC = () => {
 const VolumeControl = React.memo(VolumeControlInner);
 
 /**
+ * Mobile Miniplayer Subcomponent (< 640px)
+ * Provides a touch-friendly, compact miniplayer with progress hairline,
+ * artwork thumbnail, stacked title/artist, and primary playback controls.
+ */
+const MobilePlayerBarInner: React.FC = () => {
+  const currentTrack = usePlayerStore((s) => s.currentTrack);
+  const isPlaying = usePlayerStore((s) => s.status.state === "Playing");
+  const positionSecs = usePlayerStore((s) => s.status.position_secs || 0);
+  const durationSecs = usePlayerStore(
+    (s) => s.status.duration_secs || s.currentTrack?.metadata.duration?.secs || 0
+  );
+  const resume = usePlayerStore((s) => s.resume);
+  const pause = usePlayerStore((s) => s.pause);
+  const playNext = usePlayerStore((s) => s.playNext);
+  const isLiked = useLibraryStore(
+    (s) => !!currentTrack?.id && s.likedTrackIds.has(currentTrack.id)
+  );
+  const toggleLike = useLibraryStore((s) => s.toggleLike);
+  const toggleDrawer = useNavigationStore((s) => s.toggleNowPlayingDrawer);
+  const artworkUrl = useArtwork(currentTrack?.id);
+
+  const progress =
+    durationSecs > 0
+      ? Math.min(100, Math.max(0, (positionSecs / durationSecs) * 100))
+      : 0;
+  const hasTrack = !!currentTrack;
+
+  return (
+    <div className="relative h-14 w-full flex items-center justify-between px-3 select-none">
+      {/* Hairline Progress Bar */}
+      <div className="absolute top-0 left-0 right-0 h-[2.5px] bg-white/[0.08] overflow-hidden pointer-events-none">
+        <div
+          className="h-full bg-[#FA586A] transition-all duration-300 ease-out"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+
+      {/* Track Info (Tappable to open Now Playing drawer) */}
+      <div
+        onClick={() => toggleDrawer()}
+        className="flex items-center space-x-2.5 min-w-0 flex-1 pr-2 cursor-pointer group"
+      >
+        <div className="w-10 h-10 rounded-lg bg-[#1A1A20] flex items-center justify-center overflow-hidden flex-shrink-0 relative border border-white/[0.08] shadow-sm">
+          {artworkUrl ? (
+            <img
+              src={artworkUrl}
+              alt=""
+              className="w-full h-full object-cover"
+              loading="lazy"
+              decoding="async"
+            />
+          ) : (
+            <Music className="w-4 h-4 text-[#71717A]" />
+          )}
+          {isPlaying && (
+            <div className="absolute bottom-0.5 right-0.5 px-0.5 py-0.5 rounded-[3px] bg-black/60 backdrop-blur-sm">
+              <EqualizerWave isPlaying={true} size="xs" color="bg-[#FA586A]" />
+            </div>
+          )}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-semibold text-white truncate leading-tight group-hover:text-[#FA586A] transition-colors">
+            {currentTrack?.metadata.title || "No song selected"}
+          </p>
+          <p className="text-[11px] text-[#A1A1AA] truncate leading-tight mt-0.5">
+            {currentTrack
+              ? getFullTrackArtistString(currentTrack)
+              : "Choose a track to play"}
+          </p>
+        </div>
+      </div>
+
+      {/* Mobile Action Controls */}
+      <div className="flex items-center space-x-1 flex-shrink-0">
+        {/* Like Button */}
+        {hasTrack && (
+          <button
+            type="button"
+            aria-label={isLiked ? "Unlike song" : "Like song"}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleLike(currentTrack.id);
+            }}
+            className={`w-8 h-8 rounded-full flex items-center justify-center transition active:scale-90 ${
+              isLiked ? "text-[#FA586A]" : "text-[#71717A] hover:text-white"
+            }`}
+          >
+            <Heart className={`w-4 h-4 ${isLiked ? "fill-[#FA586A]" : ""}`} />
+          </button>
+        )}
+
+        {/* Hero Play/Pause Button */}
+        <button
+          type="button"
+          aria-label={isPlaying ? "Pause" : "Play"}
+          disabled={!hasTrack}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (isPlaying) pause();
+            else resume();
+          }}
+          className="w-9 h-9 rounded-full bg-white text-black flex items-center justify-center shadow-md active:scale-90 transition disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          {isPlaying ? (
+            <Pause className="w-4 h-4 fill-black text-black" />
+          ) : (
+            <Play className="w-4 h-4 fill-black text-black ml-0.5" />
+          )}
+        </button>
+
+        {/* Next Track Button */}
+        <button
+          type="button"
+          aria-label="Next Track"
+          disabled={!hasTrack}
+          onClick={(e) => {
+            e.stopPropagation();
+            playNext();
+          }}
+          className="w-8 h-8 rounded-full flex items-center justify-center text-[#D4D4D8] hover:text-white active:scale-90 transition disabled:opacity-20 disabled:cursor-not-allowed"
+        >
+          <SkipForward className="w-4 h-4 fill-current" />
+        </button>
+      </div>
+    </div>
+  );
+};
+const MobilePlayerBar = React.memo(MobilePlayerBarInner);
+
+/**
  * Bottom-pinned playback bar decomposed into memoized subcomponents.
  * Follows Apple HIG surface design & Impeccable contrast rhythm.
+ * Fluidly adapts between mobile miniplayer (<640px) and full desktop deck.
  */
 const PlayerBarInner: React.FC = () => {
   return (
-    <footer className="h-20 sm:h-[80px] bg-[#101014]/95 border-t border-white/[0.08] backdrop-blur-3xl px-3 sm:px-5 lg:px-6 flex items-center justify-between select-none z-30 shadow-[0_-8px_24px_rgba(0,0,0,0.35)] gap-2 sm:gap-4">
-      <TrackInfo />
-      <div className="flex flex-col items-center justify-center flex-1 max-w-xl px-1 sm:px-3 min-w-0">
-        <PlayControls />
-        <Scrubber />
+    <footer className="relative bg-[#101014]/98 border-t border-white/[0.08] backdrop-blur-3xl select-none z-30 shadow-[0_-8px_24px_rgba(0,0,0,0.35)] flex-shrink-0">
+      {/* Mobile Miniplayer Layout (< sm: 640px) */}
+      <div className="sm:hidden flex flex-col w-full">
+        <MobilePlayerBar />
       </div>
-      <VolumeControl />
+
+      {/* Tablet & Desktop Deck (>= sm: 640px) */}
+      <div className="hidden sm:flex h-20 sm:h-[80px] px-3 sm:px-5 lg:px-6 items-center justify-between gap-2 sm:gap-4 w-full">
+        <TrackInfo />
+        <div className="flex flex-col items-center justify-center flex-1 max-w-xl px-1 sm:px-3 min-w-0">
+          <PlayControls />
+          <Scrubber />
+        </div>
+        <VolumeControl />
+      </div>
     </footer>
   );
 };

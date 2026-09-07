@@ -177,8 +177,8 @@ const TrackTableInner: React.FC<TrackTableProps> = ({
     >
       {/* Search & Stats Bar */}
       {showSearchBar && (
-        <div className="flex items-center justify-between px-6 py-3 border-b border-white/[0.06] flex-shrink-0 gap-4 bg-[#0D0D10]">
-          <div className="relative flex-1 max-w-xs group">
+        <div className="flex flex-wrap items-center justify-between px-3 sm:px-6 py-2.5 sm:py-3 border-b border-white/[0.06] flex-shrink-0 gap-2 sm:gap-4 bg-[#0D0D10]">
+          <div className="relative flex-1 max-w-xs min-w-[140px] group">
             <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-[#71717A] group-focus-within:text-[#FA586A] transition-colors" />
             <input
               type="text"
@@ -189,7 +189,7 @@ const TrackTableInner: React.FC<TrackTableProps> = ({
             />
           </div>
 
-          <div className="flex items-center space-x-3 text-xs text-[#71717A]">
+          <div className="flex items-center space-x-2 sm:space-x-3 text-xs text-[#71717A] flex-shrink-0">
             {(!playbackContext || playbackContext.type === "tracks") && (
               <button
                 type="button"
@@ -206,7 +206,7 @@ const TrackTableInner: React.FC<TrackTableProps> = ({
                 }
               >
                 <Infinity className="w-3.5 h-3.5" />
-                <span className="text-[11px]">Autoplay</span>
+                <span className="text-[11px] hidden sm:inline">Autoplay</span>
               </button>
             )}
 
@@ -220,14 +220,14 @@ const TrackTableInner: React.FC<TrackTableProps> = ({
         </div>
       )}
 
-      {/* Pinned Table Header with ARIA columnheader and unified CSS grid layout */}
+      {/* Pinned Table Header with ARIA columnheader and responsive CSS grid layout */}
       <div
         role="rowgroup"
         className="bg-[#0D0D10]/95 backdrop-blur-md flex-shrink-0 border-b border-white/[0.07] z-10"
       >
         <div
           role="row"
-          className="grid grid-cols-[48px_minmax(180px,1fr)_160px_160px_80px_110px] gap-3 px-6 items-center text-[11px] font-bold text-[#71717A] uppercase tracking-wider h-10 select-none"
+          className="grid grid-cols-[36px_minmax(0,1fr)_auto] md:grid-cols-[40px_minmax(160px,1fr)_140px_80px] lg:grid-cols-[44px_minmax(180px,1fr)_150px_150px_90px] xl:grid-cols-[48px_minmax(180px,1fr)_160px_160px_80px_110px] gap-2 sm:gap-3 px-3 sm:px-6 items-center text-[11px] font-bold text-[#71717A] uppercase tracking-wider h-10 select-none"
         >
           <div
             role="columnheader"
@@ -250,7 +250,7 @@ const TrackTableInner: React.FC<TrackTableProps> = ({
           <div
             role="columnheader"
             onClick={() => handleHeaderClick("artist")}
-            className="cursor-pointer group/col hover:text-white transition min-w-0"
+            className="hidden md:block cursor-pointer group/col hover:text-white transition min-w-0"
             title="Sort by Artist"
           >
             <span>Artist</span>
@@ -259,13 +259,13 @@ const TrackTableInner: React.FC<TrackTableProps> = ({
           <div
             role="columnheader"
             onClick={() => handleHeaderClick("album")}
-            className="cursor-pointer group/col hover:text-white transition min-w-0"
+            className="hidden lg:block cursor-pointer group/col hover:text-white transition min-w-0"
             title="Sort by Album"
           >
             <span>Album</span>
             {renderSortIcon("album")}
           </div>
-          <div role="columnheader" className="text-center">
+          <div role="columnheader" className="hidden xl:block text-center">
             Format
           </div>
           <div

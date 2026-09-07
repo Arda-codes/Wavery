@@ -10,7 +10,6 @@ import {
   Disc,
   Heart,
   ListMusic,
-  HardDrive,
   Settings,
   Plus,
   Trash2,
@@ -18,7 +17,12 @@ import {
   ListPlus,
   CornerDownRight,
   FolderPlus,
+  Home,
+  Search,
+  History,
+  X,
 } from "lucide-react";
+import { useNavigationStore } from "../stores/navigationStore";
 
 interface SidebarProps {
   currentView: ViewMode;
@@ -58,15 +62,20 @@ const SidebarInner: React.FC<SidebarProps> = ({
   const addToQueue = usePlayerStore((s) => s.addToQueue);
   const openContextMenu = useContextMenuStore((s) => s.openContextMenu);
 
+  const isHomeActive = currentView === "home";
+  const isSearchActive = currentView === "search";
   const isTracksActive = currentView === "tracks";
   const isArtistsActive = currentView === "artists" || currentView === "artist_detail";
   const isAlbumsActive = currentView === "albums" || currentView === "album_detail";
   const isLikedActive = currentView === "liked";
+  const isHistoryActive = currentView === "history";
   const isPlaylistsActive = currentView === "playlists";
   const isSettingsActive = currentView === "settings";
 
-  const isTracksPlaying = playbackContext?.type === "tracks";
+  const playHistory = usePlayerStore((s) => s.playHistory);
+  const isTracksPlaying = playbackContext?.type === "tracks" && !playbackContext?.name?.includes("History");
   const isLikedPlaying = playbackContext?.type === "liked";
+  const isHistoryPlaying = playbackContext?.name?.includes("History");
 
   const handlePlaylistContextMenu = useCallback(
     (e: React.MouseEvent, pl: Playlist) => {
@@ -169,6 +178,23 @@ const SidebarInner: React.FC<SidebarProps> = ({
 
       const menuItems: ContextMenuItem[] = [
         {
+          id: "nav-home",
+          label: "Home",
+          icon: Home,
+          onClick: () => onNavigate("home"),
+        },
+        {
+          id: "nav-search",
+          label: "Search",
+          icon: Search,
+          onClick: () => onNavigate("search"),
+        },
+        {
+          id: "divider-top",
+          label: "",
+          divider: true,
+        },
+        {
           id: "nav-all-tracks",
           label: "All Tracks",
           icon: Library,
@@ -179,6 +205,12 @@ const SidebarInner: React.FC<SidebarProps> = ({
           label: "Liked Songs",
           icon: Heart,
           onClick: () => onNavigate("liked"),
+        },
+        {
+          id: "nav-history",
+          label: "Listening History",
+          icon: History,
+          onClick: () => onNavigate("history"),
         },
         {
           id: "nav-artists",
@@ -242,12 +274,48 @@ const SidebarInner: React.FC<SidebarProps> = ({
     [onNavigate, onCreatePlaylist, onOpenImport, openContextMenu]
   );
 
-  return (
-    <aside
-      onContextMenu={handleSidebarNavContextMenu}
-      className="w-60 bg-[#0F0F13]/95 border-r border-white/[0.07] p-3 flex flex-col justify-between select-none flex-shrink-0 z-20 overflow-y-auto"
-    >
-      <div className="space-y-5">
+  const isMobileSidebarOpen = useNavigationStore((s) => s.isMobileSidebarOpen);
+  const setMobileSidebarOpen = useNavigationStore((s) => s.setMobileSidebarOpen);
+
+  const renderNavContent = () => (
+    <div className="space-y-5">
+        {/* Apple Music Style Main Navigation (Home & Search) */}
+        <div className="space-y-1">
+          {/* Home */}
+          <button
+            onClick={() => onNavigate("home")}
+            className={`w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all group ${
+              isHomeActive
+                ? "bg-white/[0.10] text-white border border-white/[0.08] shadow-sm"
+                : "text-[#A1A1AA] hover:text-white hover:bg-white/[0.04]"
+            }`}
+          >
+            <Home
+              className={`w-4 h-4 transition-colors ${
+                isHomeActive ? "text-[#FA586A]" : "text-[#71717A] group-hover:text-white"
+              }`}
+            />
+            <span className="truncate">Home</span>
+          </button>
+
+          {/* Search */}
+          <button
+            onClick={() => onNavigate("search")}
+            className={`w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all group ${
+              isSearchActive
+                ? "bg-white/[0.10] text-white border border-white/[0.08] shadow-sm"
+                : "text-[#A1A1AA] hover:text-white hover:bg-white/[0.04]"
+            }`}
+          >
+            <Search
+              className={`w-4 h-4 transition-colors ${
+                isSearchActive ? "text-[#FA586A]" : "text-[#71717A] group-hover:text-white"
+              }`}
+            />
+            <span className="truncate">Search</span>
+          </button>
+        </div>
+
         {/* Library Section */}
         <div>
           <p className="text-[11px] font-bold text-[#71717A] tracking-wider uppercase mb-2 px-3">
@@ -316,6 +384,39 @@ const SidebarInner: React.FC<SidebarProps> = ({
               >
                 {likedCount}
               </span>
+            </button>
+
+            {/* Listening History */}
+            <button
+              onClick={() => onNavigate("history")}
+              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all group ${
+                isHistoryActive
+                  ? "bg-white/[0.10] text-white border border-white/[0.08] shadow-sm"
+                  : "text-[#A1A1AA] hover:text-white hover:bg-white/[0.04]"
+              }`}
+            >
+              <History
+                className={`w-4 h-4 transition-colors ${
+                  isHistoryActive ? "text-[#FA586A]" : "text-[#71717A] group-hover:text-white"
+                }`}
+              />
+              <span className="truncate">History</span>
+              {isHistoryPlaying && (
+                <span className="inline-flex items-center ml-1" title="Currently Playing from History">
+                  <EqualizerWave isPlaying={isPlaying} size="xs" color="bg-[#FA586A]" />
+                </span>
+              )}
+              {playHistory.length > 0 && (
+                <span
+                  className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-mono transition-colors ${
+                    isHistoryActive
+                      ? "bg-[#FA586A] text-white font-bold shadow-sm shadow-[#FA586A]/30"
+                      : "bg-white/[0.06] text-[#71717A] group-hover:text-[#A1A1AA]"
+                  }`}
+                >
+                  {playHistory.length}
+                </span>
+              )}
             </button>
 
             {/* Artists */}
@@ -496,17 +597,56 @@ const SidebarInner: React.FC<SidebarProps> = ({
           </nav>
         </div>
       </div>
+  );
 
-      <div className="p-3 bg-[#16161A] border border-white/[0.07] rounded-xl flex items-center gap-2.5 shadow-sm mt-4">
-        <HardDrive className="w-4 h-4 text-[#FA586A] flex-shrink-0" />
-        <div className="min-w-0">
-          <p className="text-[11px] font-bold text-white">Music Folder</p>
-          <p className="text-[10px] text-[#71717A] truncate font-mono">
-            ~/.local/share/wavery/library
-          </p>
+  return (
+    <>
+      {/* Desktop Persistent Sidebar (>= 1024px / lg) */}
+      <aside
+        onContextMenu={handleSidebarNavContextMenu}
+        className="hidden lg:flex w-60 bg-[#0F0F13]/95 border-r border-white/[0.07] p-3 flex-col justify-between select-none flex-shrink-0 z-20 overflow-y-auto"
+      >
+        {renderNavContent()}
+      </aside>
+
+      {/* Mobile & Tablet Slide-Over Off-Canvas Drawer (< 1024px / lg) */}
+      {isMobileSidebarOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden flex">
+          {/* Subtle Frosted Backdrop Overlay */}
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
+            onClick={() => setMobileSidebarOpen(false)}
+            aria-hidden="true"
+          />
+
+          {/* Slide-out Drawer Pane */}
+          <aside
+            onContextMenu={handleSidebarNavContextMenu}
+            className="relative w-72 max-w-[85vw] bg-[#0F0F13]/98 border-r border-white/[0.10] p-4 flex flex-col justify-between select-none shadow-2xl overflow-y-auto z-50 animate-fade-in"
+          >
+            {/* Mobile Header with Brand & Close Button */}
+            <div className="flex items-center justify-between pb-3 border-b border-white/[0.06] mb-3 flex-shrink-0">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-[#FA586A] to-[#E0284F] flex items-center justify-center font-bold text-white shadow-sm">
+                  <span className="text-[10px] font-black tracking-tighter">W</span>
+                </div>
+                <span className="font-bold text-sm text-white">Wavery</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobileSidebarOpen(false)}
+                className="w-8 h-8 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] active:scale-95 text-[#A1A1AA] hover:text-white flex items-center justify-center transition focus:outline-none"
+                title="Close Navigation"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {renderNavContent()}
+          </aside>
         </div>
-      </div>
-    </aside>
+      )}
+    </>
   );
 };
 

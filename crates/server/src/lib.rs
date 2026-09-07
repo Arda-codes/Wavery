@@ -217,6 +217,7 @@ pub struct AppState {
     pub config: Arc<tokio::sync::RwLock<wavery_config::Config>>,
     pub config_path: PathBuf,
     pub session: Arc<tokio::sync::RwLock<Option<wavery_core::models::PlaybackSession>>>,
+    pub app_signal_tx: tokio::sync::broadcast::Sender<String>,
 }
 
 impl AppState {
@@ -233,6 +234,7 @@ impl AppState {
             .ok()
             .and_then(|p| wavery_config::load_session(&p).ok())
             .flatten();
+        let (app_signal_tx, _) = tokio::sync::broadcast::channel(16);
         Self {
             library,
             reader,
@@ -241,6 +243,7 @@ impl AppState {
             config: Arc::new(tokio::sync::RwLock::new(config)),
             config_path,
             session: Arc::new(tokio::sync::RwLock::new(session)),
+            app_signal_tx,
         }
     }
 
@@ -257,6 +260,7 @@ impl AppState {
             .ok()
             .and_then(|p| wavery_config::load_session(&p).ok())
             .flatten();
+        let (app_signal_tx, _) = tokio::sync::broadcast::channel(16);
         Self {
             library,
             reader,
@@ -265,6 +269,7 @@ impl AppState {
             config: Arc::new(tokio::sync::RwLock::new(config)),
             config_path,
             session: Arc::new(tokio::sync::RwLock::new(session)),
+            app_signal_tx,
         }
     }
 }
@@ -387,6 +392,8 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route("/api/session", get(get_session_handler).post(save_session_handler))
         .route("/api/app/claim-playback", post(claim_playback_handler))
         .route("/api/app/switch-to-native", post(switch_to_native_handler))
+        .route("/api/app/events", get(app_events_handler))
+        .route("/api/app/close-web", post(close_web_handler))
         .route("/api/app/quit", post(quit_app_handler))
         .layer(CorsLayer::permissive())
         .with_state(state.clone());
@@ -1218,17 +1225,10 @@ async fn switch_to_native_handler(
     }
 
     match spawn_native_process() {
-        Ok(_) => {
-            // Strict mutual exclusivity: Terminate the web server process so only Tauri runs
-            tokio::spawn(async {
-                tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
-                std::process::exit(0);
-            });
-            Ok(Json(StatusResponse {
-                ok: true,
-                message: "Native desktop display launched successfully.".to_string(),
-            }))
-        }
+        Ok(_) => Ok(Json(StatusResponse {
+            ok: true,
+            message: "Native desktop display launched successfully.".to_string(),
+        })),
         Err(e) => {
             tracing::error!("Failed to launch native desktop display: {}", e);
             Err(ServerError::Internal(format!(
@@ -1239,10 +1239,47 @@ async fn switch_to_native_handler(
     }
 }
 
-async fn quit_app_handler() -> Result<Json<StatusResponse>, ServerError> {
-    tracing::info!("Shutting down Wavery background server...");
+/// Response structure representing a broadcast application lifecycle signal.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct AppSignalResponse {
+    pub signal: String,
+}
+
+/// Long-polling endpoint for web clients to receive server lifecycle signals (e.g. "close").
+async fn app_events_handler(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<AppSignalResponse>, StatusCode> {
+    let mut rx = state.app_signal_tx.subscribe();
+    match tokio::time::timeout(tokio::time::Duration::from_secs(25), rx.recv()).await {
+        Ok(Ok(sig)) => Ok(Json(AppSignalResponse { signal: sig })),
+        Ok(Err(_)) => Ok(Json(AppSignalResponse {
+            signal: "idle".to_string(),
+        })),
+        Err(_) => Ok(Json(AppSignalResponse {
+            signal: "timeout".to_string(),
+        })),
+    }
+}
+
+/// Explicit endpoint to broadcast a close signal to all active web clients.
+async fn close_web_handler(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<StatusResponse>, ServerError> {
+    tracing::info!("Broadcasting close signal to web clients...");
+    let _ = state.app_signal_tx.send("close".to_string());
+    Ok(Json(StatusResponse {
+        ok: true,
+        message: "Close signal dispatched to web clients.".to_string(),
+    }))
+}
+
+async fn quit_app_handler(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<StatusResponse>, ServerError> {
+    tracing::info!("Broadcasting close signal to web clients and shutting down Wavery background server...");
+    let _ = state.app_signal_tx.send("close".to_string());
     tokio::spawn(async {
-        tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
+        tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
         std::process::exit(0);
     });
     Ok(Json(StatusResponse {

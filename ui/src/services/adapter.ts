@@ -433,13 +433,7 @@ class BrowserAudioPlayer implements AudioPlayerAdapter {
     try {
       await fetch("/api/app/switch-to-native", { method: "POST" });
     } catch {
-      // Ignored if server terminates immediately
-    }
-    if (typeof window !== "undefined") {
-      window.close();
-      setTimeout(() => {
-        window.close();
-      }, 100);
+      // Ignored if network error
     }
   }
 
@@ -850,7 +844,10 @@ class TauriAudioPlayer implements AudioPlayerAdapter {
 
 type Vec<T> = T[];
 
+export const isTauri: boolean =
+  typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
 export const playerAdapter: AudioPlayerAdapter =
-  typeof window !== "undefined" && "__TAURI_INTERNALS__" in window
+  isTauri
     ? new TauriAudioPlayer()
     : new BrowserAudioPlayer();

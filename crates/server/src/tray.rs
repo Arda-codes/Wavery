@@ -92,6 +92,7 @@ impl Tray for WaveryServerTray {
         let web_url_clone = web_url.clone();
         let state_rescan = self.state.clone();
         let state_rebuild = self.state.clone();
+        let state_quit = self.state.clone();
 
         vec![
             StandardItem {
@@ -174,8 +175,10 @@ impl Tray for WaveryServerTray {
             MenuItem::Separator,
             StandardItem {
                 label: "🛑 Quit Wavery Server".into(),
-                activate: Box::new(|_| {
+                activate: Box::new(move |_| {
                     info!("Tray: Shutting down Wavery Server...");
+                    let _ = state_quit.app_signal_tx.send("close".to_string());
+                    std::thread::sleep(std::time::Duration::from_millis(250));
                     std::process::exit(0);
                 }),
                 ..Default::default()

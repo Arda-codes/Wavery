@@ -71,8 +71,8 @@ const ArtistsViewInner: React.FC<ArtistsViewProps> = ({
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-[#0D0D10]">
       {/* Top Filter and Sort Controls */}
-      <div className="flex items-center justify-between px-6 py-3.5 border-b border-white/[0.06] flex-shrink-0 gap-4">
-        <div className="relative flex-1 max-w-xs group">
+      <div className="flex flex-wrap items-center justify-between px-3 sm:px-6 py-2.5 sm:py-3.5 border-b border-white/[0.06] flex-shrink-0 gap-2 sm:gap-4">
+        <div className="relative flex-1 max-w-xs min-w-[140px] group">
           <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-[#71717A] group-focus-within:text-[#FA586A] transition-colors" />
           <input
             type="text"
@@ -83,14 +83,14 @@ const ArtistsViewInner: React.FC<ArtistsViewProps> = ({
           />
         </div>
 
-        <div className="flex items-center space-x-2 text-xs">
-          <span className="text-[#71717A]">Sort by:</span>
+        <div className="flex items-center space-x-1.5 sm:space-x-2 text-xs overflow-x-auto max-w-full py-0.5">
+          <span className="text-[#71717A] hidden sm:inline">Sort:</span>
           {(["name", "album_count", "track_count"] as ArtistSortKey[]).map(
             (key) => (
               <button
                 key={key}
                 onClick={() => toggleSort(key)}
-                className={`px-3 py-1 rounded-full border text-[11px] font-medium flex items-center gap-1 transition-all ${
+                className={`px-2.5 sm:px-3 py-1 rounded-full border text-[11px] font-medium flex items-center gap-1 whitespace-nowrap transition-all ${
                   sortKey === key
                     ? "bg-[#FA586A]/15 border-[#FA586A]/40 text-white font-semibold shadow-sm"
                     : "bg-[#18181D] border-white/[0.06] text-[#71717A] hover:text-white hover:border-white/[0.15]"
@@ -113,7 +113,7 @@ const ArtistsViewInner: React.FC<ArtistsViewProps> = ({
       </div>
 
       {/* Hardware-Accelerated Artists Grid */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-6 pb-28 sm:pb-24">
         <div className={gridClass}>
           {filteredAndSortedArtists.map((artist) => (
             <ArtistCard

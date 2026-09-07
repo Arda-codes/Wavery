@@ -621,3 +621,39 @@ async fn test_server_tray_initialization_and_display_urls() {
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
+
+#[tokio::test]
+async fn test_app_close_signal_broadcasting() {
+    let temp_dir = std::env::temp_dir().join(format!("wavery_signal_{}", uuid::Uuid::new_v4()));
+    let lib_dir = temp_dir.join("library");
+    let db_path = temp_dir.join("library.db");
+    fs::create_dir_all(&lib_dir).unwrap();
+
+    let manager = SqliteLibraryManager::new(lib_dir, db_path).unwrap();
+    let state = Arc::new(AppState::new(
+        Arc::new(tokio::sync::Mutex::new(manager)),
+        LoftyMetadataReader::new(),
+        None,
+    ));
+
+    let app = build_router(state.clone());
+
+    // 1. Subscribe to app_signal_tx
+    let mut rx = state.app_signal_tx.subscribe();
+
+    // 2. Trigger /api/app/close-web
+    let req = Request::builder()
+        .method("POST")
+        .uri("/api/app/close-web")
+        .body(Body::empty())
+        .unwrap();
+
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // 3. Verify signal received
+    let sig = rx.recv().await.unwrap();
+    assert_eq!(sig, "close");
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}

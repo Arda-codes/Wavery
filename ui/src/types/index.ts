@@ -53,6 +53,9 @@ export type f32 = number;
 
 // Navigation & Hierarchy Types
 export type ViewMode =
+  | "home"
+  | "search"
+  | "history"
   | "tracks"
   | "artists"
   | "artist_detail"
@@ -107,3 +110,8 @@ export type SortDirection = "asc" | "desc";
 
 export type AlbumSortKey = "title" | "artist" | "year" | "track_count";
 export type ArtistSortKey = "name" | "album_count" | "track_count";
+
+export interface PlayHistoryEntry {
+  trackId: string;
+  playedAt: number;
+}

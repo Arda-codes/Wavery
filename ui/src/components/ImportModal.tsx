@@ -64,7 +64,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-      <div className="bg-[#18181D] border border-white/[0.08] w-full max-w-lg rounded-2xl p-6 shadow-2xl relative">
+      <div className="bg-[#18181D] border border-white/[0.08] w-full max-w-lg rounded-2xl p-5 sm:p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 text-[#71717A] hover:text-white hover:bg-white/[0.06] p-1 rounded-full transition"
@@ -148,7 +148,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
             <label className="block text-xs font-semibold text-[#A1A1AA] mb-2">
               Import Method
             </label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <button
                 type="button"
                 onClick={() => setStrategy("Copy")}

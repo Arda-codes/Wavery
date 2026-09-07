@@ -80,15 +80,15 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-[#0D0D10]">
       {/* Hero Banner */}
-      <div className="p-8 pb-6 flex items-end gap-6 bg-gradient-to-b from-white/[0.08] via-white/[0.02] to-transparent border-b border-white/[0.06] flex-shrink-0">
+      <div className="p-4 sm:p-6 md:p-8 pb-6 flex flex-col sm:flex-row items-center sm:items-end gap-5 sm:gap-6 text-center sm:text-left bg-gradient-to-b from-white/[0.08] via-white/[0.02] to-transparent border-b border-white/[0.06] flex-shrink-0">
         {/* Playlist Art Card */}
-        <div className="w-36 h-36 rounded-2xl bg-gradient-to-br from-[#0070F3] via-[#7928CA] to-[#FF0080] flex items-center justify-center shadow-2xl shadow-purple-500/20 border border-white/20 flex-shrink-0">
-          <ListMusic className="w-16 h-16 text-white drop-shadow-md" />
+        <div className="w-28 h-28 sm:w-36 sm:h-36 rounded-2xl bg-gradient-to-br from-[#0070F3] via-[#7928CA] to-[#FF0080] flex items-center justify-center shadow-2xl shadow-purple-500/20 border border-white/20 flex-shrink-0">
+          <ListMusic className="w-12 h-12 sm:w-16 sm:h-16 text-white drop-shadow-md" />
         </div>
 
         {/* Info & Action Controls */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
+        <div className="flex-1 min-w-0 w-full">
+          <div className="flex items-center justify-center sm:justify-start gap-2 mb-1">
             <p className="text-[11px] font-bold text-[#71717A] uppercase tracking-widest">
               Playlist
             </p>
@@ -101,7 +101,7 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
           </div>
 
           {isEditingName ? (
-            <div className="flex items-center space-x-2 mb-2">
+            <div className="flex items-center justify-center sm:justify-start space-x-2 mb-2">
               <input
                 type="text"
                 value={editedName}
@@ -114,7 +114,7 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
                   }
                 }}
                 autoFocus
-                className="bg-[#1C1C22] border border-[#FA586A] rounded-lg px-3 py-1 text-2xl font-black text-white focus:outline-none focus:ring-2 focus:ring-[#FA586A]/40"
+                className="bg-[#1C1C22] border border-[#FA586A] rounded-lg px-3 py-1 text-xl sm:text-2xl font-black text-white focus:outline-none focus:ring-2 focus:ring-[#FA586A]/40"
               />
               <button
                 onClick={handleSaveName}
@@ -135,8 +135,8 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
               </button>
             </div>
           ) : (
-            <div className="flex items-center space-x-3 mb-2 group/title">
-              <h1 className="text-3xl font-black text-white tracking-tight truncate">
+            <div className="flex items-center justify-center sm:justify-start space-x-3 mb-2 group/title">
+              <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight truncate">
                 {playlist.name}
               </h1>
               <button
@@ -152,14 +152,14 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
             </div>
           )}
 
-          <p className="text-xs text-[#A1A1AA] font-medium flex items-center gap-2 mb-4">
+          <p className="text-xs text-[#A1A1AA] font-medium flex items-center justify-center sm:justify-start gap-2 mb-4">
             <span className="text-white font-semibold">{tracks.length} tracks</span>
             <span>•</span>
             <span>{formatTotalDuration(totalDurationSecs)}</span>
           </p>
 
           {/* Action Pills */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center sm:justify-start gap-3 flex-wrap">
             <button
               onClick={handlePlayAll}
               disabled={tracks.length === 0}
@@ -182,7 +182,7 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
                   onDeletePlaylist();
                 }
               }}
-              className="p-2 bg-white/[0.06] hover:bg-red-500/20 text-[#71717A] hover:text-red-400 rounded-full border border-white/[0.06] transition ml-auto"
+              className="p-2 bg-white/[0.06] hover:bg-red-500/20 text-[#71717A] hover:text-red-400 rounded-full border border-white/[0.06] transition sm:ml-auto"
               title="Delete Playlist"
             >
               <Trash2 className="w-4 h-4" />

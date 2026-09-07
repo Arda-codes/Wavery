@@ -28,12 +28,10 @@ export const ModeSwitcher: React.FC<ModeSwitcherProps> = ({ onSwitchStart }) => 
         await usePlayerStore.getState().switchToWeb();
       } else {
         await playerAdapter.switchToNative();
-        if (typeof window !== "undefined") {
-          window.close();
-        }
       }
     } catch (err) {
       console.error("Failed to switch mode:", err);
+    } finally {
       setIsSwitching(false);
       setSwitchingTo(null);
     }

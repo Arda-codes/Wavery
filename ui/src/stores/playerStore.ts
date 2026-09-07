@@ -106,6 +106,49 @@ function loadSession(): PlayerSession | null {
   }
 }
 
+const PLAY_HISTORY_KEY = "wavery_play_history";
+
+export interface PlayHistoryEntry {
+  trackId: string;
+  playedAt: number;
+}
+
+function loadPlayHistory(): PlayHistoryEntry[] {
+  if (typeof localStorage === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(PLAY_HISTORY_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item) => {
+        if (typeof item === "string") {
+          return { trackId: item, playedAt: Date.now() };
+        }
+        if (item && typeof item.trackId === "string") {
+          return {
+            trackId: item.trackId,
+            playedAt: typeof item.playedAt === "number" ? item.playedAt : Date.now(),
+          };
+        }
+        return null;
+      })
+      .filter((item): item is PlayHistoryEntry => item !== null)
+      .slice(0, 150);
+  } catch {
+    return [];
+  }
+}
+
+function savePlayHistory(history: PlayHistoryEntry[]): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(PLAY_HISTORY_KEY, JSON.stringify(history.slice(0, 150)));
+  } catch {
+    // Ignore quota errors
+  }
+}
+
 export interface PlayerStoreState {
   /** Current playback status from the backend. */
   status: PlayerStatus;
@@ -128,6 +171,14 @@ export interface PlayerStoreState {
   favoriteTrackIds: Set<string>;
   /** Whether the playback was explicitly stopped by the user. */
   isManualStop: boolean;
+  /** Chronological history of recently played track entries with timestamps. */
+  playHistory: PlayHistoryEntry[];
+  /** Record a track ID into recent playback history. */
+  recordTrackPlay: (trackId: string) => void;
+  /** Clear all playback history. */
+  clearPlayHistory: () => void;
+  /** Remove a track entry from playback history. */
+  removePlayHistoryItem: (trackId: string, timestamp?: number) => void;
 
   /** Start the 500ms polling loop. Call once on app mount. */
   startPolling: () => () => void;
@@ -200,6 +251,37 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
   isAutoplay: true,
   favoriteTrackIds: new Set<string>(),
   isManualStop: false,
+  playHistory: loadPlayHistory(),
+
+  recordTrackPlay: (trackId: string) => {
+    if (!trackId) return;
+    const now = Date.now();
+    const current = get().playHistory;
+    // Debounce duplicate plays within 10 seconds, and place most recent at top
+    const filtered = current.filter(
+      (entry) => !(entry.trackId === trackId && now - entry.playedAt < 10000)
+    );
+    const updated = [{ trackId, playedAt: now }, ...filtered].slice(0, 150);
+    set({ playHistory: updated });
+    savePlayHistory(updated);
+  },
+
+  clearPlayHistory: () => {
+    set({ playHistory: [] });
+    savePlayHistory([]);
+  },
+
+  removePlayHistoryItem: (trackId: string, timestamp?: number) => {
+    const current = get().playHistory;
+    const updated = current.filter((entry) => {
+      if (timestamp !== undefined) {
+        return !(entry.trackId === trackId && entry.playedAt === timestamp);
+      }
+      return entry.trackId !== trackId;
+    });
+    set({ playHistory: updated });
+    savePlayHistory(updated);
+  },
 
   startPolling: () => {
     let autoCrossfadeTriggered = false;
@@ -246,6 +328,9 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
 
         if (trackChanged || currentPollingTrackId !== newTrackId) {
           currentPollingTrackId = newTrackId;
+          if (newTrackId && s.state === "Playing") {
+            get().recordTrackPlay(newTrackId);
+          }
           // Only reset autoCrossfadeTriggered once the incoming track is playing or not in transient stopped state
           if (s.position_secs > 0 || s.state === "Playing") {
             autoCrossfadeTriggered = false;
@@ -389,6 +474,7 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
     }
 
     try {
+      get().recordTrackPlay(track.id);
       await playerAdapter.playTrack(track);
       notifyIfEnabled(track);
       // Immediately persist so a refresh always knows the current track
@@ -412,6 +498,7 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
     if (tracks.length === 0) return;
     const validIndex = Math.max(0, Math.min(startIndex, tracks.length - 1));
     const targetTrack = tracks[validIndex];
+    get().recordTrackPlay(targetTrack.id);
 
     const effectiveContext =
       context ||

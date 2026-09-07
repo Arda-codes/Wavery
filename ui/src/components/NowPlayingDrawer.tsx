@@ -435,10 +435,17 @@ export const NowPlayingDrawer: React.FC = () => {
   };
 
   return (
-    <aside
-      aria-label="Now Playing and Queue"
-      className="w-80 lg:w-96 bg-[#121216]/95 border-l border-white/[0.08] backdrop-blur-2xl flex flex-col justify-between select-none z-20 flex-shrink-0 shadow-2xl animate-fade-in"
-    >
+    <>
+      {/* Backdrop for viewports < 2xl */}
+      <div
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 2xl:hidden"
+        onClick={() => toggleDrawer()}
+        aria-hidden="true"
+      />
+      <aside
+        aria-label="Now Playing and Queue"
+        className="fixed 2xl:relative inset-y-0 right-0 z-50 2xl:z-20 w-full sm:w-80 lg:w-96 max-w-[100vw] bg-[#121216]/98 2xl:bg-[#121216]/95 border-l border-white/[0.08] backdrop-blur-2xl flex flex-col justify-between select-none flex-shrink-0 shadow-2xl animate-fade-in"
+      >
       {/* Drawer Header & Tab Selector */}
       <div className="px-5 py-3.5 border-b border-white/[0.06] flex items-center justify-between flex-shrink-0">
         <div className="flex items-center space-x-1 p-0.5 bg-white/[0.06] rounded-xl border border-white/[0.06]">
@@ -773,5 +780,6 @@ export const NowPlayingDrawer: React.FC = () => {
         )}
       </div>
     </aside>
+  </>
   );
 };

@@ -53,9 +53,9 @@ const AlbumDetailInner: React.FC<AlbumDetailProps> = ({
   return (
     <div className="flex-1 flex flex-col overflow-y-auto bg-[#0D0D10]">
       {/* Album Header Banner */}
-      <div className="bg-gradient-to-b from-[#FA586A]/20 via-[#16161A]/80 to-[#0D0D10] p-8 border-b border-white/[0.06] flex flex-col md:flex-row items-center md:items-end gap-7 flex-shrink-0">
+      <div className="bg-gradient-to-b from-[#FA586A]/20 via-[#16161A]/80 to-[#0D0D10] p-4 sm:p-6 md:p-8 border-b border-white/[0.06] flex flex-col md:flex-row items-center md:items-end gap-5 sm:gap-7 flex-shrink-0">
         {/* Cover Art */}
-        <div className="w-48 h-48 rounded-2xl bg-[#1C1C22] overflow-hidden shadow-2xl shadow-black/80 flex items-center justify-center flex-shrink-0 border border-white/[0.08]">
+        <div className="w-36 h-36 sm:w-44 sm:h-44 md:w-48 md:h-48 rounded-2xl bg-[#1C1C22] overflow-hidden shadow-2xl shadow-black/80 flex items-center justify-center flex-shrink-0 border border-white/[0.08]">
           {coverArtwork && !coverError ? (
             <img
               src={coverArtwork}
@@ -83,7 +83,7 @@ const AlbumDetailInner: React.FC<AlbumDetailProps> = ({
               </span>
             )}
           </div>
-          <h1 className="text-3xl md:text-4xl font-extrabold text-white tracking-tight mb-2.5">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-white tracking-tight mb-2.5">
             {album.title}
           </h1>
 
@@ -140,7 +140,7 @@ const AlbumDetailInner: React.FC<AlbumDetailProps> = ({
       </div>
 
       {/* Album Tracks */}
-      <div className="p-6">
+      <div className="p-3 sm:p-6 pb-28 sm:pb-24">
         <div className="bg-[#16161A]/60 rounded-2xl border border-white/[0.06] overflow-hidden shadow-md">
           <TrackTable
             tracks={album.tracks}

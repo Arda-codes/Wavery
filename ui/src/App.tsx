@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback, useDeferredValue, useRef } from "react";
-import { playerAdapter } from "./services/adapter";
+import { playerAdapter, isTauri } from "./services/adapter";
 import {
   ImportStrategy,
   AlbumInfo,
@@ -23,17 +23,100 @@ import { PlaylistDetail } from "./components/PlaylistDetail";
 import { CreatePlaylistModal } from "./components/CreatePlaylistModal";
 import { Sidebar } from "./components/Sidebar";
 import { SettingsView } from "./components/SettingsView";
+import { HomeView } from "./components/HomeView";
+import { SearchView } from "./components/SearchView";
+import { HistoryView } from "./components/HistoryView";
 import { Breadcrumbs, BreadcrumbItem } from "./components/Breadcrumbs";
 import { ImportModal } from "./components/ImportModal";
 import { NowPlayingDrawer } from "./components/NowPlayingDrawer";
 import { FullscreenPlayer } from "./components/FullscreenPlayer";
 import { ContextMenu } from "./components/ContextMenu";
 import { matchesKeyCombo, isEditableTarget } from "./utils/keybindings";
-import { Search, Settings, ExternalLink, ChevronLeft, Home } from "lucide-react";
+import { Search, Settings, ExternalLink, ChevronLeft, Home, Menu, Library, ListMusic } from "lucide-react";
 
 export const App: React.FC = () => {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isCreatePlaylistOpen, setIsCreatePlaylistOpen] = useState(false);
+  const [isAppClosed, setIsAppClosed] = useState(() => {
+    if (typeof window !== "undefined" && window.location.pathname === "/closed") {
+      return true;
+    }
+    return false;
+  });
+
+  // Listen for signal to close web page (from both Tauri IPC and Web server event stream)
+  useEffect(() => {
+    let active = true;
+
+    const handleCloseSignal = () => {
+      playerAdapter.pause().catch(() => {});
+      if (typeof window !== "undefined") {
+        try {
+          window.close();
+        } catch {}
+        try {
+          window.open("", "_self");
+          window.close();
+        } catch {}
+
+        setTimeout(() => {
+          try {
+            window.history.replaceState(null, "", "/closed");
+          } catch {}
+          setIsAppClosed(true);
+        }, 120);
+      } else {
+        setIsAppClosed(true);
+      }
+    };
+
+    if (isTauri) {
+      let unlisten: (() => void) | undefined;
+      import("@tauri-apps/api/event")
+        .then(({ listen }) => {
+          if (!active) return;
+          listen("close-web-page", () => {
+            handleCloseSignal();
+          })
+            .then((fn) => {
+              unlisten = fn;
+            })
+            .catch(() => {});
+        })
+        .catch(() => {});
+
+      return () => {
+        active = false;
+        unlisten?.();
+      };
+    } else {
+      // Browser mode: poll for server application lifecycle signals
+      const pollSignals = async () => {
+        while (active) {
+          try {
+            const res = await fetch("/api/app/events");
+            if (!active) break;
+            if (res.ok) {
+              const data = (await res.json()) as { signal?: string };
+              if (data.signal === "close" || data.signal === "quit") {
+                handleCloseSignal();
+                break;
+              }
+            }
+          } catch {
+            if (!active) break;
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+          }
+        }
+      };
+
+      pollSignals();
+
+      return () => {
+        active = false;
+      };
+    }
+  }, []);
 
   // Settings & Linux banner
   const isLinuxBannerDismissed = useSettingsStore((s) => s.isLinuxBannerDismissed);
@@ -95,10 +178,15 @@ export const App: React.FC = () => {
       ) {
         e.preventDefault();
         e.stopPropagation();
-        if (searchInputRef.current) {
-          searchInputRef.current.focus();
-          searchInputRef.current.select();
+        if (useNavigationStore.getState().viewMode !== "search") {
+          useNavigationStore.getState().navigate("search");
         }
+        setTimeout(() => {
+          if (searchInputRef.current) {
+            searchInputRef.current.focus();
+            searchInputRef.current.select();
+          }
+        }, 20);
         return;
       }
 
@@ -117,8 +205,13 @@ export const App: React.FC = () => {
       // 3. Quick '/' key to search
       if (e.key === "/" && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault();
-        searchInputRef.current?.focus();
-        searchInputRef.current?.select();
+        if (useNavigationStore.getState().viewMode !== "search") {
+          useNavigationStore.getState().navigate("search");
+        }
+        setTimeout(() => {
+          searchInputRef.current?.focus();
+          searchInputRef.current?.select();
+        }, 20);
         return;
       }
 
@@ -338,6 +431,10 @@ export const App: React.FC = () => {
   // Breadcrumb Trail Items
   const breadcrumbItems = useMemo<BreadcrumbItem[]>(() => {
     switch (viewMode) {
+      case "home":
+        return [{ label: "Home", view: "home" }];
+      case "search":
+        return [{ label: "Search", view: "search" }];
       case "artists":
         return [{ label: "Artists", view: "artists" }];
       case "artist_detail":
@@ -364,6 +461,8 @@ export const App: React.FC = () => {
         ];
       case "liked":
         return [{ label: "Liked Songs", view: "liked" }];
+      case "history":
+        return [{ label: "Listening History", view: "history" }];
       case "playlists":
         return [{ label: "Playlists", view: "playlists" }];
       case "playlist_detail":
@@ -391,62 +490,97 @@ export const App: React.FC = () => {
     );
   }, [tracks, deferredGlobalSearch]);
 
+  if (isAppClosed) {
+    return (
+      <div className="fixed inset-0 z-50 bg-[#0A0A0C] flex items-center justify-center text-white p-6 select-none">
+        <div className="text-center">
+          <p className="text-xl font-medium tracking-tight text-white/90">Wavery has closed</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-screen w-screen bg-[#0D0D10] text-[#FFFFFF] font-sans antialiased selection:bg-[#FA586A]/30 selection:text-white">
       {/* Top Desktop Chrome / Header */}
-      <header className="h-14 bg-[#0F0F13]/95 backdrop-blur-xl border-b border-white/[0.06] px-5 flex items-center justify-between flex-shrink-0 z-30 select-none">
-        {/* Left: Brand + Navigation Chevrons */}
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2.5">
+      <header className="h-14 bg-[#0F0F13]/95 backdrop-blur-xl border-b border-white/[0.06] px-3 sm:px-5 flex items-center justify-between flex-shrink-0 z-30 select-none gap-2 sm:gap-4">
+        {/* Left: Hamburger (mobile/tablet) + Brand + Navigation Chevrons */}
+        <div className="flex items-center space-x-2 sm:space-x-3 md:space-x-4 min-w-0 flex-shrink-0">
+          {/* Hamburger button on screens < lg */}
+          <button
+            type="button"
+            onClick={() => useNavigationStore.getState().toggleMobileSidebar()}
+            className="lg:hidden w-8 h-8 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] active:scale-95 text-white flex items-center justify-center transition focus:outline-none flex-shrink-0"
+            title="Toggle Navigation Menu"
+            aria-label="Toggle Navigation Menu"
+          >
+            <Menu className="w-4 h-4" />
+          </button>
+
+          <div
+            onClick={() => navigate("home")}
+            className="flex items-center space-x-2 sm:space-x-2.5 cursor-pointer flex-shrink-0"
+          >
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#FA586A] to-[#E0284F] flex items-center justify-center font-bold text-white shadow-md shadow-[#FA586A]/20">
               <span className="text-xs font-black tracking-tighter">W</span>
             </div>
-            <span className="font-bold text-[15px] tracking-tight text-white">Wavery</span>
+            <span className="font-bold text-[15px] tracking-tight text-white hidden sm:inline">Wavery</span>
           </div>
 
           {/* History Back / Forward Controls */}
-          <div className="flex items-center space-x-1 pl-2">
+          <div className="flex items-center space-x-1 pl-0.5 sm:pl-1">
             <button
               onClick={() => {
                 if (breadcrumbItems.length > 1) {
                   const prev = breadcrumbItems[breadcrumbItems.length - 2];
                   breadcrumbNavigate(prev.view, prev.targetId);
                 } else {
-                  navigate("tracks");
+                  navigate("home");
                 }
               }}
-              disabled={viewMode === "tracks"}
+              disabled={viewMode === "home"}
               className="w-7 h-7 rounded-full bg-white/[0.06] hover:bg-white/[0.12] disabled:opacity-30 disabled:hover:bg-white/[0.06] text-white flex items-center justify-center transition"
               title="Go Back"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
             <button
-              onClick={() => navigate("tracks")}
-              className="w-7 h-7 rounded-full bg-white/[0.06] hover:bg-white/[0.12] text-white flex items-center justify-center transition"
-              title="Home (All Tracks)"
+              onClick={() => navigate("home")}
+              className={`w-7 h-7 rounded-full text-white flex items-center justify-center transition ${
+                viewMode === "home"
+                  ? "bg-[#FA586A] text-white shadow-sm"
+                  : "bg-white/[0.06] hover:bg-white/[0.12]"
+              }`}
+              title="Home"
             >
               <Home className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
 
-        {/* Center: Global Search Capsule (Apple Music / Spotify style) */}
-        <div className="relative w-80 max-w-sm group">
+        {/* Center: Global Search Capsule (Responsive fluid width) */}
+        <div className="relative flex-1 max-w-xs md:max-w-sm group min-w-[120px]">
           <Search
             onClick={() => {
+              if (viewMode !== "search") navigate("search");
               searchInputRef.current?.focus();
               searchInputRef.current?.select();
             }}
-            className="w-3.5 h-3.5 absolute left-3.5 top-2.5 text-[#71717A] group-focus-within:text-[#FA586A] transition-colors cursor-pointer"
+            className="w-3.5 h-3.5 absolute left-3 top-2.5 text-[#71717A] group-focus-within:text-[#FA586A] transition-colors cursor-pointer"
           />
           <input
             ref={searchInputRef}
             type="text"
             value={globalSearch}
-            onChange={(e) => setGlobalSearch(e.target.value)}
-            placeholder="Search songs, albums, artists..."
-            className="w-full bg-[#16161A] border border-white/[0.08] hover:border-white/[0.15] focus:border-[#FA586A]/60 rounded-full pl-9 pr-9 py-1.5 text-xs text-white placeholder-[#71717A] focus:outline-none focus:ring-2 focus:ring-[#FA586A]/20 transition-all shadow-inner"
+            onFocus={() => {
+              if (viewMode !== "search") navigate("search");
+            }}
+            onChange={(e) => {
+              setGlobalSearch(e.target.value);
+              if (viewMode !== "search") navigate("search");
+            }}
+            placeholder="Search songs, albums..."
+            className="w-full bg-[#16161A] border border-white/[0.08] hover:border-white/[0.15] focus:border-[#FA586A]/60 rounded-full pl-8 sm:pl-9 pr-7 sm:pr-9 py-1.5 text-xs text-white placeholder-[#71717A] focus:outline-none focus:ring-2 focus:ring-[#FA586A]/20 transition-all shadow-inner"
           />
           {globalSearch ? (
             <button
@@ -455,7 +589,7 @@ export const App: React.FC = () => {
                 setGlobalSearch("");
                 searchInputRef.current?.focus();
               }}
-              className="absolute right-3 top-2 text-[#71717A] hover:text-white text-xs transition"
+              className="absolute right-2.5 top-2 text-[#71717A] hover:text-white text-xs transition"
               title="Clear search"
             >
               ✕
@@ -466,7 +600,7 @@ export const App: React.FC = () => {
                 searchInputRef.current?.focus();
                 searchInputRef.current?.select();
               }}
-              className="cursor-pointer absolute right-3 top-1.5 text-[10px] font-mono text-[#71717A] bg-white/[0.06] hover:bg-white/[0.12] hover:text-white px-1.5 py-0.5 rounded border border-white/[0.06] transition select-none"
+              className="hidden md:inline-block cursor-pointer absolute right-3 top-1.5 text-[10px] font-mono text-[#71717A] bg-white/[0.06] hover:bg-white/[0.12] hover:text-white px-1.5 py-0.5 rounded border border-white/[0.06] transition select-none"
               title={`Focus search (${isMac ? "⌘K" : "Ctrl+K"})`}
             >
               {isMac ? "⌘K" : "Ctrl+K"}
@@ -475,7 +609,7 @@ export const App: React.FC = () => {
         </div>
 
         {/* Right: Settings Quick Access */}
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-2 flex-shrink-0">
           <button
             onClick={() => navigate("settings")}
             className={`w-8 h-8 rounded-full flex items-center justify-center transition border ${
@@ -548,6 +682,35 @@ export const App: React.FC = () => {
           />
 
           {/* View Routing */}
+          {viewMode === "home" && (
+            <HomeView
+              tracks={tracks}
+              albums={albums}
+              artists={artists}
+              playlists={playlists}
+              likedTracks={likedTracks}
+              onSelectAlbum={handleSelectAlbum}
+              onSelectArtist={handleSelectArtist}
+              onSelectPlaylist={handleSelectPlaylist}
+              onNavigate={navigate}
+              onOpenImport={() => setIsImportModalOpen(true)}
+              getArtworkUrl={getArtworkUrl}
+            />
+          )}
+
+          {viewMode === "search" && (
+            <SearchView
+              tracks={tracks}
+              albums={albums}
+              artists={artists}
+              playlists={playlists}
+              onSelectAlbum={handleSelectAlbum}
+              onSelectArtist={handleSelectArtist}
+              onSelectPlaylist={handleSelectPlaylist}
+              getArtworkUrl={getArtworkUrl}
+            />
+          )}
+
           {viewMode === "tracks" && (
             <TrackTable
               tracks={displayedTracks}
@@ -563,6 +726,16 @@ export const App: React.FC = () => {
               likedTracks={likedTracks}
               onSelectArtist={handleSelectArtist}
               onSelectAlbum={handleSelectAlbum}
+              getArtworkUrl={getArtworkUrl}
+            />
+          )}
+
+          {viewMode === "history" && (
+            <HistoryView
+              tracks={tracks}
+              onSelectArtist={handleSelectArtist}
+              onSelectAlbum={handleSelectAlbum}
+              onNavigate={navigate}
               getArtworkUrl={getArtworkUrl}
             />
           )}
@@ -642,6 +815,70 @@ export const App: React.FC = () => {
 
       {/* Bottom Sticky Player Bar */}
       <PlayerBar />
+
+      {/* Mobile Bottom Navigation Bar (sm:hidden) */}
+      <nav
+        aria-label="Mobile Navigation"
+        className="sm:hidden h-14 bg-[#0E0E12]/95 backdrop-blur-2xl border-t border-white/[0.08] flex items-center justify-around flex-shrink-0 z-30 px-2 select-none"
+      >
+        <button
+          type="button"
+          onClick={() => navigate("home")}
+          className={`flex flex-col items-center justify-center flex-1 py-1 transition-colors ${
+            viewMode === "home" ? "text-[#FA586A]" : "text-[#71717A] hover:text-white"
+          }`}
+        >
+          <Home className="w-4 h-4 mb-0.5" />
+          <span className="text-[10px] font-semibold">Home</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            navigate("search");
+            searchInputRef.current?.focus();
+          }}
+          className={`flex flex-col items-center justify-center flex-1 py-1 transition-colors ${
+            viewMode === "search" ? "text-[#FA586A]" : "text-[#71717A] hover:text-white"
+          }`}
+        >
+          <Search className="w-4 h-4 mb-0.5" />
+          <span className="text-[10px] font-semibold">Search</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => navigate("tracks")}
+          className={`flex flex-col items-center justify-center flex-1 py-1 transition-colors ${
+            viewMode === "tracks" ? "text-[#FA586A]" : "text-[#71717A] hover:text-white"
+          }`}
+        >
+          <Library className="w-4 h-4 mb-0.5" />
+          <span className="text-[10px] font-semibold">Library</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => navigate("playlists")}
+          className={`flex flex-col items-center justify-center flex-1 py-1 transition-colors ${
+            viewMode === "playlists" || viewMode === "playlist_detail"
+              ? "text-[#FA586A]"
+              : "text-[#71717A] hover:text-white"
+          }`}
+        >
+          <ListMusic className="w-4 h-4 mb-0.5" />
+          <span className="text-[10px] font-semibold">Playlists</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => useNavigationStore.getState().toggleMobileSidebar()}
+          className="flex flex-col items-center justify-center flex-1 py-1 text-[#71717A] hover:text-white transition-colors"
+        >
+          <Menu className="w-4 h-4 mb-0.5" />
+          <span className="text-[10px] font-semibold">More</span>
+        </button>
+      </nav>
 
       {/* Ingestion Strategy Modal */}
       <ImportModal

@@ -92,9 +92,9 @@ const ArtistProfileInner: React.FC<ArtistProfileProps> = ({
   return (
     <div className="flex-1 flex flex-col overflow-y-auto bg-[#0D0D10]">
       {/* Hero Banner */}
-      <div className="bg-gradient-to-b from-[#FA586A]/20 via-[#16161A]/80 to-[#0D0D10] p-8 border-b border-white/[0.06] flex flex-col md:flex-row items-center md:items-end gap-7 flex-shrink-0">
+      <div className="bg-gradient-to-b from-[#FA586A]/20 via-[#16161A]/80 to-[#0D0D10] p-4 sm:p-6 md:p-8 border-b border-white/[0.06] flex flex-col md:flex-row items-center md:items-end gap-5 sm:gap-7 flex-shrink-0">
         {/* Large Avatar */}
-        <div className="w-40 h-40 rounded-full bg-[#1C1C22] overflow-hidden shadow-2xl shadow-black/80 flex items-center justify-center flex-shrink-0 border-2 border-white/[0.12]">
+        <div className="w-32 h-32 sm:w-36 sm:h-36 md:w-40 md:h-40 rounded-full bg-[#1C1C22] overflow-hidden shadow-2xl shadow-black/80 flex items-center justify-center flex-shrink-0 border-2 border-white/[0.12]">
           {avatarArtwork && !avatarError ? (
             <img
               src={avatarArtwork}
@@ -122,7 +122,7 @@ const ArtistProfileInner: React.FC<ArtistProfileProps> = ({
               </span>
             )}
           </div>
-          <h1 className="text-3xl md:text-5xl font-extrabold text-white tracking-tight mb-3">
+          <h1 className="text-2xl sm:text-3xl md:text-5xl font-extrabold text-white tracking-tight mb-3">
             {artist.name}
           </h1>
 
@@ -163,7 +163,7 @@ const ArtistProfileInner: React.FC<ArtistProfileProps> = ({
       </div>
 
       {/* Discography / Albums by this Artist */}
-      <div className="p-6 space-y-8">
+      <div className="p-3 sm:p-6 space-y-8 pb-28 sm:pb-24">
         {/* Full Albums */}
         {fullAlbums.length > 0 && (
           <div>

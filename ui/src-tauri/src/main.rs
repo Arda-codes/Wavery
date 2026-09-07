@@ -718,6 +718,39 @@ fn notify_server_quit_sync(host: &str, port: u16) {
     }
 }
 
+async fn notify_server_close_web_async(host: &str, port: u16) {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpStream;
+    let addr = format!("{}:{}", host, port);
+    let target = if let Ok(sock) = addr.parse() {
+        sock
+    } else {
+        std::net::SocketAddr::from(([127, 0, 0, 1], port))
+    };
+
+    if let Ok(Ok(mut stream)) = tokio::time::timeout(
+        std::time::Duration::from_millis(500),
+        TcpStream::connect(target),
+    )
+    .await
+    {
+        let req = format!(
+            "POST /api/app/close-web HTTP/1.1\r\nHost: {}:{}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            host, port
+        );
+        let _ = stream.write_all(req.as_bytes()).await;
+        let _ = stream.flush().await;
+
+        // Await server response to ensure broadcast was processed before closing connection
+        let mut resp_buf = [0u8; 512];
+        let _ = tokio::time::timeout(
+            std::time::Duration::from_millis(1000),
+            stream.read(&mut resp_buf),
+        )
+        .await;
+    }
+}
+
 fn spawn_detached_server_process(state: &AppState) -> Result<(), std::io::Error> {
     let root = find_project_root();
     let mut cmd = if let Some(exe) = find_server_executable() {
@@ -1093,9 +1126,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         server_process: SyncMutex::new(None),
     });
 
-    // Strict mutual exclusivity: Terminate any lingering server instances so only Tauri runs!
-    terminate_server_instances();
-
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
@@ -1265,6 +1295,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             let _ = player.stop();
                                         }
                                     }
+
+                                    // 1. Send signal to desktop webview window
+                                    let _ = app_clone.emit("close-web-page", ());
+                                    if let Some(window) = app_clone.get_webview_window("main") {
+                                        let _ = window.emit("close-web-page", ());
+                                        let _ = window.close();
+                                    }
+
+                                    // 2. Send signal to browser web page via wavery-server
+                                    let (server_host, server_port) = {
+                                        let config = state_clone.config.lock();
+                                        (config.server.host.clone(), config.server.port)
+                                    };
+                                    notify_server_close_web_async(&server_host, server_port).await;
+
+                                    // 3. Grace period for active web clients to process signal and close
+                                    tokio::time::sleep(tokio::time::Duration::from_millis(600)).await;
+
                                     kill_all_subprocesses(&state_clone);
                                     terminate_server_instances();
                                     app_clone.exit(0);

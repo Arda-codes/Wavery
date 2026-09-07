@@ -96,6 +96,7 @@ pub struct ThemeConfig {
     pub text_muted: String,
     pub accent: String,
     pub error: String,
+    pub custom_colors: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -264,6 +265,7 @@ impl Default for ThemeConfig {
             text_muted: "#8F93A0".into(),
             accent: "#00D2D3".into(),
             error: "#FF5252".into(),
+            custom_colors: Vec::new(),
         }
     }
 }

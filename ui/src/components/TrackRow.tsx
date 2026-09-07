@@ -270,7 +270,7 @@ const TrackRowInner: React.FC<TrackRowProps> = ({
       style={style}
       onDoubleClick={() => onPlay(track, index)}
       onContextMenu={handleContextMenu}
-      className={`grid grid-cols-[48px_minmax(180px,1fr)_160px_160px_80px_110px] gap-3 px-6 items-center group cursor-pointer hover:bg-white/[0.06] transition-all border-b border-white/[0.03] select-none ${
+      className={`grid grid-cols-[36px_minmax(0,1fr)_auto] md:grid-cols-[40px_minmax(160px,1fr)_140px_80px] lg:grid-cols-[44px_minmax(180px,1fr)_150px_150px_90px] xl:grid-cols-[48px_minmax(180px,1fr)_160px_160px_80px_110px] gap-2 sm:gap-3 px-3 sm:px-6 items-center group cursor-pointer hover:bg-white/[0.06] transition-all border-b border-white/[0.03] select-none ${
         isCompact ? "text-[11px]" : "text-xs"
       } ${
         isSelected ? "bg-white/[0.08] text-[#FA586A]" : "text-white"
@@ -310,7 +310,7 @@ const TrackRowInner: React.FC<TrackRowProps> = ({
         </button>
       </div>
 
-      {/* 2. Title & Artwork */}
+      {/* 2. Title & Artwork (with mobile-stacked Artist) */}
       <div role="cell" className="flex items-center space-x-2.5 min-w-0 font-medium">
         <div className={`${isCompact ? "w-6 h-6 rounded-md" : "w-8 h-8 rounded-lg"} bg-[#1C1C22] flex items-center justify-center overflow-hidden flex-shrink-0 shadow-sm relative border border-white/[0.06]`}>
           {artworkUrl && !imgError ? (
@@ -326,13 +326,25 @@ const TrackRowInner: React.FC<TrackRowProps> = ({
             <Music className={`${isCompact ? "w-3 h-3" : "w-3.5 h-3.5"} text-[#71717A]`} />
           )}
         </div>
-        <span className={`truncate font-semibold ${isSelected ? "text-[#FA586A]" : "text-white"}`}>
-          {track.metadata.title || "Untitled"}
-        </span>
+        <div className="min-w-0 flex-1 truncate">
+          <span className={`truncate font-semibold block leading-tight ${isSelected ? "text-[#FA586A]" : "text-white"}`}>
+            {track.metadata.title || "Untitled"}
+          </span>
+          {/* Mobile-only stacked artist subtitle */}
+          <div className="md:hidden text-[11px] text-[#A1A1AA] truncate leading-tight mt-0.5">
+            <ArtistLinks
+              artistName={artistName}
+              onSelectArtist={onSelectArtist}
+              className="truncate block"
+              linkClassName="hover:text-white hover:underline cursor-pointer transition-colors"
+              delimiterClassName="text-[#71717A]"
+            />
+          </div>
+        </div>
       </div>
 
-      {/* 3. Artist */}
-      <div role="cell" className="text-[#A1A1AA] truncate min-w-0">
+      {/* 3. Artist (visible on md+) */}
+      <div role="cell" className="hidden md:block text-[#A1A1AA] truncate min-w-0">
         <ArtistLinks
           artistName={artistName}
           onSelectArtist={onSelectArtist}
@@ -342,8 +354,8 @@ const TrackRowInner: React.FC<TrackRowProps> = ({
         />
       </div>
 
-      {/* 4. Album */}
-      <div role="cell" className="text-[#A1A1AA] truncate min-w-0">
+      {/* 4. Album (visible on lg+) */}
+      <div role="cell" className="hidden lg:block text-[#A1A1AA] truncate min-w-0">
         {onSelectAlbum ? (
           <span
             onClick={(e) => {
@@ -359,8 +371,8 @@ const TrackRowInner: React.FC<TrackRowProps> = ({
         )}
       </div>
 
-      {/* 5. Format */}
-      <div role="cell" className="flex items-center justify-center">
+      {/* 5. Format (visible on xl+) */}
+      <div role="cell" className="hidden xl:flex items-center justify-center">
         <span className="px-2 py-0.5 text-[9.5px] font-bold bg-white/[0.06] text-[#A1A1AA] rounded-md tracking-wider border border-white/[0.04]">
           {track.metadata.format}
         </span>

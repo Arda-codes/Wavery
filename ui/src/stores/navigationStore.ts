@@ -7,6 +7,33 @@
 import { create } from "zustand";
 import { ViewMode } from "../types";
 
+const RECENT_SEARCHES_KEY = "wavery:recent_searches";
+
+function loadRecentSearches(): string[] {
+  try {
+    if (typeof localStorage !== "undefined") {
+      const raw = localStorage.getItem(RECENT_SEARCHES_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed.slice(0, 10);
+      }
+    }
+  } catch {
+    // Ignore storage errors
+  }
+  return [];
+}
+
+function saveRecentSearches(searches: string[]) {
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(searches.slice(0, 10)));
+    }
+  } catch {
+    // Ignore storage errors
+  }
+}
+
 interface NavigationState {
   viewMode: ViewMode;
   selectedArtistName: string | null;
@@ -14,9 +41,11 @@ interface NavigationState {
   selectedPlaylistId: string | null;
   navSource: "artists" | "albums" | "playlists";
   globalSearch: string;
+  recentSearches: string[];
   isNowPlayingDrawerOpen: boolean;
   nowPlayingTab: "queue" | "lyrics";
   isFullscreenNowPlayingOpen: boolean;
+  isMobileSidebarOpen: boolean;
 
   navigate: (view: ViewMode) => void;
   selectArtist: (artistName: string) => void;
@@ -24,28 +53,42 @@ interface NavigationState {
   selectPlaylist: (playlistId: string) => void;
   breadcrumbNavigate: (view: ViewMode, targetId?: string) => void;
   setGlobalSearch: (query: string) => void;
+  addRecentSearch: (query: string) => void;
+  removeRecentSearch: (query: string) => void;
+  clearRecentSearches: () => void;
   toggleNowPlayingDrawer: (tab?: "queue" | "lyrics") => void;
   setNowPlayingDrawerOpen: (open: boolean) => void;
   setNowPlayingTab: (tab: "queue" | "lyrics") => void;
   toggleFullscreenNowPlaying: () => void;
   setFullscreenNowPlayingOpen: (open: boolean) => void;
+  setMobileSidebarOpen: (open: boolean) => void;
+  toggleMobileSidebar: () => void;
 }
 
 export const useNavigationStore = create<NavigationState>((set, get) => ({
-  viewMode: "tracks",
+  viewMode: "home",
   selectedArtistName: null,
   selectedAlbumKey: null,
   selectedPlaylistId: null,
   navSource: "albums",
   globalSearch: "",
+  recentSearches: loadRecentSearches(),
   isNowPlayingDrawerOpen: false,
   nowPlayingTab: "queue",
   isFullscreenNowPlayingOpen: false,
+  isMobileSidebarOpen: false,
 
   navigate: (view: ViewMode) => {
     set({
       viewMode: view,
-      ...(view === "tracks" || view === "artists" || view === "albums" || view === "liked" || view === "playlists"
+      isMobileSidebarOpen: false,
+      ...(view === "home" ||
+      view === "search" ||
+      view === "tracks" ||
+      view === "artists" ||
+      view === "albums" ||
+      view === "liked" ||
+      view === "playlists"
         ? { selectedArtistName: null, selectedAlbumKey: null, selectedPlaylistId: null }
         : {}),
     });
@@ -57,6 +100,7 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
       selectedAlbumKey: null,
       selectedPlaylistId: null,
       viewMode: "artist_detail",
+      isMobileSidebarOpen: false,
     });
   },
 
@@ -69,6 +113,7 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
       selectedPlaylistId: null,
       navSource: isFromArtist ? "artists" : "albums",
       viewMode: "album_detail",
+      isMobileSidebarOpen: false,
     });
   },
 
@@ -79,12 +124,29 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
       selectedAlbumKey: null,
       navSource: "playlists",
       viewMode: "playlist_detail",
+      isMobileSidebarOpen: false,
     });
   },
 
   breadcrumbNavigate: (view: ViewMode) => {
     const { selectedArtistName, selectedPlaylistId } = get();
-    if (view === "artists") {
+    if (view === "home") {
+      set({
+        selectedArtistName: null,
+        selectedAlbumKey: null,
+        selectedPlaylistId: null,
+        viewMode: "home",
+        isMobileSidebarOpen: false,
+      });
+    } else if (view === "search") {
+      set({
+        selectedArtistName: null,
+        selectedAlbumKey: null,
+        selectedPlaylistId: null,
+        viewMode: "search",
+        isMobileSidebarOpen: false,
+      });
+    } else if (view === "artists") {
       set({
         selectedArtistName: null,
         selectedAlbumKey: null,
@@ -138,6 +200,26 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
     set({ globalSearch: query });
   },
 
+  addRecentSearch: (query: string) => {
+    const trimmed = query.trim();
+    if (!trimmed) return;
+    const current = get().recentSearches;
+    const updated = [trimmed, ...current.filter((item) => item.toLowerCase() !== trimmed.toLowerCase())].slice(0, 10);
+    set({ recentSearches: updated });
+    saveRecentSearches(updated);
+  },
+
+  removeRecentSearch: (query: string) => {
+    const updated = get().recentSearches.filter((item) => item.toLowerCase() !== query.toLowerCase());
+    set({ recentSearches: updated });
+    saveRecentSearches(updated);
+  },
+
+  clearRecentSearches: () => {
+    set({ recentSearches: [] });
+    saveRecentSearches([]);
+  },
+
   toggleNowPlayingDrawer: (tab?: "queue" | "lyrics") => {
     set((state) => {
       const willOpen = !state.isNowPlayingDrawerOpen || (tab && state.nowPlayingTab !== tab);
@@ -162,5 +244,13 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
 
   setFullscreenNowPlayingOpen: (open: boolean) => {
     set({ isFullscreenNowPlayingOpen: open });
+  },
+
+  setMobileSidebarOpen: (open: boolean) => {
+    set({ isMobileSidebarOpen: open });
+  },
+
+  toggleMobileSidebar: () => {
+    set((state) => ({ isMobileSidebarOpen: !state.isMobileSidebarOpen }));
   },
 }));

@@ -130,7 +130,7 @@ export const AlbumMetadataModal: React.FC<AlbumMetadataModalProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06] flex-shrink-0">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-white/[0.06] flex-shrink-0">
           <div className="flex items-center space-x-3.5">
             <div className="w-10 h-10 rounded-xl bg-[#1C1C22] overflow-hidden flex items-center justify-center flex-shrink-0 border border-white/[0.08]">
               {artworkUrl ? (
@@ -154,7 +154,7 @@ export const AlbumMetadataModal: React.FC<AlbumMetadataModalProps> = ({
 
         {/* Form Body */}
         <form onSubmit={handleSave} className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
             {errorMessage && (
               <div className="flex items-center space-x-2 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -237,24 +237,26 @@ export const AlbumMetadataModal: React.FC<AlbumMetadataModalProps> = ({
                   {trackRows.map((row, idx) => (
                     <div
                       key={row.id}
-                      className="flex items-center px-3 py-2 gap-2 text-xs hover:bg-white/[0.04] transition"
+                      className="flex flex-col sm:flex-row items-stretch sm:items-center px-3 py-2 gap-2 text-xs hover:bg-white/[0.04] transition"
                     >
-                      <span className="w-6 text-center text-[#71717A] text-[11px] font-mono">
-                        {row.trackNumber}
-                      </span>
-                      <input
-                        type="text"
-                        value={row.title}
-                        onChange={(e) => handleTrackChange(idx, "title", e.target.value)}
-                        placeholder="Track Title"
-                        className="flex-1 bg-[#18181D] border border-white/[0.08] focus:border-[#FA586A]/60 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none"
-                      />
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <span className="w-6 text-center text-[#71717A] text-[11px] font-mono flex-shrink-0">
+                          {row.trackNumber}
+                        </span>
+                        <input
+                          type="text"
+                          value={row.title}
+                          onChange={(e) => handleTrackChange(idx, "title", e.target.value)}
+                          placeholder="Track Title"
+                          className="flex-1 bg-[#18181D] border border-white/[0.08] focus:border-[#FA586A]/60 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none"
+                        />
+                      </div>
                       <input
                         type="text"
                         value={row.artist}
                         onChange={(e) => handleTrackChange(idx, "artist", e.target.value)}
                         placeholder="Track Artist"
-                        className="w-1/3 min-w-[120px] bg-[#18181D] border border-white/[0.08] focus:border-[#FA586A]/60 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none"
+                        className="w-full sm:w-1/3 sm:min-w-[120px] bg-[#18181D] border border-white/[0.08] focus:border-[#FA586A]/60 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none"
                       />
                     </div>
                   ))}
@@ -281,7 +283,7 @@ export const AlbumMetadataModal: React.FC<AlbumMetadataModalProps> = ({
           </div>
 
           {/* Modal Footer */}
-          <div className="flex items-center justify-end space-x-3 px-6 py-4 border-t border-white/[0.06] bg-[#121216] flex-shrink-0">
+          <div className="flex items-center justify-end space-x-3 px-4 sm:px-6 py-4 border-t border-white/[0.06] bg-[#121216] flex-shrink-0">
             <button
               type="button"
               onClick={onClose}

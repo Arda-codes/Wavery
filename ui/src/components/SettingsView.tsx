@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { usePlayerStore } from "../stores/playerStore";
 import { useLibraryStore } from "../stores/libraryStore";
 import {
@@ -43,6 +43,8 @@ import {
   Cpu,
   Tv,
   Monitor,
+  Plus,
+  X,
 } from "lucide-react";
 
 type SettingsTab =
@@ -65,40 +67,62 @@ const ACCENT_PALETTE = [
   { name: "Indigo Night", value: "#6366F1" },
 ];
 
-const THEME_OPTIONS: Array<{
+interface ThemeOption {
   id: ThemeMode;
   name: string;
   desc: string;
   bg: string;
+  surface: string;
+  textPrimary: string;
+  textMuted: string;
   border: string;
-}> = [
+  accentPreview: string;
+}
+
+const THEME_OPTIONS: Array<ThemeOption> = [
   {
     id: "dark",
     name: "Obsidian Dark",
     desc: "Dark gray interface with soft contrast",
     bg: "#121216",
-    border: "border-white/[0.12]",
+    surface: "#1A1A1E",
+    textPrimary: "#ECEFF4",
+    textMuted: "#8F93A0",
+    border: "rgba(255, 255, 255, 0.12)",
+    accentPreview: "#FA586A",
   },
   {
     id: "oled",
     name: "Pure OLED Black",
     desc: "True black background for OLED screens",
     bg: "#000000",
-    border: "border-white/[0.16]",
+    surface: "#0A0A0C",
+    textPrimary: "#FFFFFF",
+    textMuted: "#80808C",
+    border: "rgba(255, 255, 255, 0.16)",
+    accentPreview: "#FA586A",
   },
   {
     id: "midnight",
     name: "Midnight Indigo",
     desc: "Deep navy blue palette",
-    bg: "#0B0F19",
-    border: "border-blue-500/20",
+    bg: "#080C14",
+    surface: "#0F172A",
+    textPrimary: "#F1F5F9",
+    textMuted: "#94A3B8",
+    border: "rgba(99, 102, 241, 0.25)",
+    accentPreview: "#6366F1",
   },
   {
     id: "light",
     name: "Frost Light",
     desc: "Crisp, high-contrast light theme",
     bg: "#F4F4F6",
-    border: "border-black/[0.10]",
+    surface: "#FFFFFF",
+    textPrimary: "#18181B",
+    textMuted: "#71717A",
+    border: "rgba(0, 0, 0, 0.12)",
+    accentPreview: "#FA586A",
   },
 ];
 
@@ -115,9 +139,15 @@ export const SettingsView: React.FC = () => {
   // Settings Store
   const settings = useSettingsStore();
   const setSetting = useSettingsStore((s) => s.setSetting);
+  const addCustomColor = useSettingsStore((s) => s.addCustomColor);
+  const removeCustomColor = useSettingsStore((s) => s.removeCustomColor);
   const resetToDefaults = useSettingsStore((s) => s.resetToDefaults);
   const exportConfigJson = useSettingsStore((s) => s.exportConfigJson);
   const importConfigJson = useSettingsStore((s) => s.importConfigJson);
+
+  // Custom Color State
+  const [customHexInput, setCustomHexInput] = useState("#FA586A");
+  const colorInputRef = useRef<HTMLInputElement>(null);
 
   // Maintenance States
   const [isRebuilding, setIsRebuilding] = useState(false);
@@ -313,9 +343,9 @@ export const SettingsView: React.FC = () => {
       )}
 
       {/* Main Settings Navigation & Content Layout */}
-      <div className="flex-1 flex overflow-hidden min-h-0">
-        {/* Left Settings Tabs Navigation */}
-        <aside className="w-56 border-r border-white/[0.06] p-4 flex flex-col space-y-1 flex-shrink-0 overflow-y-auto select-none bg-[#0F0F13]/60 min-h-0">
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0">
+        {/* Left Settings Tabs Navigation (Horizontal on mobile, vertical on md+) */}
+        <aside className="w-full md:w-56 border-b md:border-b-0 md:border-r border-white/[0.06] p-2 sm:p-3 md:p-4 flex flex-row md:flex-col overflow-x-auto md:overflow-y-auto space-x-1 md:space-x-0 md:space-y-1 flex-shrink-0 select-none bg-[#0F0F13]/60 min-h-0">
           {[
             { id: "general" as const, label: "General", icon: Settings, desc: "App & startup behavior" },
             { id: "audio" as const, label: "Audio & Playback", icon: Volume2, desc: "Volume, crossfade & gain" },
@@ -331,7 +361,7 @@ export const SettingsView: React.FC = () => {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-semibold flex items-center space-x-3 transition-all ${
+                className={`whitespace-nowrap md:w-full text-left px-3 py-2 md:px-3.5 md:py-2.5 rounded-xl text-xs font-semibold flex items-center space-x-2 md:space-x-3 transition-all flex-shrink-0 ${
                   isActive
                     ? "bg-[#FA586A] text-white shadow-md shadow-[#FA586A]/20"
                     : "text-[#A1A1AA] hover:text-white hover:bg-white/[0.06]"
@@ -347,7 +377,7 @@ export const SettingsView: React.FC = () => {
         </aside>
 
         {/* Right Settings Pane Content */}
-        <div className="flex-1 overflow-y-auto p-8 space-y-6 min-h-0">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 space-y-6 min-h-0 pb-28 sm:pb-24">
           {/* TAB 1: GENERAL */}
           {activeTab === "general" && (
             <div className="space-y-6 animate-fade-in max-w-3xl">
@@ -684,28 +714,69 @@ export const SettingsView: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {THEME_OPTIONS.map((theme) => {
                     const isSelected = settings.themeMode === theme.id;
+                    const accent = settings.accentColor || "#FA586A";
                     return (
                       <button
                         key={theme.id}
                         onClick={() => setSetting("themeMode", theme.id)}
-                        style={{ backgroundColor: theme.bg }}
-                        className={`p-4 rounded-2xl border text-left transition-all relative flex flex-col justify-between h-24 ${
-                          isSelected
-                            ? "border-[#FA586A] ring-2 ring-[#FA586A]/30 shadow-lg shadow-[#FA586A]/10"
-                            : "border-white/[0.08] hover:border-white/[0.20]"
+                        style={{
+                          backgroundColor: theme.bg,
+                          borderColor: isSelected ? accent : theme.border,
+                          boxShadow: isSelected
+                            ? `0 0 0 2px ${accent}40, 0 8px 20px -6px ${accent}25`
+                            : undefined,
+                        }}
+                        className={`p-4 rounded-2xl border text-left transition-all relative flex flex-col justify-between min-h-[6.5rem] group ${
+                          isSelected ? "" : "hover:brightness-110"
                         }`}
                       >
                         <div className="flex items-center justify-between w-full">
-                          <span className="text-xs font-bold text-white">{theme.name}</span>
+                          <span
+                            className="text-xs font-bold tracking-tight transition-colors"
+                            style={{ color: theme.textPrimary }}
+                          >
+                            {theme.name}
+                          </span>
                           {isSelected && (
-                            <span className="w-5 h-5 rounded-full bg-[#FA586A] flex items-center justify-center text-white">
-                              <Check className="w-3 h-3" />
+                            <span
+                              className="w-5 h-5 rounded-full flex items-center justify-center shadow-sm"
+                              style={{ backgroundColor: accent, color: "#FFFFFF" }}
+                            >
+                              <Check className="w-3 h-3 stroke-[2.5]" />
                             </span>
                           )}
                         </div>
-                        <p className="text-[11px] text-[#A1A1AA] leading-snug">
+
+                        <p
+                          className="text-[11px] leading-snug mt-1 mb-2 font-normal"
+                          style={{ color: theme.textMuted }}
+                        >
                           {theme.desc}
                         </p>
+
+                        {/* Theme palette mini preview dots */}
+                        <div className="flex items-center space-x-1.5 pt-0.5">
+                          <div
+                            className="w-3 h-3 rounded-full border border-black/10 shadow-inner"
+                            style={{ backgroundColor: theme.bg }}
+                            title="Background"
+                          />
+                          <div
+                            className="w-3 h-3 rounded-full border border-black/10 shadow-inner"
+                            style={{ backgroundColor: theme.surface }}
+                            title="Surface"
+                          />
+                          <div
+                            className="w-3 h-3 rounded-full border border-black/10 shadow-inner"
+                            style={{ backgroundColor: theme.textPrimary }}
+                            title="Text Primary"
+                          />
+                          <div
+                            className="w-3 h-3 rounded-full shadow-sm"
+                            style={{ backgroundColor: isSelected ? accent : theme.accentPreview }}
+                            title="Accent"
+                          />
+                        </div>
                       </button>
                     );
                   })}
@@ -720,25 +791,145 @@ export const SettingsView: React.FC = () => {
                     Color used for active buttons, sliders, and selection highlights.
                   </p>
                 </div>
-                <div className="flex flex-wrap gap-3 pt-1">
-                  {ACCENT_PALETTE.map((color) => {
-                    const isSelected = (settings.accentColor || "#FA586A").toLowerCase() === color.value.toLowerCase();
-                    return (
+
+                {/* Preset Palettes */}
+                <div className="space-y-2">
+                  <div className="text-[10px] font-semibold text-[#71717A] uppercase tracking-wider">
+                    Presets
+                  </div>
+                  <div className="flex flex-wrap gap-2.5 pt-0.5">
+                    {ACCENT_PALETTE.map((color) => {
+                      const isSelected = (settings.accentColor || "#FA586A").toLowerCase() === color.value.toLowerCase();
+                      return (
+                        <button
+                          key={color.value}
+                          onClick={() => setSetting("accentColor", color.value)}
+                          style={{ backgroundColor: color.value }}
+                          className={`w-8 h-8 rounded-full transition-all flex items-center justify-center shadow-md relative ${
+                            isSelected
+                              ? "ring-4 ring-white/30 scale-110 shadow-lg"
+                              : "opacity-85 hover:opacity-100 hover:scale-105"
+                          }`}
+                          title={color.name}
+                        >
+                          {isSelected && <Check className="w-3.5 h-3.5 text-white drop-shadow" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Custom Colors */}
+                <div className="space-y-2 pt-2 border-t border-white/[0.06]">
+                  <div className="flex items-center justify-between">
+                    <div className="text-[10px] font-semibold text-[#71717A] uppercase tracking-wider">
+                      Custom Colors
+                    </div>
+                    <span className="text-[11px] text-[#71717A] font-mono">
+                      Current: {settings.accentColor || "#FA586A"}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2.5 pt-0.5">
+                    {/* User saved custom colors */}
+                    {(settings.customColors || []).map((color) => {
+                      const isSelected = (settings.accentColor || "#FA586A").toLowerCase() === color.toLowerCase();
+                      return (
+                        <div key={color} className="relative group">
+                          <button
+                            onClick={() => setSetting("accentColor", color)}
+                            style={{ backgroundColor: color }}
+                            className={`w-8 h-8 rounded-full transition-all flex items-center justify-center shadow-md ${
+                              isSelected
+                                ? "ring-4 ring-white/30 scale-110 shadow-lg"
+                                : "opacity-85 hover:opacity-100 hover:scale-105"
+                            }`}
+                            title={`Custom: ${color}`}
+                          >
+                            {isSelected && <Check className="w-3.5 h-3.5 text-white drop-shadow" />}
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeCustomColor(color);
+                            }}
+                            className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#18181B] text-[#A1A1AA] hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-[10px]"
+                            title="Remove color"
+                          >
+                            <X className="w-2.5 h-2.5" />
+                          </button>
+                        </div>
+                      );
+                    })}
+
+                    {/* Active accent if not in presets and not in customColors */}
+                    {!(settings.customColors || []).some(
+                      (c) => c.toLowerCase() === (settings.accentColor || "#FA586A").toLowerCase()
+                    ) &&
+                      !ACCENT_PALETTE.some(
+                        (p) => p.value.toLowerCase() === (settings.accentColor || "#FA586A").toLowerCase()
+                      ) && (
+                        <div className="relative group">
+                          <button
+                            style={{ backgroundColor: settings.accentColor }}
+                            className="w-8 h-8 rounded-full ring-4 ring-white/30 scale-110 shadow-lg flex items-center justify-center transition-all"
+                            title={`Current custom: ${settings.accentColor}`}
+                          >
+                            <Check className="w-3.5 h-3.5 text-white drop-shadow" />
+                          </button>
+                        </div>
+                      )}
+
+                    {/* Native Color Picker Trigger */}
+                    <button
+                      onClick={() => colorInputRef.current?.click()}
+                      className="w-8 h-8 rounded-full border border-dashed border-white/30 hover:border-white/60 bg-white/[0.04] hover:bg-white/[0.08] text-white flex items-center justify-center transition-all hover:scale-105"
+                      title="Open Color Picker"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-white/70" />
+                    </button>
+                    <input
+                      ref={colorInputRef}
+                      type="color"
+                      value={settings.accentColor || "#FA586A"}
+                      onChange={(e) => {
+                        const val = e.target.value.toUpperCase();
+                        addCustomColor(val);
+                        setCustomHexInput(val);
+                      }}
+                      className="sr-only"
+                    />
+
+                    {/* Hex input & quick add */}
+                    <div className="flex items-center space-x-1.5 ml-auto">
+                      <div className="relative flex items-center">
+                        <span className="absolute left-2.5 text-xs text-[#71717A] font-mono">#</span>
+                        <input
+                          type="text"
+                          value={customHexInput.replace(/^#/, "")}
+                          maxLength={6}
+                          onChange={(e) => {
+                            const clean = e.target.value.replace(/[^0-9A-Fa-f]/g, "").toUpperCase();
+                            setCustomHexInput(`#${clean}`);
+                          }}
+                          placeholder="FA586A"
+                          className="w-24 pl-6 pr-2 py-1 text-xs bg-[#0F0F13] border border-white/10 rounded-lg text-white font-mono focus:outline-none focus:border-white/30"
+                        />
+                      </div>
                       <button
-                        key={color.value}
-                        onClick={() => setSetting("accentColor", color.value)}
-                        style={{ backgroundColor: color.value }}
-                        className={`w-9 h-9 rounded-full transition-all flex items-center justify-center shadow-md relative ${
-                          isSelected
-                            ? "ring-4 ring-white/30 scale-110 shadow-lg"
-                            : "opacity-80 hover:opacity-100 hover:scale-105"
-                        }`}
-                        title={color.name}
+                        onClick={() => {
+                          const hex = customHexInput.trim();
+                          if (/^#[0-9A-F]{6}$/i.test(hex)) {
+                            addCustomColor(hex);
+                          }
+                        }}
+                        disabled={!/^#[0-9A-F]{6}$/i.test(customHexInput.trim())}
+                        className="px-2.5 py-1 text-xs font-semibold bg-white/10 hover:bg-white/20 disabled:opacity-40 disabled:hover:bg-white/10 text-white rounded-lg transition-all"
                       >
-                        {isSelected && <Check className="w-4 h-4 text-white drop-shadow" />}
+                        Add
                       </button>
-                    );
-                  })}
+                    </div>
+                  </div>
                 </div>
               </div>
 

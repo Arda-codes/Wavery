@@ -73,12 +73,12 @@ export async function runStoresAndUtilsTests(jiti: any) {
 
   // Initial State Check
   let navState = useNavigationStore.getState();
-  assert(navState.viewMode === "tracks", "Initial viewMode is 'tracks'");
+  assert(navState.viewMode === "home", "Initial viewMode is 'home'");
   assert(navState.selectedArtistName === null, "Initial selectedArtistName is null");
   assert(navState.selectedAlbumKey === null, "Initial selectedAlbumKey is null");
   assert(navState.globalSearch === "", "Initial globalSearch is empty string");
 
-  // 1a. navigate() across views: tracks, albums, artists, playlists, settings
+  // 1a. navigate() across views: tracks, albums, artists, playlists, settings, home, search
   console.log("  Testing navigate() view switching...");
   useNavigationStore.getState().navigate("albums");
   navState = useNavigationStore.getState();
@@ -96,6 +96,14 @@ export async function runStoresAndUtilsTests(jiti: any) {
   useNavigationStore.getState().navigate("playlists" as any);
   navState = useNavigationStore.getState();
   assert((navState.viewMode as any) === "playlists", "navigate('playlists') switched viewMode to 'playlists'");
+
+  useNavigationStore.getState().navigate("search");
+  navState = useNavigationStore.getState();
+  assert(navState.viewMode === "search", "navigate('search') switched viewMode to 'search'");
+
+  useNavigationStore.getState().navigate("home");
+  navState = useNavigationStore.getState();
+  assert(navState.viewMode === "home", "navigate('home') switched viewMode to 'home'");
 
   useNavigationStore.getState().navigate("tracks");
   navState = useNavigationStore.getState();

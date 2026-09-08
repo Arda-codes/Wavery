@@ -12,5 +12,6 @@ fn main() {
             "<!DOCTYPE html><html><head><title>Wavery</title></head><body></body></html>",
         );
     }
+    println!("cargo:rerun-if-changed=../dist");
     tauri_build::build()
 }

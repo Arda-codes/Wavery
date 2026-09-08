@@ -1,6 +1,6 @@
 # Maintainer: Arda <ardaatk1@gmail.com>
 pkgname=wavery-bin
-pkgver=0.1.1
+pkgver=0.2.0
 pkgrel=1
 pkgdesc="Modular, high-performance desktop music player with SQLite FTS5, gapless audio, and Apple HIG aesthetic"
 arch=('x86_64')

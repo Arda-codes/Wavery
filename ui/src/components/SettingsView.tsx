@@ -1299,9 +1299,9 @@ export const SettingsView: React.FC = () => {
                   </div>
                   <div>
                     <h3 className="text-lg font-black text-white tracking-tight">Wavery</h3>
-                    <p className="text-xs text-[#FA586A] font-semibold">Version 0.1.2 • Release Build</p>
+                    <p className="text-xs text-[#FA586A] font-semibold">Version 0.2.0 • Beta</p>
                     <p className="text-[11px] text-[#71717A] mt-0.5">
-                      Music player built with Rust, Tauri, and React.
+                      Local-first music player built with Rust, Tauri v2, and React. No accounts, no telemetry, no internet required.
                     </p>
                   </div>
                 </div>
@@ -1317,7 +1317,7 @@ export const SettingsView: React.FC = () => {
                   </div>
                   <div className="p-3 bg-[#121216] border border-white/[0.06] rounded-xl space-y-0.5">
                     <p className="text-[10px] text-[#71717A] uppercase font-bold">Tag Parser</p>
-                    <p className="font-semibold text-white">Lofty v0.21</p>
+                    <p className="font-semibold text-white">Lofty</p>
                   </div>
                   <div className="p-3 bg-[#121216] border border-white/[0.06] rounded-xl space-y-0.5">
                     <p className="text-[10px] text-[#71717A] uppercase font-bold">Streaming</p>
@@ -1325,11 +1325,34 @@ export const SettingsView: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="p-4 bg-[#121216] border border-white/[0.06] rounded-xl space-y-1.5 text-xs text-[#A1A1AA]">
-                  <p className="font-bold text-white">Architecture & Boundaries:</p>
-                  <p className="text-[11px] leading-relaxed text-[#71717A]">
-                    Modular workspace separating core models, audio playback, database storage, and network streaming through trait contracts.
-                  </p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                  <div className="p-3 bg-[#121216] border border-white/[0.06] rounded-xl space-y-0.5">
+                    <p className="text-[10px] text-[#71717A] uppercase font-bold">Desktop Shell</p>
+                    <p className="font-semibold text-white">Tauri v2</p>
+                  </div>
+                  <div className="p-3 bg-[#121216] border border-white/[0.06] rounded-xl space-y-0.5">
+                    <p className="text-[10px] text-[#71717A] uppercase font-bold">UI Framework</p>
+                    <p className="font-semibold text-white">React 18</p>
+                  </div>
+                  <div className="p-3 bg-[#121216] border border-white/[0.06] rounded-xl space-y-0.5">
+                    <p className="text-[10px] text-[#71717A] uppercase font-bold">Linux MPRIS</p>
+                    <p className="font-semibold text-white">zbus</p>
+                  </div>
+                  <div className="p-3 bg-[#121216] border border-white/[0.06] rounded-xl space-y-0.5">
+                    <p className="text-[10px] text-[#71717A] uppercase font-bold">State</p>
+                    <p className="font-semibold text-white">Zustand</p>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-[#121216] border border-white/[0.06] rounded-xl space-y-1.5 text-xs">
+                  <p className="font-bold text-white">What's new in 0.2.0 Beta:</p>
+                  <ul className="text-[11px] leading-relaxed text-[#71717A] space-y-1 mt-1">
+                    <li>• Home view with recently played and library highlights</li>
+                    <li>• Full-featured Search with genre/decade browsing and Top Result card</li>
+                    <li>• Play History view with chronological listening timeline</li>
+                    <li>• Dual-mode: native desktop (Tauri IPC) or browser streaming (Axum)</li>
+                    <li>• Dead code sweep and dependency cleanup across all workspace crates</li>
+                  </ul>
                 </div>
               </div>
             </div>

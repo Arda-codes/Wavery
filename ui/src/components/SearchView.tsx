@@ -2,8 +2,10 @@ import React, { useState, useMemo, useCallback } from "react";
 import { AlbumInfo, ArtistInfo, Playlist, Track } from "../types";
 import { useNavigationStore } from "../stores/navigationStore";
 import { usePlayerStore } from "../stores/playerStore";
+import { useLibraryStore } from "../stores/libraryStore";
 import { useContextMenuStore, ContextMenuItem } from "../stores/contextMenuStore";
 import { formatDuration } from "../utils/library";
+import { DeleteTrackModal } from "./DeleteTrackModal";
 import {
   Search,
   X,
@@ -20,6 +22,7 @@ import {
   Zap,
   Headphones,
   Compass,
+  Trash2,
 } from "lucide-react";
 
 interface SearchViewProps {
@@ -72,6 +75,9 @@ export const SearchView: React.FC<SearchViewProps> = ({
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const playHistory = usePlayerStore((s) => s.playHistory);
   const openContextMenu = useContextMenuStore((s) => s.openContextMenu);
+
+  const [trackToDelete, setTrackToDelete] = useState<Track | null>(null);
+  const deleteTrack = useLibraryStore((s) => s.deleteTrack);
 
   const trimmedQuery = globalSearch.trim().toLowerCase();
 
@@ -404,11 +410,23 @@ export const SearchView: React.FC<SearchViewProps> = ({
               },
             ]
           : []),
+        {
+          id: "divider-del",
+          label: "",
+          divider: true,
+        },
+        {
+          id: "delete-track-search",
+          label: "Delete Song...",
+          icon: Trash2,
+          danger: true,
+          onClick: () => setTrackToDelete(track),
+        },
       ];
 
       openContextMenu(e, items);
     },
-    [handlePlayTrack, matchingTracks, onSelectAlbum, onSelectArtist, openContextMenu]
+    [handlePlayTrack, matchingTracks, onSelectAlbum, onSelectArtist, openContextMenu, setTrackToDelete]
   );
 
   const totalResultsCount =
@@ -1175,6 +1193,16 @@ export const SearchView: React.FC<SearchViewProps> = ({
           )}
         </div>
       )}
+
+      {/* Delete Track Modal */}
+      <DeleteTrackModal
+        isOpen={!!trackToDelete}
+        onClose={() => setTrackToDelete(null)}
+        track={trackToDelete}
+        onConfirm={async (id, removeFile) => {
+          await deleteTrack(id, removeFile);
+        }}
+      />
     </div>
   );
 };

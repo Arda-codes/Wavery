@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from "react";
 import { Track } from "../types";
-import { formatDuration, getFullTrackArtistString } from "../utils/library";
+import { formatDuration, getFullTrackArtistString, extractPrimaryArtist } from "../utils/library";
 import {
   Play,
   Pause,
@@ -35,6 +35,7 @@ interface TrackRowProps {
   onSelectAlbum?: (albumTitle: string, artistName: string) => void;
   onAddToPlaylist?: (track: Track) => void;
   onRemoveFromPlaylist?: (trackId: string) => void;
+  onDeleteTrack?: (track: Track) => void;
   artworkUrl?: string;
   rowDensity?: RowDensity;
 }
@@ -50,6 +51,7 @@ const TrackRowInner: React.FC<TrackRowProps> = ({
   onSelectAlbum,
   onAddToPlaylist,
   onRemoveFromPlaylist,
+  onDeleteTrack,
   artworkUrl: propArtworkUrl,
   rowDensity = "comfortable",
 }) => {
@@ -158,6 +160,12 @@ const TrackRowInner: React.FC<TrackRowProps> = ({
       ];
 
       if (onSelectArtist && artistName && artistName !== "Unknown Artist") {
+        // For navigation we want just the first/primary artist, not the full
+        // multi-artist string (e.g. "Danny Brown" from "Danny Brown, Femtanyl").
+        // Prefer album_artist tag first as it's the canonical artist for the release.
+        const primaryArtist =
+          extractPrimaryArtist(track.metadata.album_artist || track.metadata.artist || artistName);
+
         menuItems.push(
           {
             id: "divider-nav",
@@ -166,19 +174,24 @@ const TrackRowInner: React.FC<TrackRowProps> = ({
           },
           {
             id: "go-to-artist",
-            label: `Go to Artist (${artistName.length > 20 ? artistName.slice(0, 20) + "..." : artistName})`,
+            label: `Go to Artist (${primaryArtist.length > 20 ? primaryArtist.slice(0, 20) + "..." : primaryArtist})`,
             icon: User,
-            onClick: () => onSelectArtist(artistName),
+            onClick: () => onSelectArtist(primaryArtist),
           }
         );
       }
 
       if (onSelectAlbum && albumTitle && albumTitle !== "Unknown Album") {
+        // Use primary artist as album lookup key — matches AlbumInfo.artist which is
+        // also derived from extractPrimaryArtist / resolveDominantAlbumArtist.
+        const albumArtist =
+          extractPrimaryArtist(track.metadata.album_artist || track.metadata.artist || artistName);
+
         menuItems.push({
           id: "go-to-album",
           label: `Go to Album (${albumTitle.length > 20 ? albumTitle.slice(0, 20) + "..." : albumTitle})`,
           icon: Disc,
-          onClick: () => onSelectAlbum(albumTitle, artistName),
+          onClick: () => onSelectAlbum(albumTitle, albumArtist),
         });
       }
 
@@ -235,6 +248,25 @@ const TrackRowInner: React.FC<TrackRowProps> = ({
         );
       }
 
+      if (onDeleteTrack) {
+        menuItems.push(
+          {
+            id: "divider-delete-track",
+            label: "",
+            divider: true,
+          },
+          {
+            id: "delete-track",
+            label: "Delete Song...",
+            icon: Trash2,
+            danger: true,
+            onClick: () => {
+              onDeleteTrack(track);
+            },
+          }
+        );
+      }
+
       openContextMenu(e, menuItems);
     },
     [
@@ -251,6 +283,7 @@ const TrackRowInner: React.FC<TrackRowProps> = ({
       onSelectAlbum,
       onAddToPlaylist,
       onRemoveFromPlaylist,
+      onDeleteTrack,
       insertAfterCurrent,
       addToQueue,
       toggleLike,

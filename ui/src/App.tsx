@@ -348,18 +348,43 @@ export const App: React.FC = () => {
   // Selected Entities
   const selectedArtist = useMemo<ArtistInfo | undefined>(() => {
     if (!selectedArtistName) return undefined;
+    const nameLower = selectedArtistName.trim().toLowerCase();
+    // Pass 1: exact case-insensitive match
+    const exact = artists.find((a) => a.name.trim().toLowerCase() === nameLower);
+    if (exact) return exact;
+    // Pass 2: partial match — artist name starts with selected name or vice versa,
+    // handles minor tag inconsistencies (trailing spaces, subtitle suffixes).
     return artists.find(
-      (a) => a.name.toLowerCase() === selectedArtistName.toLowerCase()
+      (a) =>
+        a.name.trim().toLowerCase().startsWith(nameLower) ||
+        nameLower.startsWith(a.name.trim().toLowerCase())
     );
   }, [artists, selectedArtistName]);
 
   const selectedAlbum = useMemo<AlbumInfo | undefined>(() => {
     if (!selectedAlbumKey) return undefined;
-    return albums.find(
+    const titleLower = selectedAlbumKey.title.toLowerCase();
+    const artistLower = selectedAlbumKey.artist.toLowerCase();
+    // Pass 1: exact title + artist match (most precise)
+    const exact = albums.find(
       (a) =>
-        a.title.toLowerCase() === selectedAlbumKey.title.toLowerCase() &&
-        a.artist.toLowerCase() === selectedAlbumKey.artist.toLowerCase()
+        a.title.toLowerCase() === titleLower &&
+        a.artist.toLowerCase() === artistLower
     );
+    if (exact) return exact;
+    // Pass 2: title-only match — handles cases where the stored artist key
+    // (e.g. "Danny Brown, Femtanyl") differs from AlbumInfo.artist ("Danny Brown").
+    // If there is only one album with this title, use it unambiguously.
+    const byTitle = albums.filter((a) => a.title.toLowerCase() === titleLower);
+    if (byTitle.length === 1) return byTitle[0];
+    // Pass 3: when multiple albums share the same title, pick the one whose artist
+    // starts with or contains the stored artist key (or vice versa).
+    const fuzzy = byTitle.find(
+      (a) =>
+        a.artist.toLowerCase().includes(artistLower) ||
+        artistLower.includes(a.artist.toLowerCase())
+    );
+    return fuzzy ?? byTitle[0];
   }, [albums, selectedAlbumKey]);
 
   const selectedPlaylist = useMemo<Playlist | undefined>(() => {

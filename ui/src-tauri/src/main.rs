@@ -126,6 +126,14 @@ impl ArtworkCache {
         self.order.clear();
     }
 
+    pub fn remove(&mut self, key: &str) {
+        if self.entries.remove(key).is_some() {
+            if let Some(pos) = self.order.iter().position(|k| k == key) {
+                self.order.remove(pos);
+            }
+        }
+    }
+
     pub fn len(&self) -> usize {
         self.entries.len()
     }
@@ -274,6 +282,39 @@ async fn rebuild_library(state: tauri::State<'_, Arc<AppState>>) -> Result<Vec<T
     }
 
     Ok(tracks)
+}
+
+#[tauri::command]
+async fn delete_track(
+    track_id: String,
+    remove_file: Option<bool>,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<(), IpcError> {
+    {
+        let lib_arc = state.library.as_ref().ok_or(IpcError::LibraryNotInitialized)?;
+        let mut lib = lib_arc.lock().await;
+        lib.delete_track(&track_id, remove_file.unwrap_or(false)).await?;
+    }
+
+    // If currently playing, stop playback
+    let is_current = {
+        let queue = state.queue.lock();
+        queue.current_track().map(|t| t.id == track_id).unwrap_or(false)
+    };
+    if is_current {
+        let mut player = state.player.lock().await;
+        if let Some(p) = player.as_mut() {
+            let _ = p.stop();
+        }
+    }
+
+    // Evict artwork from cache
+    {
+        let mut cache = state.artwork_cache.lock();
+        cache.remove(&track_id);
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -1380,6 +1421,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .invoke_handler(tauri::generate_handler![
             get_tracks,
+            delete_track,
             import_file,
             import_folder,
             pick_file,
@@ -1471,6 +1513,23 @@ mod tests {
         cache.clear();
         assert_eq!(cache.len(), 0);
         assert!(cache.is_empty());
+    }
+
+    #[test]
+    fn test_artwork_cache_remove() {
+        let mut cache = ArtworkCache::new(5);
+        cache.insert("track1".into(), Some("art1".into()));
+        cache.insert("track2".into(), Some("art2".into()));
+        assert_eq!(cache.len(), 2);
+
+        cache.remove("track1");
+        assert_eq!(cache.len(), 1);
+        assert_eq!(cache.get("track1"), None);
+        assert_eq!(cache.get("track2"), Some(Some("art2".into())));
+
+        // Removing non-existent key is a safe no-op
+        cache.remove("track_non_existent");
+        assert_eq!(cache.len(), 1);
     }
 
     #[test]

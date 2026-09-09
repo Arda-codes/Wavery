@@ -61,6 +61,7 @@ export async function runStoresAndUtilsTests(jiti: any) {
   const navigationStoreModule = jiti("../src/stores/navigationStore.ts");
   const settingsStoreModule = jiti("../src/stores/settingsStore.ts");
   const libraryStoreModule = jiti("../src/stores/libraryStore.ts");
+  const playerStoreModule = jiti("../src/stores/playerStore.ts");
   const adapterModule = jiti("../src/services/adapter.ts");
   const libUtils = jiti("../src/utils/library.ts");
 
@@ -412,6 +413,79 @@ export async function runStoresAndUtilsTests(jiti: any) {
   assert(libState.isLoading === false, "loadTracks reset isLoading to false on success");
   assert(libState.error === null, "loadTracks cleared error on success");
   assert(libState.tracks.length === 15, `loadTracks updated tracks list to 15 items`);
+
+  // 3c. deleteTrack Action & Player Queue Sync
+  console.log("  Testing deleteTrack action, optimistic update and player queue cleanup...");
+  const { usePlayerStore } = playerStoreModule;
+
+  const testTrackToDelete = syntheticTracks[0];
+  const remainingTrack = syntheticTracks[1];
+
+  useLibraryStore.getState().setTracks([testTrackToDelete, remainingTrack]);
+  useLibraryStore.setState({
+    likedTrackIds: new Set([testTrackToDelete.id, remainingTrack.id]),
+    likedTracks: [testTrackToDelete, remainingTrack],
+  });
+
+  usePlayerStore.setState({
+    queue: [testTrackToDelete, remainingTrack],
+    queueIndex: 0,
+    currentTrackId: testTrackToDelete.id,
+    status: {
+      state: "Playing",
+      volume: 0.8,
+      position_secs: 15,
+      duration_secs: 120,
+      current_track: testTrackToDelete,
+      loop_mode: "Off",
+    },
+  });
+
+  const originalDeleteTrack = adapterModule.playerAdapter.deleteTrack;
+  const originalStop = adapterModule.playerAdapter.stop;
+
+  let deletedTrackIdPassed = "";
+  let removeFileFlagPassed = false;
+  adapterModule.playerAdapter.deleteTrack = async (id: string, removeFile = false) => {
+    deletedTrackIdPassed = id;
+    removeFileFlagPassed = removeFile;
+  };
+  adapterModule.playerAdapter.stop = async () => {};
+
+  try {
+    await useLibraryStore.getState().deleteTrack(testTrackToDelete.id, true);
+
+    assert(deletedTrackIdPassed === testTrackToDelete.id, "deleteTrack called playerAdapter.deleteTrack with track id");
+    assert(removeFileFlagPassed === true, "deleteTrack called playerAdapter.deleteTrack with removeFile=true");
+
+    libState = useLibraryStore.getState();
+    assert(libState.tracks.length === 1, "deleteTrack reduced library tracks length to 1");
+    assert(!libState.tracks.some((t: any) => t.id === testTrackToDelete.id), "deleteTrack removed deleted track from library tracks");
+    assert(!libState.likedTrackIds.has(testTrackToDelete.id), "deleteTrack removed deleted track from likedTrackIds");
+    assert(!libState.likedTracks.some((t: any) => t.id === testTrackToDelete.id), "deleteTrack removed deleted track from likedTracks");
+
+    const playerState = usePlayerStore.getState();
+    assert(playerState.queue.length === 1, "deleteTrack cleaned active queue in playerStore");
+    assert(!playerState.queue.some((t: any) => t.id === testTrackToDelete.id), "deleteTrack removed track from queue");
+    assert(playerState.status.state === "Stopped", "deleteTrack stopped playback because active track was deleted");
+
+    // Verify deleteTrack error handling
+    adapterModule.playerAdapter.deleteTrack = async () => {
+      throw new Error("Disk permission denied");
+    };
+    let errorCaught = false;
+    try {
+      await useLibraryStore.getState().deleteTrack(remainingTrack.id, false);
+    } catch (err: any) {
+      errorCaught = true;
+      assert(err.message === "Disk permission denied", "deleteTrack rethrows error on failure");
+    }
+    assert(errorCaught, "deleteTrack threw when adapter failed");
+    assert(useLibraryStore.getState().error === "Disk permission denied", "deleteTrack stored error in libraryStore");
+  } finally {
+    adapterModule.playerAdapter.deleteTrack = originalDeleteTrack;
+    adapterModule.playerAdapter.stop = originalStop;
+  }
 
   // =========================================================================
   // SECTION 4: utils/library.ts String Tokenizers, Formatter & Helpers

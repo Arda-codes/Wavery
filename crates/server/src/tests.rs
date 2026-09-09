@@ -657,3 +657,89 @@ async fn test_app_close_signal_broadcasting() {
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
+
+#[tokio::test]
+async fn test_delete_track_endpoint_and_artwork_cache_eviction() {
+    let temp_dir = std::env::temp_dir().join(format!("wavery_srv_del_{}", uuid::Uuid::new_v4()));
+    let lib_dir = temp_dir.join("library");
+    let db_path = temp_dir.join("library.db");
+    fs::create_dir_all(&lib_dir).unwrap();
+
+    let mut manager = SqliteLibraryManager::new(lib_dir.clone(), db_path).unwrap();
+
+    let song_path = temp_dir.join("song_to_delete.mp3");
+    {
+        let mut f = File::create(&song_path).unwrap();
+        f.write_all(&[0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xAA, 0xBB, 0xCC, 0xDD]).unwrap();
+    }
+
+    let track = manager.import_track(&song_path, ImportStrategy::Copy).await.unwrap();
+
+    let state = Arc::new(AppState::new(
+        Arc::new(tokio::sync::Mutex::new(manager)),
+        LoftyMetadataReader::new(),
+        None,
+    ));
+
+    // Prepopulate artwork cache for this track
+    {
+        let mut cache = state.artwork_cache.write().await;
+        cache.insert(
+            track.id.clone(),
+            Some(CachedArtwork {
+                data: Bytes::from_static(b"fake-art"),
+                mime_type: "image/jpeg".to_string(),
+            }),
+        );
+        assert_eq!(cache.len(), 1);
+    }
+
+    let app = build_router(state.clone());
+
+    // 1. Send DELETE request to /api/tracks/{id}?remove_file=false
+    let req = Request::builder()
+        .method("DELETE")
+        .uri(format!("/api/tracks/{}?remove_file=false", track.id))
+        .body(Body::empty())
+        .unwrap();
+
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+
+    // 2. Verify track is removed from library
+    {
+        let lib = state.library.lock().await;
+        assert!(lib.get_track(&track.id).is_none());
+    }
+
+    // 3. Verify artwork was evicted from cache
+    {
+        let mut cache = state.artwork_cache.write().await;
+        assert!(cache.get(&track.id).is_none());
+        assert_eq!(cache.len(), 0);
+    }
+
+    // 4. File should still exist since remove_file was false
+    assert!(track.source.path().exists());
+
+    // Import again and delete with remove_file=true
+    let track2 = {
+        let mut lib = state.library.lock().await;
+        lib.import_track(&song_path, ImportStrategy::Copy).await.unwrap()
+    };
+    assert!(track2.source.path().exists());
+
+    let req2 = Request::builder()
+        .method("DELETE")
+        .uri(format!("/api/tracks/{}?remove_file=true", track2.id))
+        .body(Body::empty())
+        .unwrap();
+
+    let res2 = app.oneshot(req2).await.unwrap();
+    assert_eq!(res2.status(), StatusCode::NO_CONTENT);
+
+    // File should be removed from disk
+    assert!(!track2.source.path().exists());
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}

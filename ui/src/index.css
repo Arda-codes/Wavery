@@ -387,6 +387,7 @@ input[type="range"].wavery-slider:active::-moz-range-thumb {
 .border-\[\#FA586A\]\/40 { border-color: color-mix(in srgb, var(--accent-color) 40%, transparent) !important; }
 .border-\[\#FA586A\]\/50 { border-color: color-mix(in srgb, var(--accent-color) 50%, transparent) !important; }
 .border-\[\#FA586A\]\/60 { border-color: color-mix(in srgb, var(--accent-color) 60%, transparent) !important; }
+.border-\[\#FA586A\]\/70 { border-color: color-mix(in srgb, var(--accent-color) 70%, transparent) !important; }
 
 /* --- Fill accent --- */
 .fill-\[\#FA586A\] { fill: var(--accent-color) !important; }
@@ -404,13 +405,62 @@ input[type="range"].wavery-slider:active::-moz-range-thumb {
 .shadow-\[\#FA586A\]\/30 { --tw-shadow-color: color-mix(in srgb, var(--accent-color) 30%, transparent) !important; }
 .shadow-\[\#FA586A\]\/50 { --tw-shadow-color: color-mix(in srgb, var(--accent-color) 50%, transparent) !important; }
 
-/* --- Gradient from-accent (used in sidebar active items) --- */
-.from-\[\#FA586A\]\/15 { --tw-gradient-from: color-mix(in srgb, var(--accent-color) 15%, transparent) !important; }
+/* --- Gradient from-accent --- */
+.from-\[\#FA586A\] { --tw-gradient-from: var(--accent-color) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, color-mix(in srgb, var(--accent-color) 0%, transparent)) !important; }
+.from-\[\#FA586A\]\/15 { --tw-gradient-from: color-mix(in srgb, var(--accent-color) 15%, transparent) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, color-mix(in srgb, var(--accent-color) 0%, transparent)) !important; }
+.from-\[\#FA586A\]\/20 { --tw-gradient-from: color-mix(in srgb, var(--accent-color) 20%, transparent) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, color-mix(in srgb, var(--accent-color) 0%, transparent)) !important; }
+.from-\[\#FA586A\]\/30 { --tw-gradient-from: color-mix(in srgb, var(--accent-color) 30%, transparent) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, color-mix(in srgb, var(--accent-color) 0%, transparent)) !important; }
+.from-\[\#FA586A\]\/70 { --tw-gradient-from: color-mix(in srgb, var(--accent-color) 70%, transparent) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, color-mix(in srgb, var(--accent-color) 0%, transparent)) !important; }
+
+/* --- Gradient via-accent --- */
+.via-\[\#FA586A\]\/5  { --tw-gradient-via: color-mix(in srgb, var(--accent-color)  5%, transparent) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-via), var(--tw-gradient-to) !important; }
+.via-\[\#FA586A\]\/10 { --tw-gradient-via: color-mix(in srgb, var(--accent-color) 10%, transparent) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-via), var(--tw-gradient-to) !important; }
+
+/* --- Gradient to-accent (darker shade used as gradient endpoint) --- */
+/* #E0284F, #cc2043, #f84357 are all "dark accent" variants that appear
+   as gradient destinations alongside from-[#FA586A].  Map them to
+   --color-accent-hover so they scale with the chosen accent. */
+.to-\[\#E0284F\] { --tw-gradient-to: var(--color-accent-hover) !important; }
+.to-\[\#E04557\] { --tw-gradient-to: var(--color-accent-hover) !important; }
+.to-\[\#cc2043\]  { --tw-gradient-to: var(--color-accent-hover) !important; }
+.to-\[\#f84357\]  { --tw-gradient-to: var(--color-accent-hover) !important; }
 
 /* --- Hover-prefixed accent variants (Tailwind hover: prefix) --- */
 .hover\:bg-\[\#E04859\]:hover { background-color: var(--color-accent-hover) !important; }
+.hover\:bg-\[\#FA586A\]:hover { background-color: var(--accent-color) !important; }
+.hover\:bg-\[\#FA586A\]\/30:hover { background-color: color-mix(in srgb, var(--accent-color) 30%, transparent) !important; }
+.hover\:border-\[\#FA586A\]\/50:hover { border-color: color-mix(in srgb, var(--accent-color) 50%, transparent) !important; }
+.hover\:shadow-\[\#FA586A\]\/15:hover { --tw-shadow-color: color-mix(in srgb, var(--accent-color) 15%, transparent) !important; }
 .hover\:text-\[\#FA586A\]:hover { color: var(--accent-color) !important; }
+
+/* Gradient hover variants */
+.hover\:from-\[\#FA586A\]:hover { --tw-gradient-from: var(--accent-color) !important; }
+.hover\:from-\[\#f84357\]:hover { --tw-gradient-from: var(--color-accent-hover) !important; }
+.hover\:to-\[\#cc2043\]:hover  { --tw-gradient-to: color-mix(in srgb, var(--color-accent-hover) 90%, black) !important; }
+.hover\:to-\[\#E04557\]:hover  { --tw-gradient-to: var(--color-accent-hover) !important; }
+
+/* --- Group-hover accent variants --- */
 .group-hover\:text-\[\#FA586A\]:is(:where(.group):hover *) { color: var(--accent-color) !important; }
+.group-hover\:bg-\[\#FA586A\]:is(:where(.group):hover *) { background-color: var(--accent-color) !important; }
+.group-hover\:bg-\[\#FA586A\]\/20:is(:where(.group):hover *) { background-color: color-mix(in srgb, var(--accent-color) 20%, transparent) !important; }
+.group-hover\:border-\[\#FA586A\]\/50:is(:where(.group):hover *) { border-color: color-mix(in srgb, var(--accent-color) 50%, transparent) !important; }
+.group-hover\:shadow-\[\#FA586A\]\/20:is(:where(.group):hover *) { --tw-shadow-color: color-mix(in srgb, var(--accent-color) 20%, transparent) !important; }
+
+/* --- Focus-prefixed accent variants --- */
+.focus\:border-\[\#FA586A\]:focus { border-color: var(--accent-color) !important; }
+.focus\:border-\[\#FA586A\]\/50:focus { border-color: color-mix(in srgb, var(--accent-color) 50%, transparent) !important; }
+.focus\:border-\[\#FA586A\]\/60:focus { border-color: color-mix(in srgb, var(--accent-color) 60%, transparent) !important; }
+.focus\:border-\[\#FA586A\]\/70:focus { border-color: color-mix(in srgb, var(--accent-color) 70%, transparent) !important; }
+.focus\:ring-\[\#FA586A\]\/15:focus { --tw-ring-color: color-mix(in srgb, var(--accent-color) 15%, transparent) !important; }
+.focus\:ring-\[\#FA586A\]\/20:focus { --tw-ring-color: color-mix(in srgb, var(--accent-color) 20%, transparent) !important; }
+.focus\:ring-\[\#FA586A\]\/30:focus { --tw-ring-color: color-mix(in srgb, var(--accent-color) 30%, transparent) !important; }
+.focus\:ring-\[\#FA586A\]\/40:focus { --tw-ring-color: color-mix(in srgb, var(--accent-color) 40%, transparent) !important; }
+
+/* --- Group-focus-within accent --- */
+.group-focus-within\:text-\[\#FA586A\]:is(:where(.group):focus-within *) { color: var(--accent-color) !important; }
+
+/* --- Selection accent (set via ::selection, not Tailwind class) --- */
+::selection { background-color: color-mix(in srgb, var(--accent-color) 30%, transparent); color: white; }
 
 /* =========================================================
    DYNAMIC THEME SURFACE COLOR OVERRIDES

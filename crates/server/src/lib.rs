@@ -30,6 +30,9 @@ use wavery_library::{LoftyMetadataReader, SqliteLibraryManager};
 pub mod tray;
 pub use tray::ServerTrayManager;
 
+pub mod discord;
+pub use discord::{new_discord_handle, DiscordHandle, PresencePayload};
+
 /// Typed error enum for wavery-server operations.
 #[derive(Error, Debug)]
 pub enum ServerError {
@@ -200,6 +203,20 @@ impl ArtworkCache {
         self.lru_order.clear();
         self.current_bytes = 0;
     }
+
+    /// Removes a specific track from the cache if present.
+    pub fn remove(&mut self, track_id: &str) {
+        if let Some(removed_entry) = self.entries.remove(track_id) {
+            let removed_bytes = match &removed_entry {
+                Some(art) => art.data.len() + art.mime_type.len() + track_id.len(),
+                None => track_id.len(),
+            };
+            self.current_bytes = self.current_bytes.saturating_sub(removed_bytes);
+            if let Some(pos) = self.lru_order.iter().position(|id| id == track_id) {
+                self.lru_order.remove(pos);
+            }
+        }
+    }
 }
 
 impl Default for ArtworkCache {
@@ -218,6 +235,8 @@ pub struct AppState {
     pub config_path: PathBuf,
     pub session: Arc<tokio::sync::RwLock<Option<wavery_core::models::PlaybackSession>>>,
     pub app_signal_tx: tokio::sync::broadcast::Sender<String>,
+    /// Shared Discord Rich Presence IPC bridge state.
+    pub discord_handle: DiscordHandle,
 }
 
 impl AppState {
@@ -244,6 +263,7 @@ impl AppState {
             config_path,
             session: Arc::new(tokio::sync::RwLock::new(session)),
             app_signal_tx,
+            discord_handle: new_discord_handle(None),
         }
     }
 
@@ -270,6 +290,7 @@ impl AppState {
             config_path,
             session: Arc::new(tokio::sync::RwLock::new(session)),
             app_signal_tx,
+            discord_handle: new_discord_handle(None),
         }
     }
 }
@@ -348,7 +369,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
     let api_router = Router::new()
         .route("/api/health", get(health_handler))
         .route("/api/tracks", get(list_tracks_handler))
-        .route("/api/tracks/{id}", get(get_track_handler))
+        .route("/api/tracks/{id}", get(get_track_handler).delete(delete_track_handler))
         .route("/api/tracks/{id}/artwork", get(get_artwork_handler))
         .route("/api/tracks/metadata", post(update_track_metadata_handler))
         .route("/api/albums/metadata", post(update_album_metadata_handler))
@@ -357,6 +378,8 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route("/api/stream/{id}", get(stream_track_handler))
         .route("/api/import", post(import_handler))
         .route("/api/import/folder", post(import_folder_handler))
+        .route("/api/dialog/pick-file", post(pick_file_dialog_handler))
+        .route("/api/dialog/pick-folder", post(pick_folder_dialog_handler))
         .route("/api/search", get(search_handler))
         .route("/api/liked", get(list_liked_tracks_handler))
         .route("/api/liked/ids", get(list_liked_ids_handler))
@@ -395,6 +418,12 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route("/api/app/events", get(app_events_handler))
         .route("/api/app/close-web", post(close_web_handler))
         .route("/api/app/quit", post(quit_app_handler))
+        // Discord Rich Presence IPC bridge
+        .route(
+            "/api/discord/presence",
+            post(discord_set_presence_handler).delete(discord_clear_presence_handler),
+        )
+        .route("/api/discord/status", get(discord_status_handler))
         .layer(CorsLayer::permissive())
         .with_state(state.clone());
 
@@ -458,6 +487,28 @@ async fn get_track_handler(
         Some(t) => Ok(Json(t.clone())),
         None => Err(ServerError::TrackNotFound(id)),
     }
+}
+
+/// Query parameters for deleting a track.
+#[derive(Deserialize, Debug, Default)]
+pub struct DeleteTrackQuery {
+    pub remove_file: Option<bool>,
+}
+
+async fn delete_track_handler(
+    AxumPath(id): AxumPath<String>,
+    Query(query): Query<DeleteTrackQuery>,
+    State(state): State<Arc<AppState>>,
+) -> Result<StatusCode, ServerError> {
+    {
+        let mut lib = state.library.lock().await;
+        lib.delete_track(&id, query.remove_file.unwrap_or(false)).await?;
+    }
+    {
+        let mut cache = state.artwork_cache.write().await;
+        cache.remove(&id);
+    }
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn search_handler(
@@ -566,6 +617,36 @@ async fn import_folder_handler(
     let path = PathBuf::from(req.dir_path);
     let tracks = lib.import_directory(&path, req.strategy).await?;
     Ok(Json(tracks))
+}
+
+/// Response payload for host file or directory picker dialog.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PickDialogResponse {
+    /// Full absolute path chosen by the user, or `None` if canceled.
+    pub path: Option<String>,
+}
+
+/// Native host file chooser dialog for single audio tracks.
+async fn pick_file_dialog_handler() -> Json<PickDialogResponse> {
+    let file = rfd::AsyncFileDialog::new()
+        .add_filter("Audio Files", &["mp3", "flac", "ogg", "opus", "m4a", "wav", "aac"])
+        .set_title("Select Audio Track to Ingest")
+        .pick_file()
+        .await;
+    Json(PickDialogResponse {
+        path: file.map(|f| f.path().to_string_lossy().to_string()),
+    })
+}
+
+/// Native host folder chooser dialog for music directories.
+async fn pick_folder_dialog_handler() -> Json<PickDialogResponse> {
+    let folder = rfd::AsyncFileDialog::new()
+        .set_title("Select Music Directory to Ingest")
+        .pick_folder()
+        .await;
+    Json(PickDialogResponse {
+        path: folder.map(|f| f.path().to_string_lossy().to_string()),
+    })
 }
 
 async fn list_liked_tracks_handler(
@@ -1286,6 +1367,81 @@ async fn quit_app_handler(
         ok: true,
         message: "Wavery background server shutting down.".to_string(),
     }))
+}
+
+// ---------------------------------------------------------------------------
+// Discord Rich Presence handlers
+// ---------------------------------------------------------------------------
+
+/// `POST /api/discord/presence`
+///
+/// Accepts a JSON [`PresencePayload`] and forwards it to the Discord IPC bridge.
+/// Spawns a blocking task because `DiscordIpcClient` uses synchronous I/O.
+/// Silently succeeds even when Discord is not running — no error is surfaced to
+/// the caller so the frontend never shows an error toast for a missing Discord client.
+async fn discord_set_presence_handler(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<PresencePayload>,
+) -> impl IntoResponse {
+    let handle = Arc::clone(&state.discord_handle);
+    tokio::task::spawn_blocking(move || {
+        if let Ok(lock) = handle.try_read() {
+            if let Ok(mut rpc) = lock.try_lock() {
+                rpc.set_activity(&payload);
+            }
+        }
+    })
+    .await
+    .ok();
+
+    Json(serde_json::json!({ "ok": true }))
+}
+
+/// `DELETE /api/discord/presence`
+///
+/// Clears the Discord Rich Presence activity (called when playback stops).
+async fn discord_clear_presence_handler(
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    let handle = Arc::clone(&state.discord_handle);
+    tokio::task::spawn_blocking(move || {
+        if let Ok(lock) = handle.try_read() {
+            if let Ok(mut rpc) = lock.try_lock() {
+                rpc.clear_activity();
+            }
+        }
+    })
+    .await
+    .ok();
+
+    Json(serde_json::json!({ "ok": true }))
+}
+
+/// `GET /api/discord/status`
+///
+/// Returns the current Discord IPC connection status.
+async fn discord_status_handler(
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    let handle = Arc::clone(&state.discord_handle);
+    let status = tokio::task::spawn_blocking(move || {
+        if let Ok(lock) = handle.try_read() {
+            if let Ok(rpc) = lock.try_lock() {
+                return rpc.status();
+            }
+        }
+        discord::DiscordStatusPayload {
+            connected: false,
+            discord_running: false,
+        }
+    })
+    .await
+    .unwrap_or(discord::DiscordStatusPayload {
+        connected: false,
+        discord_running: false,
+    });
+
+    Json(status)
 }
 
 #[cfg(test)]

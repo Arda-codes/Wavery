@@ -15,6 +15,14 @@ import { PlayerStatus, Track, PlaybackContext, PlayHistoryEntry } from "../types
 import { playerAdapter } from "../services/adapter";
 import { useSettingsStore } from "./settingsStore";
 import { showTrackNotification } from "../utils/notifications";
+import {
+  updateMediaSessionMetadata,
+  setMediaSessionPlaybackState,
+  setMediaSessionPositionState,
+  clearMediaSession,
+  registerMediaSessionHandlers,
+} from "../utils/mediaSession";
+import { updateDiscordPresence, clearDiscordPresence } from "../utils/discordRpc";
 
 function notifyIfEnabled(track?: Track) {
   if (!track) return;
@@ -193,6 +201,8 @@ interface PlayerStoreState {
   jumpToQueueIndex: (index: number) => Promise<void>;
   /** Remove a track from queue by index. */
   removeFromQueue: (index: number) => void;
+  /** Handle cleanup when a track is deleted from the library. */
+  handleTrackDeleted: (trackId: string) => Promise<void>;
   /** Clear the active queue. */
   clearQueue: () => void;
   /** Toggle shuffle mode on/off. */
@@ -309,6 +319,26 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
         .catch(() => {});
     }
 
+    // Register media session hardware key handlers once at polling start.
+    // These route OS media key events back into the player store actions.
+    const unsubMediaSession = registerMediaSessionHandlers({
+      onPlay: () => get().resume(),
+      onPause: () => get().pause(),
+      onStop: () => get().stop(),
+      onNextTrack: () => get().playNext(),
+      onPreviousTrack: () => get().playPrevious(),
+      onSeekTo: (positionSecs) => get().seek(positionSecs),
+      onSeekBackward: () => {
+        const pos = get().status.position_secs;
+        get().seek(Math.max(0, pos - 10));
+      },
+      onSeekForward: () => {
+        const pos = get().status.position_secs;
+        const dur = get().status.duration_secs ?? pos + 30;
+        get().seek(Math.min(dur, pos + 10));
+      },
+    });
+
     // Throttle position saves: write at most every 5 seconds
     let lastSaveTime = 0;
 
@@ -360,6 +390,49 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
           }
         }
 
+        // ---------------------------------------------------------------
+        // Integration updates: Media Session API + Discord Rich Presence
+        // ---------------------------------------------------------------
+        const integrationSettings = useSettingsStore.getState();
+
+        if (s.state === "Stopped") {
+          // Clear all integrations on stop
+          if (integrationSettings.enableMediaSession) {
+            clearMediaSession();
+          }
+          if (integrationSettings.enableDiscordRpc) {
+            clearDiscordPresence();
+          }
+        } else if (s.current_track) {
+          const track = s.current_track;
+          const positionSecs = s.position_secs;
+          const durationSecs = s.duration_secs ?? track.metadata.duration.secs;
+          const isPlaying = s.state === "Playing";
+
+          // Media Session API — works on all browsers/OSes, zero dependencies
+          if (integrationSettings.enableMediaSession) {
+            // Get artwork URL from the adapter (prebuilt URL, no extra fetch needed)
+            const artworkUrl = playerAdapter.getArtworkUrl(track.id);
+            updateMediaSessionMetadata(track, artworkUrl);
+            setMediaSessionPlaybackState(isPlaying ? "playing" : "paused");
+            if (durationSecs > 0) {
+              setMediaSessionPositionState(positionSecs, durationSecs);
+            }
+          }
+
+          // Discord Rich Presence — debounced, posted to local server bridge
+          if (integrationSettings.enableDiscordRpc && (statusChanged || trackChanged)) {
+            updateDiscordPresence({
+              title: track.metadata.title ?? "Unknown Title",
+              artist: track.metadata.artist ?? "Unknown Artist",
+              album: track.metadata.album ?? "",
+              position_secs: positionSecs,
+              duration_secs: durationSecs,
+              is_playing: isPlaying,
+            });
+          }
+        }
+        // ---------------------------------------------------------------
 
         // Auto-crossfade check:
         // When a track is playing and approaches its end within the crossfade window,
@@ -425,7 +498,11 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
     return () => {
       unsubEnded();
       unsubExternalPause();
+      unsubMediaSession();
       clearInterval(interval);
+      // Ensure integrations are cleaned up when the player is destroyed
+      clearMediaSession();
+      clearDiscordPresence();
     };
   },
 
@@ -607,6 +684,67 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
         queue: nextQueue,
         queueIndex: nextIndex,
       };
+    });
+  },
+
+  handleTrackDeleted: async (trackId: string) => {
+    const state = get();
+    const isCurrentPlaying = state.currentTrackId === trackId;
+    if (isCurrentPlaying) {
+      try {
+        await playerAdapter.stop();
+      } catch (err) {
+        console.debug("Error stopping playback for deleted track:", err);
+      }
+    }
+
+    set((s) => {
+      const nextQueue = s.queue.filter((t) => t.id !== trackId);
+      let nextIndex = s.queueIndex;
+      let nextCurrentTrackId = s.currentTrackId;
+
+      if (isCurrentPlaying) {
+        if (nextQueue.length > 0) {
+          nextIndex = Math.min(s.queueIndex, nextQueue.length - 1);
+          nextCurrentTrackId = nextQueue[nextIndex]?.id;
+        } else {
+          nextIndex = -1;
+          nextCurrentTrackId = undefined;
+        }
+      } else {
+        const removedIndices = s.queue
+          .map((t, idx) => (t.id === trackId ? idx : -1))
+          .filter((idx) => idx !== -1);
+        const removedBeforeCurrent = removedIndices.filter((idx) => idx < s.queueIndex).length;
+        nextIndex = Math.max(0, s.queueIndex - removedBeforeCurrent);
+      }
+
+      const nextStatus: PlayerStatus = {
+        ...s.status,
+        state: isCurrentPlaying ? "Stopped" : s.status.state,
+        position_secs: isCurrentPlaying ? 0 : s.status.position_secs,
+        duration_secs: isCurrentPlaying ? 0 : s.status.duration_secs,
+        current_track: isCurrentPlaying ? (nextCurrentTrackId ? nextQueue[nextIndex] : undefined) : s.status.current_track,
+      };
+
+      return {
+        queue: nextQueue,
+        queueIndex: nextIndex,
+        currentTrackId: nextCurrentTrackId,
+        status: nextStatus,
+      };
+    });
+
+    const s = get();
+    saveSession({
+      queue: s.queue,
+      queueIndex: s.queueIndex,
+      currentTrackId: s.currentTrackId,
+      playbackContext: s.playbackContext,
+      isShuffle: s.isShuffle,
+      isAutoplay: s.isAutoplay,
+      loopMode: s.status.loop_mode,
+      positionSecs: s.status.position_secs,
     });
   },
 

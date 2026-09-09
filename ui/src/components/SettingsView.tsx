@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { usePlayerStore } from "../stores/playerStore";
 import { useLibraryStore } from "../stores/libraryStore";
 import {
@@ -13,6 +13,8 @@ import {
   requestNotificationPermission,
   showTrackNotification,
 } from "../utils/notifications";
+import { isMediaSessionSupported } from "../utils/mediaSession";
+import { getDiscordStatus, DiscordStatusResponse } from "../utils/discordRpc";
 import { ModeSwitcher } from "./ModeSwitcher";
 import {
   Settings,
@@ -45,6 +47,11 @@ import {
   Monitor,
   Plus,
   X,
+  Link2,
+  Wifi,
+  WifiOff,
+  MonitorSpeaker,
+  MessageSquare,
 } from "lucide-react";
 
 type SettingsTab =
@@ -54,6 +61,7 @@ type SettingsTab =
   | "keybindings"
   | "storage"
   | "network"
+  | "integrations"
   | "about";
 
 const ACCENT_PALETTE = [
@@ -162,6 +170,29 @@ export const SettingsView: React.FC = () => {
     type: "success" | "error";
     text: string;
   } | null>(null);
+
+  // Discord RPC status — polled when the Integrations tab is active
+  const [discordStatus, setDiscordStatus] = useState<DiscordStatusResponse | null>(null);
+  const [discordStatusLoading, setDiscordStatusLoading] = useState(false);
+
+  useEffect(() => {
+    if (activeTab !== "integrations") return;
+    let cancelled = false;
+    const poll = async () => {
+      setDiscordStatusLoading(true);
+      const status = await getDiscordStatus();
+      if (!cancelled) {
+        setDiscordStatus(status);
+        setDiscordStatusLoading(false);
+      }
+    };
+    void poll();
+    const timer = setInterval(() => { void poll(); }, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [activeTab]);
 
   const handleRebuild = async () => {
     setShowConfirmModal(false);
@@ -353,6 +384,7 @@ export const SettingsView: React.FC = () => {
             { id: "keybindings" as const, label: "Shortcuts", icon: Keyboard, desc: "Key combinations" },
             { id: "storage" as const, label: "Library & Database", icon: Database, desc: "Storage & maintenance" },
             { id: "network" as const, label: "Server & Streaming", icon: Radio, desc: "Port, RFC 7233 & web" },
+            { id: "integrations" as const, label: "Integrations", icon: Link2, desc: "Discord, Media Controls" },
             { id: "about" as const, label: "About & Info", icon: Info, desc: "Version & diagnostics" },
           ].map((tab) => {
             const Icon = tab.icon;
@@ -1276,6 +1308,164 @@ export const SettingsView: React.FC = () => {
                       <span>Open Browser</span>
                       <ExternalLink className="w-3.5 h-3.5" />
                     </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: INTEGRATIONS */}
+          {activeTab === "integrations" && (
+            <div className="space-y-6 animate-fade-in max-w-3xl">
+              <div>
+                <h2 className="text-base font-bold text-white">Integrations</h2>
+                <p className="text-xs text-[#71717A] mt-0.5">
+                  Connect Wavery to OS media controls, Discord, and other external services.
+                </p>
+              </div>
+
+              {/* ── Media Session API ── */}
+              <div>
+                <div className="flex items-center space-x-2 mb-3">
+                  <MonitorSpeaker className="w-3.5 h-3.5 text-[#FA586A]" />
+                  <h3 className="text-xs font-bold text-white uppercase tracking-wider">Browser & OS Media Controls</h3>
+                </div>
+                <div className="bg-[#16161A]/80 border border-white/[0.06] rounded-2xl divide-y divide-white/[0.06] shadow-xl overflow-hidden">
+                  <div className="p-5 flex items-start justify-between gap-4">
+                    <div className="space-y-1 min-w-0">
+                      <div className="text-xs font-bold text-white flex items-center space-x-2">
+                        <MonitorSpeaker className="w-3.5 h-3.5 text-[#FA586A] flex-shrink-0" />
+                        <span>Browser Media Controls</span>
+                        {/* Live status badge */}
+                        <span className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ml-1 ${
+                          isMediaSessionSupported()
+                            ? "bg-green-500/10 border-green-500/30 text-green-400"
+                            : "bg-[#3F3F46]/60 border-white/[0.08] text-[#71717A]"
+                        }`}>
+                          {isMediaSessionSupported() ? (
+                            <><Wifi className="w-2.5 h-2.5" /><span>Supported</span></>
+                          ) : (
+                            <><WifiOff className="w-2.5 h-2.5" /><span>Unsupported</span></>
+                          )}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-[#71717A] leading-relaxed">
+                        Show the current track in your browser's media panel, OS lock screen,
+                        notification shade, and hardware media key controls (⏮ ⏯ ⏭).
+                        Works in Chrome, Firefox, Safari, Edge — on Windows, macOS, Linux, Android, and iOS.
+                      </p>
+                      {!isMediaSessionSupported() && (
+                        <p className="text-[11px] text-amber-400/80 mt-1">
+                          Your browser does not support the Media Session API. Try Chrome 73+, Firefox 82+, or Safari 15+.
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex-shrink-0">
+                      <ToggleSwitch
+                        checked={settings.enableMediaSession}
+                        onChange={(val) => setSetting("enableMediaSession", val)}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Info row */}
+                  <div className="px-5 py-3 bg-[#FA586A]/5 border-t border-[#FA586A]/10">
+                    <p className="text-[11px] text-[#A1A1AA] leading-relaxed">
+                      <span className="text-[#FA586A] font-semibold">How it works:</span>{" "}
+                      Wavery pushes track metadata and artwork into the browser's native media overlay
+                      on every status update. No extensions or installs required.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Discord Rich Presence ── */}
+              <div>
+                <div className="flex items-center space-x-2 mb-3">
+                  <MessageSquare className="w-3.5 h-3.5 text-[#5865F2]" />
+                  <h3 className="text-xs font-bold text-white uppercase tracking-wider">Discord Rich Presence</h3>
+                </div>
+                <div className="bg-[#16161A]/80 border border-white/[0.06] rounded-2xl divide-y divide-white/[0.06] shadow-xl overflow-hidden">
+                  <div className="p-5 flex items-start justify-between gap-4">
+                    <div className="space-y-1 min-w-0">
+                      <div className="text-xs font-bold text-white flex items-center flex-wrap gap-2">
+                        <MessageSquare className="w-3.5 h-3.5 text-[#5865F2] flex-shrink-0" />
+                        <span>Show Currently Playing in Discord</span>
+                        {/* Live Discord connection badge */}
+                        {discordStatusLoading && !discordStatus ? (
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-[#3F3F46]/60 border-white/[0.08] text-[#71717A]">
+                            <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                            <span>Checking…</span>
+                          </span>
+                        ) : discordStatus === null ? (
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-[#3F3F46]/60 border-white/[0.08] text-[#71717A]">
+                            <WifiOff className="w-2.5 h-2.5" />
+                            <span>Server unreachable</span>
+                          </span>
+                        ) : !discordStatus.discord_running ? (
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-amber-500/10 border-amber-500/30 text-amber-400">
+                            <AlertTriangle className="w-2.5 h-2.5" />
+                            <span>Discord not running</span>
+                          </span>
+                        ) : discordStatus.connected ? (
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-green-500/10 border-green-500/30 text-green-400">
+                            <Wifi className="w-2.5 h-2.5" />
+                            <span>Connected</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-red-500/10 border-red-500/30 text-red-400">
+                            <WifiOff className="w-2.5 h-2.5" />
+                            <span>Disconnected</span>
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-[#71717A] leading-relaxed">
+                        Display the track you're listening to as your Discord activity status —
+                        "Listening to Wavery". Updates in real-time as tracks change.
+                        Requires Discord desktop to be running on this machine.
+                      </p>
+                    </div>
+                    <div className="flex-shrink-0">
+                      <ToggleSwitch
+                        checked={settings.enableDiscordRpc}
+                        onChange={(val) => setSetting("enableDiscordRpc", val)}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Setup info */}
+                  <div className="p-5 space-y-3">
+                    <div className="text-xs font-semibold text-[#A1A1AA]">Requirements</div>
+                    <div className="space-y-2">
+                      {[
+                        { label: "Discord desktop app", met: discordStatus?.discord_running ?? false },
+                        { label: "Wavery server running (always active)", met: discordStatus !== null },
+                        { label: "IPC bridge connected", met: discordStatus?.connected ?? false },
+                      ].map((req) => (
+                        <div key={req.label} className="flex items-center space-x-2.5">
+                          <div className={`w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 ${
+                            req.met ? "bg-green-500/20 text-green-400" : "bg-white/[0.06] text-[#52525B]"
+                          }`}>
+                            {req.met
+                              ? <Check className="w-2.5 h-2.5" />
+                              : <X className="w-2.5 h-2.5" />}
+                          </div>
+                          <span className={`text-[11px] ${req.met ? "text-[#D4D4D8]" : "text-[#52525B]"}`}>
+                            {req.label}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* How it works */}
+                  <div className="px-5 py-3 bg-[#5865F2]/5 border-t border-[#5865F2]/10">
+                    <p className="text-[11px] text-[#A1A1AA] leading-relaxed">
+                      <span className="text-[#5865F2] font-semibold">How it works:</span>{" "}
+                      Wavery's local server maintains an IPC connection to Discord's desktop app.
+                      Works in any browser (Chrome, Firefox, Safari, Edge) on Windows, macOS, and Linux
+                      without extensions. No data is sent to Discord's servers — all communication is local.
+                    </p>
                   </div>
                 </div>
               </div>

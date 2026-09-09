@@ -554,7 +554,11 @@ impl LibraryManager for SqliteLibraryManager {
 
         if remove_file {
             if let Some(rel) = deleted_rel {
-                let full = self.library_root.join(rel);
+                let full = if rel.is_absolute() {
+                    rel
+                } else {
+                    self.library_root.join(rel)
+                };
                 if full.exists() {
                     let _ = fs::remove_file(full);
                 }

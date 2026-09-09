@@ -7,6 +7,7 @@ import { useLibraryStore } from "../stores/libraryStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import { TrackRow } from "./TrackRow";
 import { AddToPlaylistModal } from "./AddToPlaylistModal";
+import { DeleteTrackModal } from "./DeleteTrackModal";
 import {
   Music,
   Clock,
@@ -27,6 +28,7 @@ interface TrackTableProps {
   showSearchBar?: boolean;
   onAddToPlaylist?: (track: Track) => void;
   onRemoveTrack?: (trackId: string) => void;
+  onDeleteTrack?: (track: Track) => void;
 }
 
 const TrackTableInner: React.FC<TrackTableProps> = ({
@@ -38,6 +40,7 @@ const TrackTableInner: React.FC<TrackTableProps> = ({
   showSearchBar = true,
   onAddToPlaylist: customAddToPlaylist,
   onRemoveTrack,
+  onDeleteTrack: customDeleteTrack,
 }) => {
   const rowDensity = useSettingsStore((s) => s.rowDensity);
   const rowHeight = rowDensity === "compact" ? 34 : 44;
@@ -52,6 +55,10 @@ const TrackTableInner: React.FC<TrackTableProps> = ({
   const playlists = useLibraryStore((s) => s.playlists);
   const addTracksToPlaylist = useLibraryStore((s) => s.addTracksToPlaylist);
   const createPlaylist = useLibraryStore((s) => s.createPlaylist);
+
+  // Delete Track modal state
+  const [trackToDelete, setTrackToDelete] = useState<Track | null>(null);
+  const deleteTrack = useLibraryStore((s) => s.deleteTrack);
 
   // Fine-grained selector subscriptions — avoids 500ms polling re-renders
   const currentTrackId = usePlayerStore((s) => s.currentTrackId);
@@ -138,6 +145,24 @@ const TrackTableInner: React.FC<TrackTableProps> = ({
       }
     },
     [customAddToPlaylist]
+  );
+
+  const handleDeleteTrackClick = useCallback(
+    (track: Track) => {
+      if (customDeleteTrack) {
+        customDeleteTrack(track);
+      } else {
+        setTrackToDelete(track);
+      }
+    },
+    [customDeleteTrack]
+  );
+
+  const handleConfirmDelete = useCallback(
+    async (trackId: string, removeFile: boolean) => {
+      await deleteTrack(trackId, removeFile);
+    },
+    [deleteTrack]
   );
 
   if (tracks.length === 0) {
@@ -317,6 +342,7 @@ const TrackTableInner: React.FC<TrackTableProps> = ({
                 onSelectAlbum={onSelectAlbum}
                 onAddToPlaylist={handleOpenAddToPlaylist}
                 onRemoveFromPlaylist={onRemoveTrack}
+                onDeleteTrack={handleDeleteTrackClick}
                 artworkUrl={getArtworkUrl ? getArtworkUrl(track.id) : undefined}
                 rowDensity={rowDensity}
               />
@@ -338,6 +364,14 @@ const TrackTableInner: React.FC<TrackTableProps> = ({
           const pl = await createPlaylist(name);
           await addTracksToPlaylist(pl.id, [trackId]);
         }}
+      />
+
+      {/* Delete Track Modal */}
+      <DeleteTrackModal
+        isOpen={!!trackToDelete}
+        onClose={() => setTrackToDelete(null)}
+        track={trackToDelete}
+        onConfirm={handleConfirmDelete}
       />
     </div>
   );

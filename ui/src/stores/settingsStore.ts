@@ -46,6 +46,10 @@ interface SettingsData {
   simplifyMode: boolean;
   isLinuxBannerDismissed: boolean;
 
+  // Integrations
+  enableMediaSession: boolean;
+  enableDiscordRpc: boolean;
+
   // Keybindings
   keybindings: Keybindings;
 }
@@ -100,6 +104,9 @@ export const DEFAULT_SETTINGS: SettingsData = {
   showLyricsSmoothScroll: true,
   simplifyMode: false,
   isLinuxBannerDismissed: false,
+
+  enableMediaSession: true,
+  enableDiscordRpc: false,
 
   keybindings: DEFAULT_KEYBINDINGS,
 };
@@ -210,6 +217,15 @@ function mapBackendConfigToSettings(backendCfg: any): Partial<SettingsData> {
     };
   }
 
+  if (backendCfg.integrations) {
+    if (typeof backendCfg.integrations.enable_media_session === "boolean") {
+      s.enableMediaSession = backendCfg.integrations.enable_media_session;
+    }
+    if (typeof backendCfg.integrations.enable_discord_rpc === "boolean") {
+      s.enableDiscordRpc = backendCfg.integrations.enable_discord_rpc;
+    }
+  }
+
   return s;
 }
 
@@ -292,6 +308,10 @@ function mapSettingsToBackendConfig(data: SettingsData): any {
       toggle_mute: data.keybindings.toggleMute,
       toggle_fullscreen: data.keybindings.toggleFullscreen,
       toggle_lyrics: data.keybindings.toggleLyrics,
+    },
+    integrations: {
+      enable_media_session: data.enableMediaSession,
+      enable_discord_rpc: data.enableDiscordRpc,
     },
   };
 }
@@ -486,6 +506,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
         showLyricsSmoothScroll: state.showLyricsSmoothScroll,
         simplifyMode: state.simplifyMode,
         isLinuxBannerDismissed: state.isLinuxBannerDismissed,
+        enableMediaSession: state.enableMediaSession,
+        enableDiscordRpc: state.enableDiscordRpc,
         keybindings: state.keybindings,
       };
       return JSON.stringify(exportable, null, 2);

@@ -39,6 +39,7 @@ export interface AudioPlayerAdapter {
   getPlaylistTracks(id: string): Promise<Track[]>;
   renamePlaylist(id: string, name: string): Promise<void>;
   deletePlaylist(id: string): Promise<void>;
+  deleteTrack(id: string, removeFile?: boolean): Promise<void>;
   addTracksToPlaylist(playlistId: string, trackIds: string[]): Promise<void>;
   removeTrackFromPlaylist(playlistId: string, trackId: string): Promise<void>;
   savePlaylist(playlist: Playlist): Promise<void>;
@@ -252,6 +253,11 @@ class BrowserAudioPlayer implements AudioPlayerAdapter {
         console.warn("Incoming crossfade track play postponed or interrupted:", e);
       }
 
+      if (this.currentTrack?.id !== track.id) {
+        incomingEl.pause();
+        return;
+      }
+
       // Promote incoming to active so that getStatus() and events reference the incoming element.
       this.activeIdx = incomingIdx;
       this.handoffActive = false;
@@ -330,6 +336,7 @@ class BrowserAudioPlayer implements AudioPlayerAdapter {
   }
 
   async stop(): Promise<void> {
+    this.currentTrack = null;
     this.handoffActive = true;
     // Stop and reset both elements cleanly.
     for (let i = 0; i < 2; i++) {
@@ -338,7 +345,6 @@ class BrowserAudioPlayer implements AudioPlayerAdapter {
       this.elements[i].currentTime = 0;
     }
     this.handoffActive = false;
-    this.currentTrack = null;
   }
 
   async seek(seconds: number): Promise<void> {
@@ -517,6 +523,13 @@ class BrowserAudioPlayer implements AudioPlayerAdapter {
     if (!res.ok) throw new Error(await res.text());
   }
 
+  async deleteTrack(id: string, removeFile = false): Promise<void> {
+    const res = await fetch(`/api/tracks/${encodeURIComponent(id)}?remove_file=${Boolean(removeFile)}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) throw new Error(await res.text());
+  }
+
   async addTracksToPlaylist(playlistId: string, trackIds: string[]): Promise<void> {
     const res = await fetch(`/api/playlists/${encodeURIComponent(playlistId)}/tracks`, {
       method: "POST",
@@ -578,7 +591,11 @@ class BrowserAudioPlayer implements AudioPlayerAdapter {
 
 class TauriAudioPlayer implements AudioPlayerAdapter {
   isTauri(): boolean {
-    return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+    return (
+      typeof window !== "undefined" &&
+      (Boolean((window as unknown as { isTauri?: boolean }).isTauri) ||
+        "__TAURI_INTERNALS__" in window)
+    );
   }
 
   onTrackEnded(callback: () => void): () => void {
@@ -805,6 +822,11 @@ class TauriAudioPlayer implements AudioPlayerAdapter {
     return invoke("delete_playlist", { id });
   }
 
+  async deleteTrack(id: string, removeFile = false): Promise<void> {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke("delete_track", { trackId: id, removeFile: Boolean(removeFile) });
+  }
+
   async addTracksToPlaylist(playlistId: string, trackIds: string[]): Promise<void> {
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke("add_tracks_to_playlist", { playlistId, trackIds });
@@ -843,7 +865,9 @@ class TauriAudioPlayer implements AudioPlayerAdapter {
 
 
 export const isTauri: boolean =
-  typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+  typeof window !== "undefined" &&
+  (Boolean((window as unknown as { isTauri?: boolean }).isTauri) ||
+    "__TAURI_INTERNALS__" in window);
 
 export const playerAdapter: AudioPlayerAdapter =
   isTauri

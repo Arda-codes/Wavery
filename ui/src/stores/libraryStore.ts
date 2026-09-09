@@ -9,6 +9,7 @@ import { create } from "zustand";
 import { Track, AlbumInfo, ArtistInfo, ImportStrategy, Playlist } from "../types";
 import { playerAdapter } from "../services/adapter";
 import { groupTracksByAlbum, groupTracksByArtist } from "../utils/library";
+import { usePlayerStore } from "./playerStore";
 
 interface LibraryState {
   tracks: Track[];
@@ -22,6 +23,7 @@ interface LibraryState {
 
   loadTracks: () => Promise<void>;
   setTracks: (tracks: Track[]) => void;
+  deleteTrack: (trackId: string, removeFile?: boolean) => Promise<void>;
   loadLiked: () => Promise<void>;
   toggleLike: (trackId: string) => Promise<boolean>;
   loadPlaylists: () => Promise<void>;
@@ -50,6 +52,38 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     const albums = groupTracksByAlbum(tracks);
     const artists = groupTracksByArtist(tracks);
     set({ tracks, albums, artists });
+  },
+
+  deleteTrack: async (trackId: string, removeFile = false) => {
+    try {
+      await playerAdapter.deleteTrack(trackId, removeFile);
+
+      // Clean up in playerStore if this track was playing or in queue
+      await usePlayerStore.getState().handleTrackDeleted(trackId);
+
+      const nextTracks = get().tracks.filter((t) => t.id !== trackId);
+      const nextAlbums = groupTracksByAlbum(nextTracks);
+      const nextArtists = groupTracksByArtist(nextTracks);
+
+      const nextLikedIds = new Set(get().likedTrackIds);
+      nextLikedIds.delete(trackId);
+      const nextLikedTracks = get().likedTracks.filter((t) => t.id !== trackId);
+
+      set({
+        tracks: nextTracks,
+        albums: nextAlbums,
+        artists: nextArtists,
+        likedTrackIds: nextLikedIds,
+        likedTracks: nextLikedTracks,
+      });
+
+      // Also reload playlists to refresh their counts/track lists
+      get().loadPlaylists();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      set({ error: msg || "Failed to delete track" });
+      throw err;
+    }
   },
 
   loadTracks: async () => {

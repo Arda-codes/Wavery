@@ -171,6 +171,7 @@ async fn test_hundreds_of_adversarial_corrupted_audio_files_parallel_scan_with_p
             bit_depth: Some(16),
             channels: Some(2),
             format: "WAV".into(),
+            lyrics: None,
         };
         let _ = reader.write_metadata(&path, &meta);
         created_audio_files += 1;
@@ -330,6 +331,7 @@ async fn test_parallel_scan_under_extreme_wal_read_concurrency_stress() {
                 bit_depth: Some(16),
                 channels: Some(2),
                 format: "FLAC".into(),
+                lyrics: None,
             },
             date_added: 1700000000 + i as u64,
         });

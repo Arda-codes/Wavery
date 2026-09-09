@@ -83,6 +83,7 @@ fn test_batched_ingestion_and_fts5_triggers() {
                 bit_depth: Some(16),
                 channels: Some(2),
                 format: "FLAC".into(),
+                lyrics: None,
             },
             date_added: 1700000000 + i as u64,
         });
@@ -146,6 +147,7 @@ fn test_sqlite_fts5_diacritics_unicode_and_special_queries() {
                 bit_depth: Some(16),
                 channels: Some(2),
                 format: "FLAC".into(),
+                lyrics: None,
             },
             date_added: 1700000001,
         },
@@ -166,6 +168,7 @@ fn test_sqlite_fts5_diacritics_unicode_and_special_queries() {
                 bit_depth: Some(16),
                 channels: Some(2),
                 format: "FLAC".into(),
+                lyrics: None,
             },
             date_added: 1700000002,
         },
@@ -186,6 +189,7 @@ fn test_sqlite_fts5_diacritics_unicode_and_special_queries() {
                 bit_depth: Some(16),
                 channels: Some(2),
                 format: "MP3".into(),
+                lyrics: None,
             },
             date_added: 1700000003,
         },
@@ -206,6 +210,7 @@ fn test_sqlite_fts5_diacritics_unicode_and_special_queries() {
                 bit_depth: Some(16),
                 channels: Some(2),
                 format: "MP3".into(),
+                lyrics: None,
             },
             date_added: 1700000004,
         },
@@ -226,6 +231,7 @@ fn test_sqlite_fts5_diacritics_unicode_and_special_queries() {
                 bit_depth: Some(24),
                 channels: Some(2),
                 format: "FLAC".into(),
+                lyrics: None,
             },
             date_added: 1700000005,
         },
@@ -246,6 +252,7 @@ fn test_sqlite_fts5_diacritics_unicode_and_special_queries() {
                 bit_depth: Some(16),
                 channels: Some(2),
                 format: "MP3".into(),
+                lyrics: None,
             },
             date_added: 1700000006,
         },
@@ -336,6 +343,7 @@ fn test_multi_connection_wal_concurrency() {
                 bit_depth: None,
                 channels: None,
                 format: "MP3".into(),
+                lyrics: None,
             },
             date_added: 1700000000 + i as u64,
         });
@@ -401,6 +409,7 @@ fn test_multi_connection_wal_concurrency() {
                         bit_depth: None,
                         channels: None,
                         format: "MP3".into(),
+                        lyrics: None,
                     },
                     date_added: 1700000000 + i as u64,
                 });
@@ -451,6 +460,7 @@ fn test_transaction_atomicity_and_rollback_integrity() {
             bit_depth: None,
             channels: None,
             format: "MP3".into(),
+            lyrics: None,
         },
         date_added: 1700000000,
     };
@@ -626,6 +636,7 @@ fn test_multi_artist_and_missing_tag_edge_cases() {
                 bit_depth: Some(16),
                 channels: Some(2),
                 format: "MP3".into(),
+                lyrics: None,
             },
             date_added: 1700000001,
         },
@@ -646,6 +657,7 @@ fn test_multi_artist_and_missing_tag_edge_cases() {
                 bit_depth: Some(16),
                 channels: Some(2),
                 format: "FLAC".into(),
+                lyrics: None,
             },
             date_added: 1700000002,
         },
@@ -666,6 +678,7 @@ fn test_multi_artist_and_missing_tag_edge_cases() {
                 bit_depth: Some(16),
                 channels: Some(2),
                 format: "FLAC".into(),
+                lyrics: None,
             },
             date_added: 1700000003,
         },
@@ -686,6 +699,7 @@ fn test_multi_artist_and_missing_tag_edge_cases() {
                 bit_depth: Some(16),
                 channels: Some(2),
                 format: "MP3".into(),
+                lyrics: None,
             },
             date_added: 1700000004,
         },
@@ -706,6 +720,7 @@ fn test_multi_artist_and_missing_tag_edge_cases() {
                 bit_depth: Some(16),
                 channels: Some(2),
                 format: "WAV".into(),
+                lyrics: None,
             },
             date_added: 1700000005,
         },
@@ -776,6 +791,7 @@ fn test_sqlite_aggregations() {
                 bit_depth: Some(16),
                 channels: Some(2),
                 format: "FLAC".into(),
+                lyrics: None,
             },
             date_added: 1700000000,
         },
@@ -796,6 +812,7 @@ fn test_sqlite_aggregations() {
                 bit_depth: Some(16),
                 channels: Some(2),
                 format: "FLAC".into(),
+                lyrics: None,
             },
             date_added: 1700000001,
         },
@@ -816,6 +833,7 @@ fn test_sqlite_aggregations() {
                 bit_depth: Some(16),
                 channels: Some(2),
                 format: "FLAC".into(),
+                lyrics: None,
             },
             date_added: 1700000002,
         },
@@ -924,6 +942,7 @@ fn test_playlist_operations() {
                 bit_depth: None,
                 channels: None,
                 format: "MP3".into(),
+                lyrics: None,
             },
             date_added: 1700000000,
         },
@@ -944,6 +963,7 @@ fn test_playlist_operations() {
                 bit_depth: None,
                 channels: None,
                 format: "MP3".into(),
+                lyrics: None,
             },
             date_added: 1700000001,
         },
@@ -1025,6 +1045,7 @@ fn test_liked_tracks_operations() {
                 bit_depth: None,
                 channels: None,
                 format: "MP3".into(),
+                lyrics: None,
             },
             date_added: 1700000000,
         },
@@ -1045,6 +1066,7 @@ fn test_liked_tracks_operations() {
                 bit_depth: None,
                 channels: None,
                 format: "FLAC".into(),
+                lyrics: None,
             },
             date_added: 1700000001,
         },
@@ -1265,6 +1287,7 @@ fn test_fts5_bm25_weighted_ranking_relevance() {
                 bit_depth: Some(16),
                 channels: Some(2),
                 format: "FLAC".into(),
+                lyrics: None,
             },
             date_added: 1700000001,
         },
@@ -1285,6 +1308,7 @@ fn test_fts5_bm25_weighted_ranking_relevance() {
                 bit_depth: Some(16),
                 channels: Some(2),
                 format: "FLAC".into(),
+                lyrics: None,
             },
             date_added: 1700000002,
         },
@@ -1305,6 +1329,7 @@ fn test_fts5_bm25_weighted_ranking_relevance() {
                 bit_depth: Some(16),
                 channels: Some(2),
                 format: "FLAC".into(),
+                lyrics: None,
             },
             date_added: 1700000003,
         },
@@ -1325,6 +1350,7 @@ fn test_fts5_bm25_weighted_ranking_relevance() {
                 bit_depth: Some(16),
                 channels: Some(2),
                 format: "FLAC".into(),
+                lyrics: None,
             },
             date_added: 1700000004,
         },
@@ -1345,6 +1371,7 @@ fn test_fts5_bm25_weighted_ranking_relevance() {
                 bit_depth: Some(16),
                 channels: Some(2),
                 format: "FLAC".into(),
+                lyrics: None,
             },
             date_added: 1700000005,
         },
@@ -1417,6 +1444,7 @@ fn test_year_boundary_validation_and_defensive_guard() {
         bit_depth: Some(16),
         channels: Some(2),
         format: "WAV".into(),
+        lyrics: None,
     };
     let write_res = reader.write_metadata(&audio_file, &neg_year_meta);
     assert!(write_res.is_ok(), "Writing metadata with negative year must succeed without panic: {:?}", write_res.err());
@@ -1438,6 +1466,7 @@ fn test_year_boundary_validation_and_defensive_guard() {
         bit_depth: Some(16),
         channels: Some(2),
         format: "WAV".into(),
+        lyrics: None,
     };
     let write_zero_res = reader.write_metadata(&audio_file, &zero_year_meta);
     assert!(write_zero_res.is_ok(), "Writing metadata with zero year must succeed without panic");
@@ -1459,6 +1488,7 @@ fn test_year_boundary_validation_and_defensive_guard() {
         bit_depth: Some(16),
         channels: Some(2),
         format: "WAV".into(),
+        lyrics: None,
     };
     let write_valid_res = reader.write_metadata(&audio_file, &valid_year_meta);
     assert!(write_valid_res.is_ok(), "Writing metadata with valid year must succeed");
@@ -1560,5 +1590,159 @@ async fn test_parallel_ingestion_corrupted_zero_byte_concurrent_wal_reads() {
     let fts_trunc = manager.search_fts("truncated").unwrap();
     assert_eq!(fts_trunc.len(), 10);
 
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn test_lyrics_reading_embedded_and_sidecar() {
+    let reader = LoftyMetadataReader::new();
+
+    // 1. Verify reading embedded lyrics from the user's sample FLAC if available
+    let flac_path = Path::new("/home/arda/Downloads/04 - Tyler, The Creator - See You Again (feat. Kali Uchis)_with_lyrics.flac");
+    if flac_path.exists() {
+        let meta = reader.read_metadata(flac_path).unwrap();
+        assert!(meta.lyrics.is_some(), "Embedded lyrics must be parsed from FLAC tag");
+        let lyrics = meta.lyrics.unwrap();
+        assert!(lyrics.contains("See You Again"), "Lyrics must contain song title");
+        assert!(lyrics.contains("[00:00.19]"), "Lyrics must contain LRC timestamps");
+    }
+
+    // 2. Verify reading from sidecar .lrc file
+    let temp_dir = std::env::temp_dir().join(format!("wavery_lrc_test_{}", uuid::Uuid::new_v4()));
+    fs::create_dir_all(&temp_dir).unwrap();
+    let song_file = temp_dir.join("test_song.mp3");
+    let lrc_file = temp_dir.join("test_song.lrc");
+
+    // Write a dummy file (unreadable by probe fallback) and a sidecar .lrc
+    fs::write(&song_file, b"DUMMY_AUDIO_DATA").unwrap();
+    fs::write(&lrc_file, "[00:01.00]Sidecar lyric line 1\n[00:05.00]Sidecar lyric line 2").unwrap();
+
+    let meta = reader.read_metadata(&song_file).unwrap();
+    assert!(meta.lyrics.is_some(), "Sidecar .lrc must be read when present");
+    let sidecar_lyrics = meta.lyrics.unwrap();
+    assert!(sidecar_lyrics.contains("Sidecar lyric line 1"));
+    assert!(sidecar_lyrics.contains("[00:05.00]"));
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn test_lyrics_database_persistence_and_queries() {
+    let temp_dir = std::env::temp_dir().join(format!("wavery_db_lyrics_test_{}", uuid::Uuid::new_v4()));
+    let db_path = temp_dir.join("library.db");
+    let managed_root = temp_dir.join("managed");
+    fs::create_dir_all(&managed_root).unwrap();
+
+    let db = LibraryDatabase::open(&db_path).unwrap();
+
+    let sample_lrc = "[00:10.00]First line\n[00:20.00]Second line";
+    let track = Track {
+        id: "track-with-lyrics-1".into(),
+        source: TrackSource::Managed(managed_root.join("artist/album/song.flac")),
+        metadata: TrackMetadata {
+            title: Some("Song With Lyrics".into()),
+            artist: Some("Lyric Artist".into()),
+            album: Some("Lyric Album".into()),
+            album_artist: Some("Lyric Artist".into()),
+            track_number: Some(1),
+            disc_number: Some(1),
+            year: Some(2026),
+            genre: Some("Pop".into()),
+            duration: Duration::from_secs(210),
+            sample_rate: Some(44100),
+            bit_depth: Some(16),
+            channels: Some(2),
+            format: "FLAC".into(),
+            lyrics: Some(sample_lrc.into()),
+        },
+        date_added: 1700000000,
+    };
+
+    // 1. Insert track
+    db.insert_or_update(&track, &managed_root).unwrap();
+
+    // 2. Fetch by ID
+    let fetched = db.get_track("track-with-lyrics-1", &managed_root).unwrap().unwrap();
+    assert_eq!(fetched.metadata.lyrics.as_deref(), Some(sample_lrc));
+
+    // 3. Load all
+    let all = db.load_all(&managed_root).unwrap();
+    assert_eq!(all.len(), 1);
+    assert_eq!(all[0].metadata.lyrics.as_deref(), Some(sample_lrc));
+
+    // 4. Get album tracks
+    let album_tracks = db.get_album_tracks("Lyric Album", Some("Lyric Artist"), &managed_root).unwrap();
+    assert_eq!(album_tracks.len(), 1);
+    assert_eq!(album_tracks[0].metadata.lyrics.as_deref(), Some(sample_lrc));
+
+    // 5. Update track metadata with new lyrics
+    let mut updated_meta = fetched.metadata.clone();
+    let updated_lrc = "[00:15.00]Updated lyric line";
+    updated_meta.lyrics = Some(updated_lrc.into());
+    db.update_track_metadata("track-with-lyrics-1", &updated_meta).unwrap();
+
+    let refetched = db.get_track("track-with-lyrics-1", &managed_root).unwrap().unwrap();
+    assert_eq!(refetched.metadata.lyrics.as_deref(), Some(updated_lrc));
+
+    drop(db);
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn test_database_schema_migration_for_lyrics() {
+    let temp_dir = std::env::temp_dir().join(format!("wavery_db_migration_test_{}", uuid::Uuid::new_v4()));
+    let db_path = temp_dir.join("legacy_library.db");
+    let managed_root = temp_dir.join("managed");
+    fs::create_dir_all(&managed_root).unwrap();
+
+    // 1. Manually create a legacy database schema without the lyrics column
+    {
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE tracks (
+                id TEXT PRIMARY KEY,
+                relative_path TEXT NOT NULL,
+                title TEXT,
+                artist TEXT,
+                album TEXT,
+                album_artist TEXT,
+                track_number INTEGER,
+                disc_number INTEGER,
+                year INTEGER,
+                genre TEXT,
+                duration_secs REAL NOT NULL,
+                sample_rate INTEGER,
+                bit_depth INTEGER,
+                channels INTEGER,
+                format TEXT NOT NULL,
+                date_added INTEGER NOT NULL
+            );
+            CREATE TABLE playlists (id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+            CREATE TABLE playlist_tracks (playlist_id TEXT NOT NULL, track_id TEXT NOT NULL, position INTEGER NOT NULL, PRIMARY KEY (playlist_id, position));
+            CREATE TABLE liked_tracks (track_id TEXT PRIMARY KEY, created_at INTEGER NOT NULL);
+            CREATE VIRTUAL TABLE tracks_fts USING fts5(title, artist, album, album_artist, genre, content='tracks', content_rowid='rowid');
+            INSERT INTO tracks (id, relative_path, title, artist, album, duration_secs, format, date_added)
+            VALUES ('legacy-track-1', 'song.mp3', 'Legacy Song', 'Legacy Artist', 'Legacy Album', 120.0, 'MP3', 1700000000);
+            "
+        ).unwrap();
+    }
+
+    // 2. Open via LibraryDatabase::open which must apply the migration
+    let db = LibraryDatabase::open(&db_path).unwrap();
+
+    // Verify existing track is loaded with lyrics: None
+    let track = db.get_track("legacy-track-1", &managed_root).unwrap().unwrap();
+    assert_eq!(track.metadata.title.as_deref(), Some("Legacy Song"));
+    assert_eq!(track.metadata.lyrics, None);
+
+    // Verify updating metadata to add lyrics works on migrated database
+    let mut meta = track.metadata.clone();
+    meta.lyrics = Some("[00:01.00]Migrated lyrics".into());
+    db.update_track_metadata("legacy-track-1", &meta).unwrap();
+
+    let updated = db.get_track("legacy-track-1", &managed_root).unwrap().unwrap();
+    assert_eq!(updated.metadata.lyrics.as_deref(), Some("[00:01.00]Migrated lyrics"));
+
+    drop(db);
     let _ = fs::remove_dir_all(&temp_dir);
 }

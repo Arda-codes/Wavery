@@ -106,6 +106,7 @@ mod tests {
                 bit_depth: None,
                 channels: None,
                 format: "MP3".into(),
+                lyrics: None,
             },
             date_added: 0,
         };
@@ -178,6 +179,7 @@ mod tests {
                 bit_depth: None,
                 channels: None,
                 format: "MP3".into(),
+                lyrics: None,
             },
             date_added: 0,
         };

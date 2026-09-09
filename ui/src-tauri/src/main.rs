@@ -1955,6 +1955,7 @@ mod tests {
                 bit_depth: Some(16),
                 channels: Some(2),
                 format: "FLAC".into(),
+                lyrics: None,
             },
             date_added: 0,
         }

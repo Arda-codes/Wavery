@@ -54,7 +54,8 @@ impl LibraryDatabase {
                 bit_depth INTEGER,
                 channels INTEGER,
                 format TEXT NOT NULL,
-                date_added INTEGER NOT NULL
+                date_added INTEGER NOT NULL,
+                lyrics TEXT
             );
 
             CREATE INDEX IF NOT EXISTS idx_tracks_artist ON tracks(artist);
@@ -125,6 +126,26 @@ impl LibraryDatabase {
         )
         .map_err(|e| LibraryError::IndexError(format!("Failed schema migration: {e}")))?;
 
+        // Ensure lyrics column exists for pre-existing databases
+        let has_lyrics: bool = conn
+            .prepare("PRAGMA table_info(tracks)")
+            .and_then(|mut stmt| {
+                let mut rows = stmt.query([])?;
+                while let Some(row) = rows.next()? {
+                    let col_name: String = row.get(1)?;
+                    if col_name == "lyrics" {
+                        return Ok(true);
+                    }
+                }
+                Ok(false)
+            })
+            .unwrap_or(false);
+
+        if !has_lyrics {
+            conn.execute("ALTER TABLE tracks ADD COLUMN lyrics TEXT;", [])
+                .map_err(|e| LibraryError::IndexError(format!("Failed to add lyrics column: {e}")))?;
+        }
+
         Ok(Self {
             conn: Mutex::new(conn),
         })
@@ -160,9 +181,9 @@ impl LibraryDatabase {
                     "INSERT INTO tracks (
                         id, relative_path, title, artist, album, album_artist,
                         track_number, disc_number, year, genre, duration_secs,
-                        sample_rate, bit_depth, channels, format, date_added
+                        sample_rate, bit_depth, channels, format, date_added, lyrics
                     ) VALUES (
-                        ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16
+                        ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17
                     )
                     ON CONFLICT(id) DO UPDATE SET
                         relative_path = excluded.relative_path,
@@ -179,7 +200,8 @@ impl LibraryDatabase {
                         bit_depth = excluded.bit_depth,
                         channels = excluded.channels,
                         format = excluded.format,
-                        date_added = excluded.date_added",
+                        date_added = excluded.date_added,
+                        lyrics = excluded.lyrics",
                 )
                 .map_err(|e| LibraryError::IndexError(format!("Failed to prepare cached statement: {e}")))?;
 
@@ -208,6 +230,7 @@ impl LibraryDatabase {
                     track.metadata.channels,
                     track.metadata.format,
                     track.date_added as i64,
+                    track.metadata.lyrics,
                 ])
                 .map_err(|e| LibraryError::IndexError(format!("Failed to insert track: {e}")))?;
             }
@@ -355,8 +378,9 @@ impl LibraryDatabase {
                 track_number = ?5,
                 disc_number = ?6,
                 year = ?7,
-                genre = ?8
-             WHERE id = ?9",
+                genre = ?8,
+                lyrics = ?9
+             WHERE id = ?10",
             params![
                 metadata.title,
                 metadata.artist,
@@ -366,6 +390,7 @@ impl LibraryDatabase {
                 metadata.disc_number,
                 metadata.year,
                 metadata.genre,
+                metadata.lyrics,
                 track_id,
             ],
         );
@@ -382,8 +407,9 @@ impl LibraryDatabase {
                     track_number = ?5,
                     disc_number = ?6,
                     year = ?7,
-                    genre = ?8
-                 WHERE id = ?9",
+                    genre = ?8,
+                    lyrics = ?9
+                 WHERE id = ?10",
                 params![
                     metadata.title,
                     metadata.artist,
@@ -393,6 +419,7 @@ impl LibraryDatabase {
                     metadata.disc_number,
                     metadata.year,
                     metadata.genre,
+                    metadata.lyrics,
                     track_id,
                 ],
             )
@@ -400,6 +427,45 @@ impl LibraryDatabase {
                 LibraryError::IndexError(format!("Failed to update track metadata: {retry_err} (initial: {e})"))
             })?;
         }
+
+        Ok(())
+    }
+
+    /// Returns list of (track_id, relative_path) tuples for all tracks currently missing lyrics.
+    pub fn get_tracks_missing_lyrics(&self) -> Result<Vec<(String, String)>, LibraryError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| LibraryError::IndexError("Database mutex poisoned".into()))?;
+
+        let mut stmt = conn
+            .prepare("SELECT id, relative_path FROM tracks WHERE lyrics IS NULL")
+            .map_err(|e| LibraryError::IndexError(e.to_string()))?;
+
+        let rows = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map_err(|e| LibraryError::IndexError(e.to_string()))?;
+
+        let mut result = Vec::new();
+        for r in rows {
+            result.push(r.map_err(|e| LibraryError::IndexError(e.to_string()))?);
+        }
+
+        Ok(result)
+    }
+
+    /// Sets the lyrics text for an existing track.
+    pub fn set_track_lyrics(&self, track_id: &str, lyrics: &str) -> Result<(), LibraryError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| LibraryError::IndexError("Database mutex poisoned".into()))?;
+
+        conn.execute(
+            "UPDATE tracks SET lyrics = ?1 WHERE id = ?2",
+            params![lyrics, track_id],
+        )
+        .map_err(|e| LibraryError::IndexError(format!("Failed to update track lyrics: {e}")))?;
 
         Ok(())
     }
@@ -414,7 +480,7 @@ impl LibraryDatabase {
         let mut stmt = conn.prepare(
             "SELECT id, relative_path, title, artist, album, album_artist,
                     track_number, disc_number, year, genre, duration_secs,
-                    sample_rate, bit_depth, channels, format, date_added
+                    sample_rate, bit_depth, channels, format, date_added, lyrics
              FROM tracks WHERE id = ?1",
         ).map_err(|e| LibraryError::IndexError(e.to_string()))?;
 
@@ -445,7 +511,7 @@ impl LibraryDatabase {
         let mut stmt = conn.prepare(
             "SELECT id, relative_path, title, artist, album, album_artist,
                     track_number, disc_number, year, genre, duration_secs,
-                    sample_rate, bit_depth, channels, format, date_added
+                    sample_rate, bit_depth, channels, format, date_added, lyrics
              FROM tracks ORDER BY artist, album, track_number, title",
         ).map_err(|e| LibraryError::IndexError(e.to_string()))?;
 
@@ -568,7 +634,7 @@ impl LibraryDatabase {
             let mut stmt = conn.prepare(
                 "SELECT id, relative_path, title, artist, album, album_artist,
                         track_number, disc_number, year, genre, duration_secs,
-                        sample_rate, bit_depth, channels, format, date_added
+                        sample_rate, bit_depth, channels, format, date_added, lyrics
                  FROM tracks
                  WHERE album = ?1 AND (artist = ?2 OR album_artist = ?2)
                  ORDER BY COALESCE(disc_number, 1) ASC, COALESCE(track_number, 0) ASC, title ASC",
@@ -585,7 +651,7 @@ impl LibraryDatabase {
             let mut stmt = conn.prepare(
                 "SELECT id, relative_path, title, artist, album, album_artist,
                         track_number, disc_number, year, genre, duration_secs,
-                        sample_rate, bit_depth, channels, format, date_added
+                        sample_rate, bit_depth, channels, format, date_added, lyrics
                  FROM tracks
                  WHERE album = ?1
                  ORDER BY COALESCE(disc_number, 1) ASC, COALESCE(track_number, 0) ASC, title ASC",
@@ -625,7 +691,7 @@ impl LibraryDatabase {
         let mut stmt = conn.prepare(
             "SELECT t.id, t.relative_path, t.title, t.artist, t.album, t.album_artist,
                     t.track_number, t.disc_number, t.year, t.genre, t.duration_secs,
-                    t.sample_rate, t.bit_depth, t.channels, t.format, t.date_added
+                    t.sample_rate, t.bit_depth, t.channels, t.format, t.date_added, t.lyrics
              FROM tracks t
              JOIN tracks_fts fts ON fts.rowid = t.rowid
              WHERE tracks_fts MATCH ?1
@@ -909,7 +975,7 @@ impl LibraryDatabase {
         let mut stmt = conn.prepare(
             "SELECT t.id, t.relative_path, t.title, t.artist, t.album, t.album_artist,
                     t.track_number, t.disc_number, t.year, t.genre, t.duration_secs,
-                    t.sample_rate, t.bit_depth, t.channels, t.format, t.date_added
+                    t.sample_rate, t.bit_depth, t.channels, t.format, t.date_added, t.lyrics
              FROM tracks t
              JOIN playlist_tracks pt ON pt.track_id = t.id
              WHERE pt.playlist_id = ?1
@@ -1151,7 +1217,7 @@ impl LibraryDatabase {
         let mut stmt = conn.prepare(
             "SELECT t.id, t.relative_path, t.title, t.artist, t.album, t.album_artist,
                     t.track_number, t.disc_number, t.year, t.genre, t.duration_secs,
-                    t.sample_rate, t.bit_depth, t.channels, t.format, t.date_added
+                    t.sample_rate, t.bit_depth, t.channels, t.format, t.date_added, t.lyrics
              FROM tracks t
              JOIN liked_tracks lt ON lt.track_id = t.id
              ORDER BY lt.created_at DESC",
@@ -1187,6 +1253,7 @@ fn row_to_track(row: &Row, managed_root: &Path) -> rusqlite::Result<Track> {
     let channels: Option<u16> = row.get(13)?;
     let format: String = row.get(14)?;
     let date_added: i64 = row.get(15)?;
+    let lyrics: Option<String> = row.get(16)?;
 
     let full_path = managed_root.join(&rel_path);
 
@@ -1207,6 +1274,7 @@ fn row_to_track(row: &Row, managed_root: &Path) -> rusqlite::Result<Track> {
             bit_depth,
             channels,
             format,
+            lyrics,
         },
         date_added: date_added as u64,
     })

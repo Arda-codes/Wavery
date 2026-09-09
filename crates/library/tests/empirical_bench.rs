@@ -59,6 +59,7 @@ fn generate_synthetic_tracks(count: usize, managed_root: &Path) -> Vec<Track> {
                 bit_depth: Some(if i % 2 == 0 { 16 } else { 24 }),
                 channels: Some(2),
                 format: "FLAC".to_string(),
+                lyrics: None,
             },
             date_added: 1700000000 + i as u64,
         });
@@ -453,6 +454,7 @@ fn bench_concurrent_read_write_wal_stress() {
                                 bit_depth: Some(16),
                                 channels: Some(2),
                                 format: "FLAC".into(),
+                                lyrics: None,
                             },
                             date_added: 1700000000 + idx as u64,
                         }

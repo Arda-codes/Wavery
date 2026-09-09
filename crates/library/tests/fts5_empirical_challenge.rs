@@ -45,6 +45,7 @@ fn build_track(
             bit_depth: Some(24),
             channels: Some(2),
             format: "FLAC".to_string(),
+            lyrics: None,
         },
         date_added: 1700000000,
     }
@@ -408,6 +409,7 @@ fn test_adversarial_rapid_concurrent_mutations_and_trigger_sync() {
                     bit_depth: Some(16),
                     channels: Some(2),
                     format: "FLAC".to_string(),
+                    lyrics: None,
                 };
 
                 match db_c.update_track_metadata(&target_id, &meta) {
@@ -608,6 +610,7 @@ fn test_adversarial_multi_word_cross_column_ranking_and_nulls() {
             bit_depth: None,
             channels: None,
             format: "FLAC".to_string(),
+            lyrics: None,
         },
         date_added: 1700000000,
     };

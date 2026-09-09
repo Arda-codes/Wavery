@@ -68,6 +68,7 @@ fn test_bm25_exact_column_weight_hierarchy() {
                 bit_depth: Some(16),
                 channels: Some(2),
                 format: "FLAC".into(),
+                lyrics: None,
             },
             date_added: 1700000001,
         },
@@ -88,6 +89,7 @@ fn test_bm25_exact_column_weight_hierarchy() {
                 bit_depth: Some(16),
                 channels: Some(2),
                 format: "FLAC".into(),
+                lyrics: None,
             },
             date_added: 1700000002,
         },
@@ -108,6 +110,7 @@ fn test_bm25_exact_column_weight_hierarchy() {
                 bit_depth: Some(16),
                 channels: Some(2),
                 format: "FLAC".into(),
+                lyrics: None,
             },
             date_added: 1700000003,
         },
@@ -128,6 +131,7 @@ fn test_bm25_exact_column_weight_hierarchy() {
                 bit_depth: Some(16),
                 channels: Some(2),
                 format: "FLAC".into(),
+                lyrics: None,
             },
             date_added: 1700000004,
         },
@@ -148,6 +152,7 @@ fn test_bm25_exact_column_weight_hierarchy() {
                 bit_depth: Some(16),
                 channels: Some(2),
                 format: "FLAC".into(),
+                lyrics: None,
             },
             date_added: 1700000005,
         },
@@ -208,6 +213,7 @@ fn test_year_defensive_bounds_and_tag_manipulation() {
             bit_depth: Some(16),
             channels: Some(2),
             format: "WAV".into(),
+            lyrics: None,
         };
 
         let res = reader.write_metadata(&sample_wav, &meta);

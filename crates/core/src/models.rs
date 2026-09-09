@@ -31,7 +31,7 @@ impl TrackSource {
 }
 
 /// Audio metadata representation.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct TrackMetadata {
     pub title: Option<String>,
     pub artist: Option<String>,
@@ -46,6 +46,8 @@ pub struct TrackMetadata {
     pub bit_depth: Option<u16>,
     pub channels: Option<u16>,
     pub format: String, // e.g., "FLAC", "ALAC", "MP3", "WAV"
+    #[serde(default)]
+    pub lyrics: Option<String>,
 }
 
 /// A playable item in the library or queue.

@@ -74,12 +74,35 @@ impl LoftyMetadataReader {
         if let Some(genre) = &metadata.genre {
             tag.set_genre(genre.clone());
         }
+        if let Some(lyrics) = &metadata.lyrics {
+            tag.insert_text(ItemKey::Lyrics, lyrics.clone());
+        }
 
         tag.save_to_path(path, lofty::config::WriteOptions::default())
             .map_err(|e| LibraryError::TagReadError(format!("Failed to write tags to disk: {e}")))?;
 
         Ok(())
     }
+}
+
+fn read_sidecar_lrc(path: &Path) -> Option<String> {
+    let lrc_path = path.with_extension("lrc");
+    if lrc_path.is_file() {
+        if let Ok(content) = std::fs::read_to_string(&lrc_path) {
+            if !content.trim().is_empty() {
+                return Some(content);
+            }
+        }
+    }
+    let lrc_upper = path.with_extension("LRC");
+    if lrc_upper.is_file() {
+        if let Ok(content) = std::fs::read_to_string(&lrc_upper) {
+            if !content.trim().is_empty() {
+                return Some(content);
+            }
+        }
+    }
+    None
 }
 
 impl MetadataReader for LoftyMetadataReader {
@@ -112,6 +135,7 @@ impl MetadataReader for LoftyMetadataReader {
                     bit_depth: None,
                     channels: None,
                     format,
+                    lyrics: read_sidecar_lrc(path),
                 });
             }
         };
@@ -134,6 +158,7 @@ impl MetadataReader for LoftyMetadataReader {
                     bit_depth: None,
                     channels: None,
                     format,
+                    lyrics: read_sidecar_lrc(path),
                 });
             }
         };
@@ -168,6 +193,16 @@ impl MetadataReader for LoftyMetadataReader {
                 })
         });
 
+        let lyrics = tag
+            .as_ref()
+            .and_then(|t| {
+                t.get_string(&ItemKey::Lyrics)
+                    .or_else(|| t.get_string(&ItemKey::Unknown("UNSYNCEDLYRICS".to_string())))
+                    .map(|s| s.to_string())
+            })
+            .filter(|s| !s.trim().is_empty())
+            .or_else(|| read_sidecar_lrc(path));
+
         Ok(TrackMetadata {
             title: title.or_else(|| {
                 path.file_stem()
@@ -190,6 +225,7 @@ impl MetadataReader for LoftyMetadataReader {
             bit_depth,
             channels,
             format,
+            lyrics,
         })
     }
 

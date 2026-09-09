@@ -27,6 +27,7 @@ export interface TrackMetadata {
   bit_depth?: number;
   channels?: number;
   format: string;
+  lyrics?: string;
 }
 
 export interface TrackSource {

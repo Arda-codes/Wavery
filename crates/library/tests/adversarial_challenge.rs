@@ -44,6 +44,7 @@ fn create_sample_track(id: &str, title: &str, artist: &str, album: &str, genre: 
             bit_depth: Some(16),
             channels: Some(2),
             format: "FLAC".to_string(),
+            lyrics: None,
         },
         date_added: 1700000000,
     }

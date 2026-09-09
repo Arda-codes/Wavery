@@ -43,12 +43,27 @@ impl SqliteLibraryManager {
         fs::create_dir_all(&library_root)?;
         let db = Arc::new(LibraryDatabase::open(&db_path)?);
         let _ = db.prune_missing_files(&library_root);
+
+        let reader = LoftyMetadataReader::new();
+        if let Ok(missing_lyrics) = db.get_tracks_missing_lyrics() {
+            for (id, rel_path) in missing_lyrics {
+                let full_path = library_root.join(&rel_path);
+                if full_path.is_file() {
+                    if let Ok(meta) = reader.read_metadata(&full_path) {
+                        if let Some(lyrics) = meta.lyrics {
+                            let _ = db.set_track_lyrics(&id, &lyrics);
+                        }
+                    }
+                }
+            }
+        }
+
         let tracks = db.load_all(&library_root)?;
 
         Ok(Self {
             library_root,
             db,
-            reader: LoftyMetadataReader::new(),
+            reader,
             tracks_cache: tracks,
         })
     }

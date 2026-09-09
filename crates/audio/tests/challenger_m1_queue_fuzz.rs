@@ -29,6 +29,7 @@ fn make_test_track(id: &str, title: &str) -> Track {
             bit_depth: Some(24),
             channels: Some(2),
             format: "FLAC".into(),
+            lyrics: None,
         },
         date_added: 0,
     }

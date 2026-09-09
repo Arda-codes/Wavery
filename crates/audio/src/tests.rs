@@ -26,6 +26,7 @@ fn make_test_track(id: &str, title: &str) -> Track {
             bit_depth: None,
             channels: None,
             format: "MP3".into(),
+            lyrics: None,
         },
         date_added: 0,
     }
@@ -327,6 +328,7 @@ async fn test_rodio_player_error_handling() {
                     bit_depth: None,
                     channels: None,
                     format: "MP3".into(),
+                    lyrics: None,
                 },
                 date_added: 0,
             };
@@ -357,6 +359,7 @@ async fn test_rodio_player_error_handling() {
                     bit_depth: None,
                     channels: None,
                     format: "MP3".into(),
+                    lyrics: None,
                 },
                 date_added: 0,
             };

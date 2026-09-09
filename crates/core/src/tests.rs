@@ -21,6 +21,7 @@ fn test_track_models() {
         bit_depth: Some(16),
         channels: Some(2),
         format: "FLAC".into(),
+        lyrics: None,
     };
 
     let track = Track {

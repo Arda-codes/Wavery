@@ -76,6 +76,7 @@ fn make_track(id: &str, path: PathBuf, duration: Duration) -> Track {
             bit_depth: Some(16),
             channels: Some(2),
             format: "WAV".into(),
+            lyrics: None,
         },
         date_added: 1725235200,
     }

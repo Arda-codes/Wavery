@@ -117,7 +117,13 @@ export const FullscreenPlayer: React.FC = () => {
   // Parse real lyrics only (no placeholder fallback)
   const lyrics = useMemo(() => {
     if (!currentTrack) return [];
-    const rawLyrics = (currentTrack.metadata as { lyrics?: string }).lyrics;
+    let rawLyrics = currentTrack.metadata?.lyrics;
+    if (!rawLyrics || !rawLyrics.trim()) {
+      const libraryTrack = useLibraryStore.getState().tracks.find((t) => t.id === currentTrack.id);
+      if (libraryTrack?.metadata?.lyrics) {
+        rawLyrics = libraryTrack.metadata.lyrics;
+      }
+    }
     if (rawLyrics && rawLyrics.trim()) {
       return parseLrc(rawLyrics);
     }

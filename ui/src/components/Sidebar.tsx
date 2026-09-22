@@ -346,7 +346,7 @@ const SidebarInner: React.FC<SidebarProps> = ({
                 className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-mono transition-colors ${
                   isTracksActive
                     ? "bg-accent text-white font-bold shadow-sm shadow-accent/30"
-                    : "bg-surfaceHover text-textMuted group-hover:text-textSecondary border border-border/40"
+                    : "bg-surfaceHover text-textMuted group-hover:text-textSecondary"
                 }`}
               >
                 {trackCount}
@@ -379,7 +379,7 @@ const SidebarInner: React.FC<SidebarProps> = ({
                 className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-mono transition-colors ${
                   isLikedActive
                     ? "bg-accent text-white font-bold shadow-sm"
-                    : "bg-surfaceHover text-textMuted group-hover:text-textSecondary border border-border/40"
+                    : "bg-surfaceHover text-textMuted group-hover:text-textSecondary"
                 }`}
               >
                 {likedCount}
@@ -411,7 +411,7 @@ const SidebarInner: React.FC<SidebarProps> = ({
                   className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-mono transition-colors ${
                     isHistoryActive
                       ? "bg-accent text-white font-bold shadow-sm shadow-accent/30"
-                      : "bg-surfaceHover text-textMuted group-hover:text-textSecondary border border-border/40"
+                      : "bg-surfaceHover text-textMuted group-hover:text-textSecondary"
                   }`}
                 >
                   {playHistory.length}
@@ -438,7 +438,7 @@ const SidebarInner: React.FC<SidebarProps> = ({
                 className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-mono transition-colors ${
                   isArtistsActive
                     ? "bg-accent text-white font-bold shadow-sm shadow-accent/30"
-                    : "bg-surfaceHover text-textMuted group-hover:text-textSecondary border border-border/40"
+                    : "bg-surfaceHover text-textMuted group-hover:text-textSecondary"
                 }`}
               >
                 {artistCount}
@@ -464,7 +464,7 @@ const SidebarInner: React.FC<SidebarProps> = ({
                 className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-mono transition-colors ${
                   isAlbumsActive
                     ? "bg-accent text-white font-bold shadow-sm shadow-accent/30"
-                    : "bg-surfaceHover text-textMuted group-hover:text-textSecondary border border-border/40"
+                    : "bg-surfaceHover text-textMuted group-hover:text-textSecondary"
                 }`}
               >
                 {albumCount}

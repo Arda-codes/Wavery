@@ -1,23 +1,28 @@
 /**
  * Discord Rich Presence client-side bridge for Wavery.
  *
- * Discord's Rich Presence is a desktop IPC protocol (Unix socket on Linux/macOS,
- * named pipe on Windows). Web pages have no direct access to it. This module
- * bridges the gap by POSTing presence updates to the local Wavery server
- * (`/api/discord/presence`), which maintains an IPC connection to Discord desktop.
+ * Discord's Rich Presence uses local IPC (Unix domain socket on Linux/macOS,
+ * named pipe on Windows). Web pages cannot access this socket directly.
+ *
+ * This module seamlessly bridges both modes:
+ *   - Tauri Desktop mode: Directly invokes native Tauri IPC commands
+ *     (`update_discord_presence`, `clear_discord_presence`, `get_discord_status`).
+ *   - Browser mode: Communicates via HTTP endpoints on `wavery-server`
+ *     (`/api/discord/presence`, `/api/discord/status`).
  *
  * Requirements:
  *   - Discord desktop must be running on the same machine.
- *   - wavery-server must be running (it always is in both web and Tauri modes).
  *   - The user must enable "Discord Rich Presence" in Settings → Integrations.
  *
  * Behavior:
- *   - All fetch errors are swallowed silently (Discord may not be installed).
- *   - Updates are debounced at 500 ms to avoid flooding the endpoint during seek.
- *   - Presence is automatically cleared on stop.
+ *   - All errors are swallowed silently so missing Discord clients never produce error toasts.
+ *   - Updates are debounced at 500 ms to avoid flooding during scrubber seek.
+ *   - Presence is automatically cleared when playback stops.
  */
 
-/** Payload sent to `/api/discord/presence`. */
+import { useSettingsStore } from "../stores/settingsStore";
+
+/** Payload sent to Discord RPC. */
 export interface DiscordPresencePayload {
   title: string;
   artist: string;
@@ -25,9 +30,10 @@ export interface DiscordPresencePayload {
   position_secs: number;
   duration_secs: number;
   is_playing: boolean;
+  app_id?: string;
 }
 
-/** Response from `/api/discord/status`. */
+/** Response from `/api/discord/status` or `get_discord_status` command. */
 export interface DiscordStatusResponse {
   connected: boolean;
   discord_running: boolean;
@@ -35,31 +41,43 @@ export interface DiscordStatusResponse {
 
 // Debounce timer handle
 let _debounceTimer: ReturnType<typeof setTimeout> | null = null;
-// Track the last payload to avoid redundant identical POSTs
+// Track the last payload to avoid redundant identical dispatches
 let _lastPayloadHash = "";
 
-/** Resolves the base URL for the local Wavery API. */
+/** Detects if the frontend is running inside the Tauri native desktop shell. */
+function isTauri(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    (Boolean((window as unknown as { isTauri?: boolean }).isTauri) ||
+      "__TAURI_INTERNALS__" in window)
+  );
+}
+
+/** Resolves the base URL for the local Wavery API in browser mode. */
 function getApiBase(): string {
   if (typeof window !== "undefined") {
     const { protocol, hostname, port } = window.location;
-    // In Tauri mode the page is served from tauri://localhost — use the HTTP server directly
-    if (protocol === "tauri:" || hostname === "tauri.localhost") {
-      return "http://localhost:7272";
+    if (protocol === "http:" || protocol === "https:") {
+      return `${protocol}//${hostname}${port ? `:${port}` : ""}`;
     }
-    // In browser mode, use the same origin (server handles CORS)
-    return `${protocol}//${hostname}${port ? `:${port}` : ""}`;
   }
-  return "http://localhost:7272";
+  return "";
 }
 
 /**
- * Posts a presence update to the local Wavery server.
+ * Posts a presence update to Discord via Tauri IPC or local server bridge.
  * Debounced at 500 ms; identical consecutive payloads are suppressed.
  *
- * @param payload  The presence data to send.
+ * @param payload The presence data to send.
  */
 export function updateDiscordPresence(payload: DiscordPresencePayload): void {
-  const hash = JSON.stringify(payload);
+  const customAppId = useSettingsStore.getState().discordAppId;
+  const enrichedPayload: DiscordPresencePayload = {
+    ...payload,
+    app_id: customAppId ? customAppId.trim() : undefined,
+  };
+
+  const hash = JSON.stringify(enrichedPayload);
   if (hash === _lastPayloadHash) return;
 
   if (_debounceTimer !== null) {
@@ -69,13 +87,24 @@ export function updateDiscordPresence(payload: DiscordPresencePayload): void {
   _debounceTimer = setTimeout(() => {
     _lastPayloadHash = hash;
     _debounceTimer = null;
-    fetch(`${getApiBase()}/api/discord/presence`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: hash,
-    }).catch(() => {
-      // Discord not running or server not reachable — ignore silently
-    });
+
+    if (isTauri()) {
+      import("@tauri-apps/api/core")
+        .then(({ invoke }) => {
+          invoke("update_discord_presence", { payload: enrichedPayload }).catch(() => {
+            // Discord not running — ignore silently
+          });
+        })
+        .catch(() => {});
+    } else {
+      fetch(`${getApiBase()}/api/discord/presence`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: hash,
+      }).catch(() => {
+        // Discord not running or server not reachable — ignore silently
+      });
+    }
   }, 500);
 }
 
@@ -84,27 +113,52 @@ export function updateDiscordPresence(payload: DiscordPresencePayload): void {
  * Call this when playback stops.
  */
 export function clearDiscordPresence(): void {
-  // Cancel any pending debounced update
   if (_debounceTimer !== null) {
     clearTimeout(_debounceTimer);
     _debounceTimer = null;
   }
   _lastPayloadHash = "";
 
-  fetch(`${getApiBase()}/api/discord/presence`, {
-    method: "DELETE",
-  }).catch(() => {
-    // Ignore silently
-  });
+  if (isTauri()) {
+    import("@tauri-apps/api/core")
+      .then(({ invoke }) => {
+        invoke("clear_discord_presence").catch(() => {});
+      })
+      .catch(() => {});
+  } else {
+    fetch(`${getApiBase()}/api/discord/presence`, {
+      method: "DELETE",
+    }).catch(() => {});
+  }
 }
 
 /**
- * Queries the server for the current Discord IPC connection status.
- * Returns null if the server is unreachable or Discord is not installed.
+ * Queries the current Discord IPC connection status.
+ * Returns null if the host environment is unreachable.
+ *
+ * @param customAppId Optional custom Discord application ID to test.
  */
-export async function getDiscordStatus(): Promise<DiscordStatusResponse | null> {
+export async function getDiscordStatus(customAppId?: string): Promise<DiscordStatusResponse | null> {
+  const effectiveAppId =
+    customAppId !== undefined
+      ? customAppId.trim() || undefined
+      : useSettingsStore.getState().discordAppId?.trim() || undefined;
+
+  if (isTauri()) {
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      return await invoke<DiscordStatusResponse>("get_discord_status", {
+        customAppId: effectiveAppId || null,
+      });
+    } catch (e) {
+      console.warn("Failed to get Discord status via Tauri IPC:", e);
+      return null;
+    }
+  }
+
   try {
-    const res = await fetch(`${getApiBase()}/api/discord/status`, {
+    const query = effectiveAppId ? `?app_id=${encodeURIComponent(effectiveAppId)}` : "";
+    const res = await fetch(`${getApiBase()}/api/discord/status${query}`, {
       signal: AbortSignal.timeout(3000),
     });
     if (!res.ok) return null;

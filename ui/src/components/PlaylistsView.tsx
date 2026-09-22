@@ -12,13 +12,14 @@ interface PlaylistsViewProps {
   onDeletePlaylist?: (id: string) => void;
 }
 
-const GRADIENTS = [
-  "from-[#FA586A] via-[#E0284F] to-[#7928CA]",
-  "from-[#0070F3] via-[#7928CA] to-[#FF0080]",
-  "from-[#00DFD8] via-[#007CF0] to-[#7928CA]",
-  "from-[#FF4D4D] via-[#F9CB28] to-[#FF4D4D]",
-  "from-[#7928CA] via-[#FF0080] to-[#FF4D4D]",
-  "from-[#10B981] via-[#3B82F6] to-[#6366F1]",
+const PLAYLIST_COVER_GRADIENTS = [
+  "bg-gradient-to-br from-slate-900 via-surfaceActive to-surface",
+  "bg-gradient-to-br from-indigo-950/70 via-surfaceActive to-surface",
+  "bg-gradient-to-br from-zinc-900 via-surfaceActive to-surface",
+  "bg-gradient-to-br from-teal-950/60 via-surfaceActive to-surface",
+  "bg-gradient-to-br from-amber-950/50 via-surfaceActive to-surface",
+  "bg-gradient-to-br from-purple-950/50 via-surfaceActive to-surface",
+  "bg-gradient-to-br from-rose-950/50 via-surfaceActive to-surface",
 ];
 
 export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
@@ -171,9 +172,9 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
         {/* Create Playlist Action Card */}
         <div
           onClick={onCreatePlaylist}
-          className="group cursor-pointer aspect-square rounded-2xl border-2 border-dashed border-white/[0.10] hover:border-[#FA586A]/50 bg-white/[0.02] hover:bg-white/[0.05] transition flex flex-col items-center justify-center p-6 text-center select-none"
+          className="group cursor-pointer aspect-square rounded-2xl border-2 border-dashed border-white/[0.10] hover:border-accent/50 bg-white/[0.02] hover:bg-white/[0.05] transition flex flex-col items-center justify-center p-6 text-center select-none"
         >
-          <div className="w-12 h-12 rounded-2xl bg-white/[0.06] group-hover:bg-[#FA586A] group-hover:text-white text-[#71717A] flex items-center justify-center transition mb-3 shadow-inner">
+          <div className="w-12 h-12 rounded-2xl bg-white/[0.06] group-hover:bg-accent group-hover:text-white text-[#71717A] flex items-center justify-center transition mb-3 shadow-inner">
             <Plus className="w-6 h-6" />
           </div>
           <span className="text-xs font-bold text-[#A1A1AA] group-hover:text-white transition">
@@ -183,8 +184,8 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
 
         {/* Existing Playlists */}
         {playlists.map((pl, idx) => {
-          const gradient = GRADIENTS[idx % GRADIENTS.length];
           const isCurrentLoading = playingId === pl.id;
+          const coverGradient = PLAYLIST_COVER_GRADIENTS[idx % PLAYLIST_COVER_GRADIENTS.length];
 
           return (
             <div
@@ -195,9 +196,11 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
             >
               {/* Art Card with Hover Play Overlay */}
               <div
-                className={`w-full aspect-square rounded-2xl bg-gradient-to-br ${gradient} p-4 flex items-end justify-between relative overflow-hidden shadow-lg group-hover:shadow-xl group-hover:scale-[1.02] transition-all border border-white/10`}
+                className={`w-full aspect-square rounded-2xl ${coverGradient} p-4 flex items-end justify-between relative overflow-hidden shadow-md group-hover:shadow-xl group-hover:border-white/20 transition-all border border-white/[0.08]`}
               >
-                <ListMusic className="w-8 h-8 text-white/80 absolute top-4 left-4" />
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <ListMusic className="w-10 h-10 text-textMuted/70 group-hover:text-accent transition-colors" />
+                </div>
 
                 {/* Play button overlay */}
                 <button
@@ -214,7 +217,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
               {/* Title & Stats */}
               <div className="mt-3 flex items-start justify-between min-w-0">
                 <div className="min-w-0 flex-1">
-                  <h3 className="text-xs font-bold text-white truncate group-hover:text-[#FA586A] transition">
+                  <h3 className="text-xs font-bold text-white truncate group-hover:text-accent transition">
                     {pl.name}
                   </h3>
                   <p className="text-[11px] text-[#71717A] font-medium mt-0.5">

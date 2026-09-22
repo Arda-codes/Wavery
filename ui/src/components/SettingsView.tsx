@@ -3,11 +3,13 @@ import { usePlayerStore } from "../stores/playerStore";
 import { useLibraryStore } from "../stores/libraryStore";
 import {
   useSettingsStore,
-  ThemeMode,
   ReplayGainMode,
   AlbumGridSize,
   RowDensity,
+  THEME_PRESETS,
+  CustomTheme,
 } from "../stores/settingsStore";
+import { CustomThemeModal } from "./CustomThemeModal";
 import { playerAdapter } from "../services/adapter";
 import {
   requestNotificationPermission,
@@ -26,7 +28,6 @@ import {
   Loader2,
   Trash2,
   Zap,
-  Sparkles,
   Volume2,
   Palette,
   Sliders,
@@ -52,6 +53,8 @@ import {
   WifiOff,
   MonitorSpeaker,
   MessageSquare,
+  Search,
+  Sparkles,
 } from "lucide-react";
 
 type SettingsTab =
@@ -75,64 +78,7 @@ const ACCENT_PALETTE = [
   { name: "Indigo Night", value: "#6366F1" },
 ];
 
-interface ThemeOption {
-  id: ThemeMode;
-  name: string;
-  desc: string;
-  bg: string;
-  surface: string;
-  textPrimary: string;
-  textMuted: string;
-  border: string;
-  accentPreview: string;
-}
-
-const THEME_OPTIONS: Array<ThemeOption> = [
-  {
-    id: "dark",
-    name: "Obsidian Dark",
-    desc: "Dark gray interface with soft contrast",
-    bg: "#121216",
-    surface: "#1A1A1E",
-    textPrimary: "#ECEFF4",
-    textMuted: "#8F93A0",
-    border: "rgba(255, 255, 255, 0.12)",
-    accentPreview: "#FA586A",
-  },
-  {
-    id: "oled",
-    name: "Pure OLED Black",
-    desc: "True black background for OLED screens",
-    bg: "#000000",
-    surface: "#0A0A0C",
-    textPrimary: "#FFFFFF",
-    textMuted: "#80808C",
-    border: "rgba(255, 255, 255, 0.16)",
-    accentPreview: "#FA586A",
-  },
-  {
-    id: "midnight",
-    name: "Midnight Indigo",
-    desc: "Deep navy blue palette",
-    bg: "#080C14",
-    surface: "#0F172A",
-    textPrimary: "#F1F5F9",
-    textMuted: "#94A3B8",
-    border: "rgba(99, 102, 241, 0.25)",
-    accentPreview: "#6366F1",
-  },
-  {
-    id: "light",
-    name: "Frost Light",
-    desc: "Crisp, high-contrast light theme",
-    bg: "#F4F4F6",
-    surface: "#FFFFFF",
-    textPrimary: "#18181B",
-    textMuted: "#71717A",
-    border: "rgba(0, 0, 0, 0.12)",
-    accentPreview: "#FA586A",
-  },
-];
+const PRESET_OPTIONS = Object.values(THEME_PRESETS);
 
 export const SettingsView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<SettingsTab>("general");
@@ -147,11 +93,36 @@ export const SettingsView: React.FC = () => {
   // Settings Store
   const settings = useSettingsStore();
   const setSetting = useSettingsStore((s) => s.setSetting);
+  const setThemePreset = useSettingsStore((s) => s.setThemePreset);
+  const customTheme = useSettingsStore((s) => s.customTheme);
+  const savedCustomThemes = useSettingsStore((s) => s.savedCustomThemes);
+  const applyCustomTheme = useSettingsStore((s) => s.applyCustomTheme);
+  const deleteCustomTheme = useSettingsStore((s) => s.deleteCustomTheme);
   const addCustomColor = useSettingsStore((s) => s.addCustomColor);
   const removeCustomColor = useSettingsStore((s) => s.removeCustomColor);
   const resetToDefaults = useSettingsStore((s) => s.resetToDefaults);
   const exportConfigJson = useSettingsStore((s) => s.exportConfigJson);
   const importConfigJson = useSettingsStore((s) => s.importConfigJson);
+
+  // Theme Maker Modal State
+  const [isCustomThemeModalOpen, setIsCustomThemeModalOpen] = useState(false);
+  const [customThemeToEdit, setCustomThemeToEdit] = useState<CustomTheme | null>(null);
+  const [themeCategoryFilter, setThemeCategoryFilter] = useState<string>("all");
+
+  // Protected Artists Store
+  const protectedArtists = useSettingsStore((s) => s.protectedArtists);
+  const addProtectedArtist = useSettingsStore((s) => s.addProtectedArtist);
+  const removeProtectedArtist = useSettingsStore((s) => s.removeProtectedArtist);
+  const resetProtectedArtists = useSettingsStore((s) => s.resetProtectedArtists);
+  const [newProtectedArtistInput, setNewProtectedArtistInput] = useState("");
+  const [protectedArtistSearch, setProtectedArtistSearch] = useState("");
+
+  const filteredProtectedArtists = React.useMemo(() => {
+    const list = protectedArtists || [];
+    if (!protectedArtistSearch.trim()) return list;
+    const q = protectedArtistSearch.trim().toLowerCase();
+    return list.filter((a) => a.toLowerCase().includes(q));
+  }, [protectedArtists, protectedArtistSearch]);
 
   // Custom Color State
   const [customHexInput, setCustomHexInput] = useState("#FA586A");
@@ -509,7 +480,7 @@ export const SettingsView: React.FC = () => {
                               });
                             }
                           }}
-                          className="px-2.5 py-1 bg-white/[0.06] hover:bg-white/[0.12] text-xs text-[#FA586A] rounded-lg border border-white/[0.08] font-semibold transition"
+                          className="px-2.5 py-1 bg-accent/10 hover:bg-accent/20 active:scale-95 text-xs text-accent rounded-lg border border-accent/20 font-semibold transition"
                         >
                           Send Test Notification
                         </button>
@@ -739,18 +710,56 @@ export const SettingsView: React.FC = () => {
               </div>
 
               {/* Theme Mode Selector Cards */}
-              <div className="space-y-3">
-                <div className="text-xs font-bold text-white uppercase tracking-wider text-[#71717A]">
-                  Theme
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="space-y-0.5">
+                    <div className="text-xs font-bold text-white uppercase tracking-wider text-[#71717A]">
+                      Theme Presets
+                    </div>
+                    <p className="text-[11px] text-[#71717A]">
+                      Presets synchronize canvas, surfaces, typography, and signature accent color.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setCustomThemeToEdit(customTheme || null);
+                      setIsCustomThemeModalOpen(true);
+                    }}
+                    className="self-start sm:self-auto flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-white transition-all shadow-sm active:scale-95"
+                  >
+                    <Palette className="w-3.5 h-3.5" />
+                    <span>Theme Maker</span>
+                  </button>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {THEME_OPTIONS.map((theme) => {
+
+                {/* Category Filters */}
+                <div className="flex items-center space-x-1.5 overflow-x-auto pb-1">
+                  {["all", "Standard", "Atmospheric", "Catppuccin"].map((cat) => (
+                    <button
+                      key={cat}
+                      onClick={() => setThemeCategoryFilter(cat)}
+                      className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${
+                        themeCategoryFilter === cat
+                          ? "bg-white/[0.12] text-white shadow-sm"
+                          : "text-[#71717A] hover:text-white hover:bg-white/[0.04]"
+                      }`}
+                    >
+                      {cat === "all" ? "All Presets" : cat}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Presets Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                  {PRESET_OPTIONS.filter(
+                    (p) => themeCategoryFilter === "all" || p.category === themeCategoryFilter
+                  ).map((theme) => {
                     const isSelected = settings.themeMode === theme.id;
-                    const accent = settings.accentColor || "#FA586A";
+                    const accent = isSelected ? (settings.accentColor || theme.accentColor) : theme.accentColor;
                     return (
                       <button
                         key={theme.id}
-                        onClick={() => setSetting("themeMode", theme.id)}
+                        onClick={() => setThemePreset(theme.id)}
                         style={{
                           backgroundColor: theme.bg,
                           borderColor: isSelected ? accent : theme.border,
@@ -758,7 +767,7 @@ export const SettingsView: React.FC = () => {
                             ? `0 0 0 2px ${accent}40, 0 8px 20px -6px ${accent}25`
                             : undefined,
                         }}
-                        className={`p-4 rounded-2xl border text-left transition-all relative flex flex-col justify-between min-h-[6.5rem] group ${
+                        className={`p-3.5 rounded-2xl border text-left transition-all relative flex flex-col justify-between min-h-[6.5rem] group ${
                           isSelected ? "" : "hover:brightness-110"
                         }`}
                       >
@@ -805,14 +814,202 @@ export const SettingsView: React.FC = () => {
                           />
                           <div
                             className="w-3 h-3 rounded-full shadow-sm"
-                            style={{ backgroundColor: isSelected ? accent : theme.accentPreview }}
-                            title="Accent"
+                            style={{ backgroundColor: theme.accentColor }}
+                            title="Signature Accent"
                           />
                         </div>
                       </button>
                     );
                   })}
+
+                  {/* Custom Theme Card */}
+                  {(themeCategoryFilter === "all" || themeCategoryFilter === "Custom") && (
+                    <div
+                      style={{
+                        backgroundColor: customTheme?.bg || "#121216",
+                        borderColor:
+                          settings.themeMode === "custom"
+                            ? settings.accentColor
+                            : customTheme?.border || "rgba(255, 255, 255, 0.12)",
+                        boxShadow:
+                          settings.themeMode === "custom"
+                            ? `0 0 0 2px ${settings.accentColor}40, 0 8px 20px -6px ${settings.accentColor}25`
+                            : undefined,
+                      }}
+                      className={`p-3.5 rounded-2xl border text-left transition-all relative flex flex-col justify-between min-h-[6.5rem] group ${
+                        settings.themeMode === "custom" ? "" : "hover:brightness-110"
+                      }`}
+                    >
+                      <div
+                        className="cursor-pointer"
+                        onClick={() => {
+                          if (customTheme) {
+                            applyCustomTheme(customTheme);
+                          } else {
+                            setCustomThemeToEdit(null);
+                            setIsCustomThemeModalOpen(true);
+                          }
+                        }}
+                      >
+                        <div className="flex items-center justify-between w-full">
+                          <span
+                            className="text-xs font-bold tracking-tight transition-colors"
+                            style={{ color: customTheme?.textPrimary || "#FFFFFF" }}
+                          >
+                            {customTheme ? customTheme.name : "Custom Theme"}
+                          </span>
+                          {settings.themeMode === "custom" && (
+                            <span
+                              className="w-5 h-5 rounded-full flex items-center justify-center shadow-sm"
+                              style={{
+                                backgroundColor: settings.accentColor,
+                                color: "#FFFFFF",
+                              }}
+                            >
+                              <Check className="w-3 h-3 stroke-[2.5]" />
+                            </span>
+                          )}
+                        </div>
+
+                        <p
+                          className="text-[11px] leading-snug mt-1 mb-2 font-normal"
+                          style={{ color: customTheme?.textMuted || "#71717A" }}
+                        >
+                          {customTheme
+                            ? "Active custom theme"
+                            : "Design your custom palette"}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-0.5">
+                        {customTheme ? (
+                          <div className="flex items-center space-x-1.5">
+                            <div
+                              className="w-3 h-3 rounded-full border border-black/10 shadow-inner"
+                              style={{ backgroundColor: customTheme.bg }}
+                              title="Background"
+                            />
+                            <div
+                              className="w-3 h-3 rounded-full border border-black/10 shadow-inner"
+                              style={{ backgroundColor: customTheme.surface }}
+                              title="Surface"
+                            />
+                            <div
+                              className="w-3 h-3 rounded-full border border-black/10 shadow-inner"
+                              style={{ backgroundColor: customTheme.textPrimary }}
+                              title="Text Primary"
+                            />
+                            <div
+                              className="w-3 h-3 rounded-full shadow-sm"
+                              style={{ backgroundColor: customTheme.accentColor }}
+                              title="Accent"
+                            />
+                          </div>
+                        ) : (
+                          <span className="text-[10px] text-[#71717A]">
+                            No theme configured
+                          </span>
+                        )}
+
+                        <button
+                          onClick={() => {
+                            setCustomThemeToEdit(customTheme || null);
+                            setIsCustomThemeModalOpen(true);
+                          }}
+                          className="text-[11px] font-semibold text-[#A1A1AA] hover:text-white underline underline-offset-2 ml-auto"
+                        >
+                          {customTheme ? "Edit" : "Create"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
+
+                {/* Saved Custom Themes Drawer / List (if any) */}
+                {savedCustomThemes && savedCustomThemes.length > 0 && (
+                  <div className="mt-3 p-4 rounded-xl bg-[#16161A]/60 border border-white/[0.06] space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-semibold text-[#A1A1AA] uppercase tracking-wider">
+                        Saved Custom Themes ({savedCustomThemes.length})
+                      </span>
+                      <button
+                        onClick={() => {
+                          setCustomThemeToEdit(null);
+                          setIsCustomThemeModalOpen(true);
+                        }}
+                        className="text-[11px] font-semibold text-[#A1A1AA] hover:text-white flex items-center space-x-1"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>New Custom Theme</span>
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {savedCustomThemes.map((st) => {
+                        const isCurrent =
+                          settings.themeMode === "custom" &&
+                          settings.customTheme?.id === st.id;
+                        return (
+                          <div
+                            key={st.id}
+                            className={`p-2.5 rounded-lg border flex items-center justify-between transition-all ${
+                              isCurrent
+                                ? "bg-white/[0.08] border-white/20"
+                                : "bg-black/20 border-white/[0.04] hover:border-white/10"
+                            }`}
+                          >
+                            <div
+                              className="flex items-center space-x-2.5 cursor-pointer flex-1 min-w-0"
+                              onClick={() => applyCustomTheme(st)}
+                            >
+                              <div className="flex items-center -space-x-1">
+                                <div
+                                  className="w-3.5 h-3.5 rounded-full border border-black/20"
+                                  style={{ backgroundColor: st.bg }}
+                                />
+                                <div
+                                  className="w-3.5 h-3.5 rounded-full border border-black/20"
+                                  style={{ backgroundColor: st.surface }}
+                                />
+                                <div
+                                  className="w-3.5 h-3.5 rounded-full border border-black/20"
+                                  style={{ backgroundColor: st.accentColor }}
+                                />
+                              </div>
+                              <span className="text-xs font-semibold text-white truncate">
+                                {st.name}
+                              </span>
+                              {isCurrent && (
+                                <span className="text-[10px] font-bold text-[#10B981]">
+                                  (Active)
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex items-center space-x-1.5 ml-2">
+                              <button
+                                onClick={() => {
+                                  setCustomThemeToEdit(st);
+                                  setIsCustomThemeModalOpen(true);
+                                }}
+                                className="px-2 py-0.5 text-[10px] font-medium text-[#A1A1AA] hover:text-white bg-white/[0.04] hover:bg-white/[0.08] rounded transition-colors"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => deleteCustomTheme(st.id)}
+                                className="p-1 text-[#71717A] hover:text-[#FF453A] rounded transition-colors"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Accent Color Picker */}
@@ -1051,6 +1248,23 @@ export const SettingsView: React.FC = () => {
                   />
                 </div>
 
+                {/* Interface Gradients */}
+                <div className="p-5 flex items-center justify-between">
+                  <div className="space-y-0.5 pr-4">
+                    <div className="text-xs font-bold text-white flex items-center space-x-2">
+                      <Sparkles className="w-3.5 h-3.5 text-accent" />
+                      <span>Interface Gradients</span>
+                    </div>
+                    <p className="text-[11px] text-[#71717A]">
+                      Enable subtle surface lighting and hover washes. When off, all surfaces stay solid.
+                    </p>
+                  </div>
+                  <ToggleSwitch
+                    checked={settings.enableGradients}
+                    onChange={(val) => setSetting("enableGradients", val)}
+                  />
+                </div>
+
                 {/* Simplify Low Resource Mode */}
                 <div className="p-5 flex items-center justify-between">
                   <div className="space-y-0.5 pr-4">
@@ -1158,6 +1372,125 @@ export const SettingsView: React.FC = () => {
                 </div>
               </div>
 
+              {/* Protected Artists Management Card */}
+              <div className="p-5 bg-[#16161A]/80 border border-white/[0.06] rounded-2xl space-y-4 shadow-xl">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center space-x-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center flex-shrink-0 text-[#FA586A]">
+                      <Shield className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <h3 className="text-xs font-bold text-white">Protected Artist Names</h3>
+                        <span className="px-2 py-0.5 rounded-full bg-white/[0.06] border border-white/[0.08] text-[10px] font-semibold text-[#A1A1AA]">
+                          {filteredProtectedArtists.length}{" "}
+                          {filteredProtectedArtists.length === protectedArtists.length
+                            ? "artists"
+                            : `of ${protectedArtists.length}`}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-[#71717A] mt-0.5">
+                        Artist names containing commas, ampersands, or slashes that should never be split into separate artists.
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      resetProtectedArtists();
+                      setProtectedArtistSearch("");
+                    }}
+                    className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] active:scale-95 text-xs text-[#A1A1AA] hover:text-white border border-white/[0.08] transition flex-shrink-0 self-start sm:self-auto"
+                    title="Restore default list of protected artists"
+                  >
+                    <RotateCcw className="w-3 h-3 text-[#71717A]" />
+                    <span>Reset Defaults</span>
+                  </button>
+                </div>
+
+                {/* Add New Protected Artist Input */}
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (newProtectedArtistInput.trim()) {
+                      addProtectedArtist(newProtectedArtistInput.trim());
+                      setNewProtectedArtistInput("");
+                    }
+                  }}
+                  className="flex items-center space-x-2"
+                >
+                  <input
+                    type="text"
+                    value={newProtectedArtistInput}
+                    onChange={(e) => setNewProtectedArtistInput(e.target.value)}
+                    placeholder="Add protected artist (e.g. Tyler, The Creator or Earth, Wind & Fire)..."
+                    className="flex-1 bg-[#121216] border border-white/[0.08] focus:border-[#FA586A]/60 rounded-xl px-3.5 py-2 text-xs text-white placeholder-[#71717A] focus:outline-none focus:ring-1 focus:ring-[#FA586A]/30 transition"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!newProtectedArtistInput.trim()}
+                    className="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-[#FA586A] hover:bg-[#FA586A]/90 active:scale-95 text-white rounded-xl text-xs font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed shadow-md shadow-[#FA586A]/20"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Artist</span>
+                  </button>
+                </form>
+
+                {/* Filter Search Input (shown when list > 6) */}
+                {protectedArtists.length > 6 && (
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 text-[#71717A] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={protectedArtistSearch}
+                      onChange={(e) => setProtectedArtistSearch(e.target.value)}
+                      placeholder="Search protected artists list..."
+                      className="w-full bg-[#121216]/60 border border-white/[0.06] focus:border-white/[0.15] rounded-xl pl-8 pr-8 py-1.5 text-xs text-white placeholder-[#71717A] focus:outline-none transition"
+                    />
+                    {protectedArtistSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setProtectedArtistSearch("")}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#71717A] hover:text-white transition"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Protected Artists Chips Container */}
+                <div className="p-3 bg-[#121216] border border-white/[0.06] rounded-xl max-h-56 overflow-y-auto custom-scrollbar">
+                  {filteredProtectedArtists.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {filteredProtectedArtists.map((artist) => (
+                        <span
+                          key={artist}
+                          className="inline-flex items-center space-x-1.5 px-2.5 py-1 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] rounded-lg text-xs text-white/90 group transition"
+                        >
+                          <span className="select-text">{artist}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeProtectedArtist(artist)}
+                            className="text-[#71717A] hover:text-red-400 p-0.5 rounded transition"
+                            title={`Remove "${artist}" from protected list`}
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="py-6 text-center text-xs text-[#71717A]">
+                      {protectedArtistSearch
+                        ? `No protected artists matching "${protectedArtistSearch}"`
+                        : "No protected artists configured. Click 'Reset Defaults' to restore."}
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {/* Maintenance Actions Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {/* Action 1: Rebuild */}
@@ -1194,7 +1527,7 @@ export const SettingsView: React.FC = () => {
                 <div className="p-4 bg-[#16161A]/80 border border-white/[0.06] rounded-2xl flex flex-col justify-between space-y-3 shadow-md">
                   <div>
                     <h3 className="text-xs font-bold text-white flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-white" />
+                      <Database className="w-3.5 h-3.5 text-white" />
                       <span>Optimize SQLite</span>
                     </h3>
                     <p className="text-[11px] text-[#71717A] mt-1 leading-relaxed">
@@ -1213,7 +1546,7 @@ export const SettingsView: React.FC = () => {
                       </>
                     ) : (
                       <>
-                        <Sparkles className="w-3.5 h-3.5 text-[#FA586A]" />
+                        <RefreshCw className="w-3.5 h-3.5 text-[#FA586A]" />
                         <span>Vacuum Database</span>
                       </>
                     )}
@@ -1433,14 +1766,32 @@ export const SettingsView: React.FC = () => {
                     </div>
                   </div>
 
+                  {/* Discord Application ID input */}
+                  <div className="p-5 space-y-2">
+                    <label className="block text-xs font-semibold text-[#A1A1AA]">
+                      Discord Application ID <span className="text-[10px] text-[#71717A] font-normal">(Optional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={settings.discordAppId || ""}
+                      onChange={(e) => setSetting("discordAppId", e.target.value.trim())}
+                      placeholder="1205619376275980288 (Default: Music)"
+                      className="w-full bg-[#1C1C22] border border-white/[0.08] rounded-xl px-3 py-2 text-xs text-white placeholder-[#52525B] focus:outline-none focus:border-[#5865F2]/60 focus:ring-1 focus:ring-[#5865F2]/40 transition font-mono"
+                    />
+                    <p className="text-[11px] text-[#71717A] leading-relaxed">
+                      Leave empty to use the built-in Music application ID (displays as <span className="text-white font-medium">"Listening to Music"</span>).
+                      Or enter your own custom Application ID from <a href="https://discord.com/developers/applications" target="_blank" rel="noreferrer" className="text-[#5865F2] hover:underline">discord.com/developers/applications</a> to display as <span className="text-white font-medium">"Listening to Wavery"</span>.
+                    </p>
+                  </div>
+
                   {/* Setup info */}
                   <div className="p-5 space-y-3">
-                    <div className="text-xs font-semibold text-[#A1A1AA]">Requirements</div>
+                    <div className="text-xs font-semibold text-[#A1A1AA]">Requirements & Status</div>
                     <div className="space-y-2">
                       {[
-                        { label: "Discord desktop app", met: discordStatus?.discord_running ?? false },
-                        { label: "Wavery server running (always active)", met: discordStatus !== null },
-                        { label: "IPC bridge connected", met: discordStatus?.connected ?? false },
+                        { label: "Discord desktop app running", met: discordStatus?.discord_running ?? false },
+                        { label: playerAdapter.isTauri() ? "Desktop IPC bridge available" : "Wavery server running", met: discordStatus !== null },
+                        { label: "Discord Rich Presence connected", met: discordStatus?.connected ?? false },
                       ].map((req) => (
                         <div key={req.label} className="flex items-center space-x-2.5">
                           <div className={`w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 ${
@@ -1462,9 +1813,9 @@ export const SettingsView: React.FC = () => {
                   <div className="px-5 py-3 bg-[#5865F2]/5 border-t border-[#5865F2]/10">
                     <p className="text-[11px] text-[#A1A1AA] leading-relaxed">
                       <span className="text-[#5865F2] font-semibold">How it works:</span>{" "}
-                      Wavery's local server maintains an IPC connection to Discord's desktop app.
-                      Works in any browser (Chrome, Firefox, Safari, Edge) on Windows, macOS, and Linux
-                      without extensions. No data is sent to Discord's servers — all communication is local.
+                      Wavery connects directly to Discord's desktop application via local IPC (Unix socket on Linux/macOS, named pipe on Windows).
+                      Works natively in the desktop app and in any browser (Chrome, Firefox, Safari, Edge) without browser extensions.
+                      All communication is completely local to your machine.
                     </p>
                   </div>
                 </div>
@@ -1482,14 +1833,14 @@ export const SettingsView: React.FC = () => {
                 </p>
               </div>
 
-              <div className="bg-[#16161A]/80 border border-white/[0.06] rounded-2xl p-6 space-y-5 shadow-xl">
+              <div className="bg-surface/80 border border-white/[0.06] rounded-2xl p-6 space-y-5 shadow-xl">
                 <div className="flex items-center space-x-4">
-                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#FA586A] to-[#E0284F] flex items-center justify-center font-black text-2xl text-white shadow-xl shadow-[#FA586A]/20">
+                  <div className="w-14 h-14 rounded-2xl bg-accent flex items-center justify-center font-black text-2xl text-white shadow-xl border border-white/10">
                     W
                   </div>
                   <div>
                     <h3 className="text-lg font-black text-white tracking-tight">Wavery</h3>
-                    <p className="text-xs text-[#FA586A] font-semibold">Version 0.2.0 • Beta</p>
+                    <p className="text-xs text-accent font-semibold">Version 0.2.0 • Beta</p>
                     <p className="text-[11px] text-[#71717A] mt-0.5">
                       Local-first music player built with Rust, Tauri v2, and React. No accounts, no telemetry, no internet required.
                     </p>
@@ -1670,6 +2021,16 @@ export const SettingsView: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Custom Theme Maker Studio Modal */}
+      <CustomThemeModal
+        isOpen={isCustomThemeModalOpen}
+        onClose={() => {
+          setIsCustomThemeModalOpen(false);
+          setCustomThemeToEdit(null);
+        }}
+        initialTheme={customThemeToEdit}
+      />
     </div>
   );
 };
@@ -1677,22 +2038,31 @@ export const SettingsView: React.FC = () => {
 interface ToggleSwitchProps {
   checked: boolean;
   onChange: (checked: boolean) => void;
+  disabled?: boolean;
+  label?: string;
 }
 
-const ToggleSwitch: React.FC<ToggleSwitchProps> = ({ checked, onChange }) => {
+const ToggleSwitch: React.FC<ToggleSwitchProps> = ({ checked, onChange, disabled, label }) => {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
-      onClick={() => onChange(!checked)}
-      className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#FA586A]/30 ${
-        checked ? "bg-[#FA586A]" : "bg-white/[0.12]"
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => !disabled && onChange(!checked)}
+      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer items-center rounded-full p-0.5 transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:opacity-40 disabled:cursor-not-allowed ${
+        checked
+          ? "bg-accent hover:opacity-95"
+          : "wavery-toggle-off"
       }`}
     >
-      <div
-        className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${
-          checked ? "translate-x-5" : "translate-x-0"
+      <span
+        aria-hidden="true"
+        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white transition duration-200 ease-in-out ${
+          checked
+            ? "translate-x-5 shadow-[0_1px_3px_rgba(0,0,0,0.30)]"
+            : "translate-x-0 wavery-toggle-knob-off"
         }`}
       />
     </button>

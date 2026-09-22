@@ -15,7 +15,7 @@ import {
   Users,
   ListMusic,
   Clock,
-  Sparkles,
+  Heart,
   Radio,
   Guitar,
   Flame,
@@ -30,8 +30,8 @@ interface SearchViewProps {
   albums: AlbumInfo[];
   artists: ArtistInfo[];
   playlists: Playlist[];
-  onSelectAlbum: (albumTitle: string, artistName: string) => void;
   onSelectArtist: (artistName: string) => void;
+  onSelectAlbum: (albumTitle: string, artistName: string) => void;
   onSelectPlaylist: (playlistId: string) => void;
   getArtworkUrl: (trackId: string) => string;
 }
@@ -39,16 +39,56 @@ interface SearchViewProps {
 type SearchFilterTab = "all" | "songs" | "albums" | "artists" | "playlists";
 
 const GRADIENT_PALETTES = [
-  { gradient: "from-purple-600 to-indigo-950", icon: Guitar },
-  { gradient: "from-rose-600 to-red-950", icon: Flame },
-  { gradient: "from-cyan-500 to-blue-950", icon: Zap },
-  { gradient: "from-pink-500 to-rose-950", icon: Sparkles },
-  { gradient: "from-amber-500 to-orange-950", icon: Radio },
-  { gradient: "from-sky-500 to-indigo-950", icon: Headphones },
-  { gradient: "from-teal-600 to-emerald-950", icon: Compass },
-  { gradient: "from-blue-600 to-violet-950", icon: Music },
-  { gradient: "from-emerald-600 to-teal-950", icon: Disc },
-  { gradient: "from-fuchsia-600 to-purple-950", icon: Users },
+  {
+    cardGradient: "bg-gradient-to-br from-emerald-950/40 via-surface to-surface hover:from-emerald-900/50 border-emerald-500/20 hover:border-emerald-500/40",
+    iconColor: "text-emerald-400",
+    icon: Guitar,
+  },
+  {
+    cardGradient: "bg-gradient-to-br from-indigo-950/40 via-surface to-surface hover:from-indigo-900/50 border-indigo-500/20 hover:border-indigo-500/40",
+    iconColor: "text-indigo-400",
+    icon: Flame,
+  },
+  {
+    cardGradient: "bg-gradient-to-br from-rose-950/40 via-surface to-surface hover:from-rose-900/50 border-rose-500/20 hover:border-rose-500/40",
+    iconColor: "text-rose-400",
+    icon: Zap,
+  },
+  {
+    cardGradient: "bg-gradient-to-br from-pink-950/40 via-surface to-surface hover:from-pink-900/50 border-pink-500/20 hover:border-pink-500/40",
+    iconColor: "text-pink-400",
+    icon: Heart,
+  },
+  {
+    cardGradient: "bg-gradient-to-br from-amber-950/40 via-surface to-surface hover:from-amber-900/50 border-amber-500/20 hover:border-amber-500/40",
+    iconColor: "text-amber-400",
+    icon: Radio,
+  },
+  {
+    cardGradient: "bg-gradient-to-br from-sky-950/40 via-surface to-surface hover:from-sky-900/50 border-sky-500/20 hover:border-sky-500/40",
+    iconColor: "text-sky-400",
+    icon: Headphones,
+  },
+  {
+    cardGradient: "bg-gradient-to-br from-teal-950/40 via-surface to-surface hover:from-teal-900/50 border-teal-500/20 hover:border-teal-500/40",
+    iconColor: "text-teal-400",
+    icon: Compass,
+  },
+  {
+    cardGradient: "bg-gradient-to-br from-blue-950/40 via-surface to-surface hover:from-blue-900/50 border-blue-500/20 hover:border-blue-500/40",
+    iconColor: "text-blue-400",
+    icon: Music,
+  },
+  {
+    cardGradient: "bg-gradient-to-br from-violet-950/40 via-surface to-surface hover:from-violet-900/50 border-violet-500/20 hover:border-violet-500/40",
+    iconColor: "text-violet-400",
+    icon: Disc,
+  },
+  {
+    cardGradient: "bg-gradient-to-br from-fuchsia-950/40 via-surface to-surface hover:from-fuchsia-900/50 border-fuchsia-500/20 hover:border-fuchsia-500/40",
+    iconColor: "text-fuchsia-400",
+    icon: Users,
+  },
 ];
 
 export const SearchView: React.FC<SearchViewProps> = ({
@@ -104,7 +144,8 @@ export const SearchView: React.FC<SearchViewProps> = ({
           name,
           query: name,
           subtitle: `${count} ${count === 1 ? "track" : "tracks"}`,
-          gradient: palette.gradient,
+          cardGradient: palette.cardGradient,
+          iconColor: palette.iconColor,
           icon: palette.icon,
         };
       });
@@ -129,7 +170,8 @@ export const SearchView: React.FC<SearchViewProps> = ({
           name: `${decade} Music`,
           query: decade.replace("s", ""),
           subtitle: `${count} tracks`,
-          gradient: palette.gradient,
+          cardGradient: palette.cardGradient,
+          iconColor: palette.iconColor,
           icon: palette.icon,
         };
       });
@@ -143,7 +185,8 @@ export const SearchView: React.FC<SearchViewProps> = ({
         name: artist.name,
         query: artist.name,
         subtitle: `${artist.trackCount} tracks`,
-        gradient: palette.gradient,
+        cardGradient: palette.cardGradient,
+        iconColor: palette.iconColor,
         icon: palette.icon,
       };
     });
@@ -437,35 +480,28 @@ export const SearchView: React.FC<SearchViewProps> = ({
 
   return (
     <div className="flex-1 overflow-y-auto px-4 sm:px-6 md:px-8 py-4 sm:py-6 space-y-7 select-none pb-28 sm:pb-24">
-      {/* 1. Header & Integrated Apple Music Style Search Bar */}
+      {/* 1. Header & Active Search Filters */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">Search</h1>
-        </div>
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+              {trimmedQuery ? `Results for “${trimmedQuery}”` : "Explore"}
+            </h1>
+            <p className="text-xs sm:text-sm text-textMuted mt-1">
+              {trimmedQuery
+                ? `${totalResultsCount} ${totalResultsCount === 1 ? "result" : "results"} found across your library`
+                : "Search songs, artists, albums, or explore curated categories below."}
+            </p>
+          </div>
 
-        {/* Large Prominent Search Input Box */}
-        <div className="relative max-w-2xl group">
-          <Search className="w-5 h-5 absolute left-4 top-3.5 text-[#71717A] group-focus-within:text-[#FA586A] transition-colors" />
-          <input
-            type="text"
-            value={globalSearch}
-            onChange={(e) => setGlobalSearch(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && globalSearch.trim()) {
-                addRecentSearch(globalSearch.trim());
-              }
-            }}
-            placeholder="Artists, Songs, Lyrics, and more"
-            autoFocus
-            className="w-full bg-[#16161A] border border-white/[0.08] hover:border-white/[0.16] focus:border-[#FA586A]/70 rounded-2xl pl-12 pr-11 py-3 text-sm text-white placeholder-[#71717A] focus:outline-none focus:ring-4 focus:ring-[#FA586A]/15 transition-all shadow-lg"
-          />
-          {globalSearch && (
+          {trimmedQuery && (
             <button
               onClick={() => setGlobalSearch("")}
-              className="absolute right-4 top-3.5 text-[#71717A] hover:text-white transition p-0.5 rounded-full hover:bg-white/[0.08]"
-              title="Clear"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-textMuted hover:text-white bg-white/[0.06] hover:bg-white/[0.12] active:scale-95 rounded-lg border border-white/[0.08] transition-all"
+              title="Clear search query"
             >
-              <X className="w-4 h-4" />
+              <X className="w-3.5 h-3.5" />
+              <span>Clear search</span>
             </button>
           )}
         </div>
@@ -475,50 +511,50 @@ export const SearchView: React.FC<SearchViewProps> = ({
           <div className="flex items-center gap-2 overflow-x-auto pt-1 pb-1">
             <button
               onClick={() => setActiveTab("all")}
-              className={`px-3.5 py-1 rounded-full text-xs font-semibold transition ${
+              className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition ${
                 activeTab === "all"
                   ? "bg-white text-black font-bold shadow-sm"
-                  : "bg-white/[0.06] text-[#A1A1AA] hover:text-white hover:bg-white/[0.10]"
+                  : "bg-white/[0.06] text-textSecondary hover:text-white hover:bg-white/[0.10]"
               }`}
             >
               All Results
             </button>
             <button
               onClick={() => setActiveTab("songs")}
-              className={`px-3.5 py-1 rounded-full text-xs font-semibold transition ${
+              className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition ${
                 activeTab === "songs"
                   ? "bg-white text-black font-bold shadow-sm"
-                  : "bg-white/[0.06] text-[#A1A1AA] hover:text-white hover:bg-white/[0.10]"
+                  : "bg-white/[0.06] text-textSecondary hover:text-white hover:bg-white/[0.10]"
               }`}
             >
               Songs ({matchingTracks.length})
             </button>
             <button
               onClick={() => setActiveTab("albums")}
-              className={`px-3.5 py-1 rounded-full text-xs font-semibold transition ${
+              className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition ${
                 activeTab === "albums"
                   ? "bg-white text-black font-bold shadow-sm"
-                  : "bg-white/[0.06] text-[#A1A1AA] hover:text-white hover:bg-white/[0.10]"
+                  : "bg-white/[0.06] text-textSecondary hover:text-white hover:bg-white/[0.10]"
               }`}
             >
               Albums ({matchingAlbums.length})
             </button>
             <button
               onClick={() => setActiveTab("artists")}
-              className={`px-3.5 py-1 rounded-full text-xs font-semibold transition ${
+              className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition ${
                 activeTab === "artists"
                   ? "bg-white text-black font-bold shadow-sm"
-                  : "bg-white/[0.06] text-[#A1A1AA] hover:text-white hover:bg-white/[0.10]"
+                  : "bg-white/[0.06] text-textSecondary hover:text-white hover:bg-white/[0.10]"
               }`}
             >
               Artists ({matchingArtists.length})
             </button>
             <button
               onClick={() => setActiveTab("playlists")}
-              className={`px-3.5 py-1 rounded-full text-xs font-semibold transition ${
+              className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition ${
                 activeTab === "playlists"
                   ? "bg-white text-black font-bold shadow-sm"
-                  : "bg-white/[0.06] text-[#A1A1AA] hover:text-white hover:bg-white/[0.10]"
+                  : "bg-white/[0.06] text-textSecondary hover:text-white hover:bg-white/[0.10]"
               }`}
             >
               Playlists ({matchingPlaylists.length})
@@ -534,13 +570,13 @@ export const SearchView: React.FC<SearchViewProps> = ({
           {recentSearches.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2 text-xs font-bold text-[#A1A1AA] uppercase tracking-wider">
-                  <Clock className="w-3.5 h-3.5 text-[#FA586A]" />
+                <div className="flex items-center space-x-2 text-xs font-bold text-textSecondary uppercase tracking-wider">
+                  <Clock className="w-3.5 h-3.5 text-accent" />
                   <span>Recent Searches</span>
                 </div>
                 <button
                   onClick={clearRecentSearches}
-                  className="text-xs text-[#71717A] hover:text-white transition font-medium"
+                  className="text-xs text-textMuted hover:text-white transition font-medium"
                 >
                   Clear History
                 </button>
@@ -551,16 +587,16 @@ export const SearchView: React.FC<SearchViewProps> = ({
                   <div
                     key={search}
                     onClick={() => setGlobalSearch(search)}
-                    className="group inline-flex items-center space-x-2 px-3 py-1.5 bg-[#16161A] hover:bg-white/[0.10] border border-white/[0.08] hover:border-white/[0.18] rounded-full text-xs font-medium text-[#E4E4E7] cursor-pointer transition shadow-sm"
+                    className="group inline-flex items-center space-x-2 px-3 py-1.5 bg-surface hover:bg-surfaceActive border border-white/[0.08] hover:border-white/[0.18] rounded-full text-xs font-medium text-textPrimary cursor-pointer transition shadow-sm"
                   >
-                    <Search className="w-3 h-3 text-[#71717A] group-hover:text-[#FA586A] transition-colors" />
+                    <Search className="w-3 h-3 text-textMuted group-hover:text-accent transition-colors" />
                     <span>{search}</span>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         removeRecentSearch(search);
                       }}
-                      className="text-[#71717A] hover:text-white p-0.5 rounded-full transition ml-1"
+                      className="text-textMuted hover:text-white p-0.5 rounded-full transition ml-1"
                       title="Remove"
                     >
                       <X className="w-3 h-3" />
@@ -574,7 +610,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
           {/* Browse Categories (Apple Music Vibrant Category Grid) */}
           <div className="space-y-3.5">
             <div className="flex items-center space-x-2">
-              <Sparkles className="w-4 h-4 text-[#FA586A]" />
+              <Compass className="w-4 h-4 text-accent" />
               <h2 className="text-lg font-bold text-white tracking-tight">
                 Browse Categories
               </h2>
@@ -590,16 +626,16 @@ export const SearchView: React.FC<SearchViewProps> = ({
                       setGlobalSearch(cat.query);
                       addRecentSearch(cat.query);
                     }}
-                    className={`group relative h-28 sm:h-32 rounded-2xl overflow-hidden cursor-pointer p-4 flex flex-col justify-between border border-white/[0.08] hover:border-white/[0.22] transition-all duration-300 hover:shadow-xl hover:scale-[1.02] bg-gradient-to-br ${cat.gradient}`}
+                    className={`group relative h-28 sm:h-32 rounded-2xl overflow-hidden cursor-pointer p-4 flex flex-col justify-between border transition-all duration-300 hover:shadow-xl hover:scale-[1.02] shadow-sm ${cat.cardGradient}`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-sm sm:text-base font-extrabold text-white tracking-tight group-hover:text-white leading-tight">
+                      <span className="text-sm sm:text-base font-extrabold text-textPrimary tracking-tight leading-tight">
                         {cat.name}
                       </span>
-                      <IconComponent className="w-5 h-5 text-white/40 group-hover:text-white/80 transition-colors flex-shrink-0" />
+                      <IconComponent className={`w-5 h-5 ${cat.iconColor} group-hover:scale-110 transition-transform flex-shrink-0`} />
                     </div>
 
-                    <div className="flex items-center justify-between text-[11px] font-semibold text-white/70 group-hover:text-white transition-colors">
+                    <div className="flex items-center justify-between text-[11px] font-semibold text-textSecondary group-hover:text-textPrimary transition-colors">
                       <span>{cat.subtitle}</span>
                       <span className="group-hover:translate-x-1 transition-transform">→</span>
                     </div>
@@ -626,7 +662,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                       onClick={() => onSelectAlbum(album.title, album.artist)}
                       className="group cursor-pointer flex flex-col"
                     >
-                      <div className="relative aspect-square rounded-xl overflow-hidden bg-[#16161A] border border-white/[0.08] group-hover:border-white/[0.2] transition shadow-md">
+                      <div className="relative aspect-square rounded-xl overflow-hidden bg-surface border border-white/[0.08] group-hover:border-white/[0.2] transition shadow-md">
                         {artworkUrl ? (
                           <img
                             src={artworkUrl}
@@ -637,23 +673,23 @@ export const SearchView: React.FC<SearchViewProps> = ({
                             }}
                           />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center text-[#71717A]">
+                          <div className="w-full h-full flex items-center justify-center text-textMuted">
                             <Disc className="w-10 h-10" />
                           </div>
                         )}
                         <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
                           <button
                             onClick={(e) => handlePlayAlbum(album, e)}
-                            className="w-10 h-10 rounded-full bg-[#FA586A] text-white flex items-center justify-center shadow-lg hover:scale-110 transition"
+                            className="w-10 h-10 rounded-full bg-accent text-white flex items-center justify-center shadow-lg hover:scale-110 transition"
                           >
                             <Play className="w-4 h-4 fill-white translate-x-0.5" />
                           </button>
                         </div>
                       </div>
-                      <p className="mt-2 text-xs font-semibold text-white truncate group-hover:text-[#FA586A] transition">
+                      <p className="mt-2 text-xs font-semibold text-white truncate group-hover:text-accent transition">
                         {album.title}
                       </p>
-                      <p className="text-[11px] text-[#71717A] truncate">
+                      <p className="text-[11px] text-textMuted truncate">
                         {album.artist}
                       </p>
                     </div>
@@ -671,13 +707,13 @@ export const SearchView: React.FC<SearchViewProps> = ({
           {totalResultsCount === 0 ? (
             /* Empty Search State */
             <div className="flex flex-col items-center justify-center py-16 text-center select-none">
-              <div className="w-16 h-16 rounded-2xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-[#71717A] mb-4">
+              <div className="w-16 h-16 rounded-2xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-textMuted mb-4">
                 <Search className="w-8 h-8" />
               </div>
               <h3 className="text-lg font-bold text-white mb-1">
                 No Results Found
               </h3>
-              <p className="text-xs text-[#A1A1AA] max-w-sm">
+              <p className="text-xs text-textSecondary max-w-sm">
                 We couldn't find any songs, albums, or artists matching "
                 <span className="text-white font-medium">{globalSearch}</span>". Check your spelling or try another query.
               </p>
@@ -706,12 +742,12 @@ export const SearchView: React.FC<SearchViewProps> = ({
                               handlePlayTopResult();
                             }
                           }}
-                          className="group relative h-[210px] rounded-2xl bg-[#16161A] border border-white/[0.08] hover:border-white/[0.18] p-5 flex flex-col justify-between cursor-pointer transition-all duration-200 shadow-md hover:shadow-xl"
+                          className="group relative h-[210px] rounded-2xl bg-surface border border-white/[0.08] hover:border-white/[0.18] p-5 flex flex-col justify-between cursor-pointer transition-all duration-200 shadow-md hover:shadow-xl"
                         >
                           <div className="flex items-start justify-between">
                             {/* Entity Artwork / Avatar */}
                             <div
-                              className={`w-20 h-20 overflow-hidden bg-[#24242C] border border-white/[0.08] shadow-md ${
+                              className={`w-20 h-20 overflow-hidden bg-surfaceActive border border-white/[0.08] shadow-md ${
                                 topResult.type === "artist"
                                   ? "rounded-full"
                                   : "rounded-xl"
@@ -727,7 +763,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                                   }}
                                 />
                               ) : (
-                                <div className="w-full h-full flex items-center justify-center text-[#71717A]">
+                                <div className="w-full h-full flex items-center justify-center text-textMuted">
                                   {topResult.type === "artist" ? (
                                     <Users className="w-8 h-8" />
                                   ) : (
@@ -743,7 +779,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                                 e.stopPropagation();
                                 handlePlayTopResult();
                               }}
-                              className="w-12 h-12 rounded-full bg-[#FA586A] text-white shadow-xl flex items-center justify-center hover:scale-110 active:scale-95 transition-transform"
+                              className="w-12 h-12 rounded-full bg-accent text-white shadow-xl flex items-center justify-center hover:scale-110 active:scale-95 transition-transform"
                               title="Play"
                             >
                               <Play className="w-5 h-5 fill-white translate-x-0.5" />
@@ -751,13 +787,13 @@ export const SearchView: React.FC<SearchViewProps> = ({
                           </div>
 
                           <div>
-                            <span className="text-[10px] font-black tracking-wider uppercase px-2 py-0.5 rounded-full bg-white/[0.08] text-[#FA586A] border border-white/[0.06]">
+                            <span className="text-[10px] font-black tracking-wider uppercase px-2 py-0.5 rounded-full bg-white/[0.08] text-accent border border-white/[0.06]">
                               {topResult.type.toUpperCase()}
                             </span>
-                            <h3 className="text-xl font-extrabold text-white mt-1.5 truncate group-hover:text-[#FA586A] transition-colors">
+                            <h3 className="text-xl font-extrabold text-white mt-1.5 truncate group-hover:text-accent transition-colors">
                               {topResult.title}
                             </h3>
-                            <p className="text-xs text-[#A1A1AA] truncate mt-0.5">
+                            <p className="text-xs text-textSecondary truncate mt-0.5">
                               {topResult.subtitle}
                             </p>
                           </div>
@@ -778,14 +814,14 @@ export const SearchView: React.FC<SearchViewProps> = ({
                         {matchingTracks.length > 4 && (
                           <button
                             onClick={() => setActiveTab("songs")}
-                            className="text-xs text-[#71717A] hover:text-white transition font-medium"
+                            className="text-xs text-textMuted hover:text-white transition font-medium"
                           >
                             See all ({matchingTracks.length})
                           </button>
                         )}
                       </div>
 
-                      <div className="space-y-1 bg-[#16161A]/60 border border-white/[0.06] rounded-2xl p-2">
+                      <div className="space-y-1 bg-surface/60 border border-white/[0.06] rounded-2xl p-2">
                         {matchingTracks.slice(0, 4).map((track, idx) => {
                           const isThisPlaying =
                             currentTrack?.id === track.id && isPlaying;
@@ -799,7 +835,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                               className="group flex items-center justify-between px-3 py-2 rounded-xl hover:bg-white/[0.06] cursor-pointer transition"
                             >
                               <div className="flex items-center space-x-3 min-w-0 pr-4">
-                                <div className="relative w-10 h-10 rounded-lg overflow-hidden bg-[#24242C] border border-white/[0.06] flex-shrink-0">
+                                <div className="relative w-10 h-10 rounded-lg overflow-hidden bg-surfaceActive border border-white/[0.06] flex-shrink-0">
                                   {artworkUrl ? (
                                     <img
                                       src={artworkUrl}
@@ -811,7 +847,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                                       }}
                                     />
                                   ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-[#71717A]">
+                                    <div className="w-full h-full flex items-center justify-center text-textMuted">
                                       <Music className="w-4 h-4" />
                                     </div>
                                   )}
@@ -825,19 +861,19 @@ export const SearchView: React.FC<SearchViewProps> = ({
                                   <p
                                     className={`text-xs font-semibold truncate ${
                                       isThisPlaying
-                                        ? "text-[#FA586A]"
-                                        : "text-white group-hover:text-[#FA586A]"
+                                        ? "text-accent"
+                                        : "text-white group-hover:text-accent"
                                     } transition-colors`}
                                   >
                                     {track.metadata.title || "Untitled Track"}
                                   </p>
-                                  <p className="text-[11px] text-[#A1A1AA] truncate">
+                                  <p className="text-[11px] text-textSecondary truncate">
                                     {track.metadata.artist || "Unknown Artist"}
                                   </p>
                                 </div>
                               </div>
 
-                              <span className="text-xs text-[#71717A] font-mono flex-shrink-0">
+                              <span className="text-xs text-textMuted font-mono flex-shrink-0">
                                 {formatDuration(track.metadata.duration.secs)}
                               </span>
                             </div>
@@ -857,7 +893,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                         {matchingAlbums.length > 5 && (
                           <button
                             onClick={() => setActiveTab("albums")}
-                            className="text-xs text-[#71717A] hover:text-white transition font-medium"
+                            className="text-xs text-textMuted hover:text-white transition font-medium"
                           >
                             See all ({matchingAlbums.length})
                           </button>
@@ -874,7 +910,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                               onClick={() => onSelectAlbum(album.title, album.artist)}
                               className="group cursor-pointer flex flex-col"
                             >
-                              <div className="relative aspect-square rounded-xl overflow-hidden bg-[#16161A] border border-white/[0.08] group-hover:border-white/[0.2] transition shadow-md">
+                              <div className="relative aspect-square rounded-xl overflow-hidden bg-surface border border-white/[0.08] group-hover:border-white/[0.2] transition shadow-md">
                                 {artworkUrl ? (
                                   <img
                                     src={artworkUrl}
@@ -885,23 +921,23 @@ export const SearchView: React.FC<SearchViewProps> = ({
                                     }}
                                   />
                                 ) : (
-                                  <div className="w-full h-full flex items-center justify-center text-[#71717A]">
+                                  <div className="w-full h-full flex items-center justify-center text-textMuted">
                                     <Disc className="w-10 h-10" />
                                   </div>
                                 )}
                                 <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
                                   <button
                                     onClick={(e) => handlePlayAlbum(album, e)}
-                                    className="w-10 h-10 rounded-full bg-[#FA586A] text-white flex items-center justify-center shadow-lg hover:scale-110 transition"
+                                    className="w-10 h-10 rounded-full bg-accent text-white flex items-center justify-center shadow-lg hover:scale-110 transition"
                                   >
                                     <Play className="w-4 h-4 fill-white translate-x-0.5" />
                                   </button>
                                 </div>
                               </div>
-                              <p className="mt-2 text-xs font-semibold text-white truncate group-hover:text-[#FA586A] transition">
+                              <p className="mt-2 text-xs font-semibold text-white truncate group-hover:text-accent transition">
                                 {album.title}
                               </p>
-                              <p className="text-[11px] text-[#71717A] truncate">
+                              <p className="text-[11px] text-textMuted truncate">
                                 {album.artist}
                               </p>
                             </div>
@@ -921,7 +957,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                         {matchingArtists.length > 6 && (
                           <button
                             onClick={() => setActiveTab("artists")}
-                            className="text-xs text-[#71717A] hover:text-white transition font-medium"
+                            className="text-xs text-textMuted hover:text-white transition font-medium"
                           >
                             See all ({matchingArtists.length})
                           </button>
@@ -938,7 +974,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                               onClick={() => onSelectArtist(artist.name)}
                               className="group flex flex-col items-center text-center cursor-pointer"
                             >
-                              <div className="relative w-24 h-24 rounded-full overflow-hidden bg-[#16161A] border border-white/[0.08] group-hover:border-[#FA586A]/50 transition shadow-md">
+                              <div className="relative w-24 h-24 rounded-full overflow-hidden bg-surface border border-white/[0.08] group-hover:border-accent/50 transition shadow-md">
                                 {artworkUrl ? (
                                   <img
                                     src={artworkUrl}
@@ -949,23 +985,23 @@ export const SearchView: React.FC<SearchViewProps> = ({
                                     }}
                                   />
                                 ) : (
-                                  <div className="w-full h-full flex items-center justify-center text-[#71717A]">
+                                  <div className="w-full h-full flex items-center justify-center text-textMuted">
                                     <Users className="w-8 h-8" />
                                   </div>
                                 )}
                                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
                                   <button
                                     onClick={(e) => handlePlayArtist(artist, e)}
-                                    className="w-8 h-8 rounded-full bg-[#FA586A] text-white flex items-center justify-center shadow-lg hover:scale-110 transition"
+                                    className="w-8 h-8 rounded-full bg-accent text-white flex items-center justify-center shadow-lg hover:scale-110 transition"
                                   >
                                     <Play className="w-3.5 h-3.5 fill-white translate-x-0.5" />
                                   </button>
                                 </div>
                               </div>
-                              <p className="mt-2 text-xs font-semibold text-white truncate max-w-full group-hover:text-[#FA586A] transition">
+                              <p className="mt-2 text-xs font-semibold text-white truncate max-w-full group-hover:text-accent transition">
                                 {artist.name}
                               </p>
-                              <p className="text-[10px] text-[#71717A]">
+                              <p className="text-[10px] text-textMuted">
                                 {artist.trackCount} {artist.trackCount === 1 ? "song" : "songs"}
                               </p>
                             </div>
@@ -986,15 +1022,15 @@ export const SearchView: React.FC<SearchViewProps> = ({
                           <div
                             key={pl.id}
                             onClick={() => onSelectPlaylist(pl.id)}
-                            className="group p-4 bg-[#16161A] hover:bg-[#1C1C22] border border-white/[0.08] hover:border-white/[0.18] rounded-2xl cursor-pointer transition shadow-sm"
+                            className="group p-4 bg-surface hover:bg-surfaceActive border border-white/[0.08] hover:border-white/[0.18] rounded-2xl cursor-pointer transition shadow-sm"
                           >
                             <div className="flex items-center justify-between mb-2">
-                              <ListMusic className="w-5 h-5 text-[#FA586A]" />
-                              <span className="text-[10px] text-[#71717A] font-mono">
+                              <ListMusic className="w-5 h-5 text-accent" />
+                              <span className="text-[10px] text-textMuted font-mono">
                                 {pl.track_ids.length} songs
                               </span>
                             </div>
-                            <h3 className="text-sm font-bold text-white truncate group-hover:text-[#FA586A] transition">
+                            <h3 className="text-sm font-bold text-white truncate group-hover:text-accent transition">
                               {pl.name}
                             </h3>
                           </div>
@@ -1008,7 +1044,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
               {/* "Songs" Tab View */}
               {activeTab === "songs" && (
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between border-b border-white/[0.06] pb-2 text-xs text-[#71717A] px-3 font-semibold uppercase">
+                  <div className="flex items-center justify-between border-b border-white/[0.06] pb-2 text-xs text-textMuted px-3 font-semibold uppercase">
                     <span>Title</span>
                     <span>Duration</span>
                   </div>
@@ -1025,7 +1061,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                           className="group flex items-center justify-between px-3 py-2 rounded-xl hover:bg-white/[0.06] cursor-pointer transition"
                         >
                           <div className="flex items-center space-x-3 min-w-0 pr-4">
-                            <div className="relative w-10 h-10 rounded-lg overflow-hidden bg-[#24242C] border border-white/[0.06] flex-shrink-0">
+                            <div className="relative w-10 h-10 rounded-lg overflow-hidden bg-surfaceActive border border-white/[0.06] flex-shrink-0">
                               {artworkUrl ? (
                                 <img
                                   src={artworkUrl}
@@ -1036,7 +1072,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                                   }}
                                 />
                               ) : (
-                                <div className="w-full h-full flex items-center justify-center text-[#71717A]">
+                                <div className="w-full h-full flex items-center justify-center text-textMuted">
                                   <Music className="w-4 h-4" />
                                 </div>
                               )}
@@ -1048,18 +1084,18 @@ export const SearchView: React.FC<SearchViewProps> = ({
                               <p
                                 className={`text-xs font-semibold truncate ${
                                   isThisPlaying
-                                    ? "text-[#FA586A]"
-                                    : "text-white group-hover:text-[#FA586A]"
+                                    ? "text-accent"
+                                    : "text-white group-hover:text-accent"
                                 } transition-colors`}
                               >
                                 {track.metadata.title || "Untitled Track"}
                               </p>
-                              <p className="text-[11px] text-[#A1A1AA] truncate">
+                              <p className="text-[11px] text-textSecondary truncate">
                                 {track.metadata.artist || "Unknown Artist"} • {track.metadata.album || "Unknown Album"}
                               </p>
                             </div>
                           </div>
-                          <span className="text-xs text-[#71717A] font-mono">
+                          <span className="text-xs text-textMuted font-mono">
                             {formatDuration(track.metadata.duration.secs)}
                           </span>
                         </div>
@@ -1082,7 +1118,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                         onClick={() => onSelectAlbum(album.title, album.artist)}
                         className="group cursor-pointer flex flex-col"
                       >
-                        <div className="relative aspect-square rounded-xl overflow-hidden bg-[#16161A] border border-white/[0.08] group-hover:border-white/[0.2] transition shadow-md">
+                        <div className="relative aspect-square rounded-xl overflow-hidden bg-surface border border-white/[0.08] group-hover:border-white/[0.2] transition shadow-md">
                           {artworkUrl ? (
                             <img
                               src={artworkUrl}
@@ -1093,23 +1129,23 @@ export const SearchView: React.FC<SearchViewProps> = ({
                               }}
                             />
                           ) : (
-                            <div className="w-full h-full flex items-center justify-center text-[#71717A]">
+                            <div className="w-full h-full flex items-center justify-center text-textMuted">
                               <Disc className="w-10 h-10" />
                             </div>
                           )}
                           <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
                             <button
                               onClick={(e) => handlePlayAlbum(album, e)}
-                              className="w-10 h-10 rounded-full bg-[#FA586A] text-white flex items-center justify-center shadow-lg hover:scale-110 transition"
+                              className="w-10 h-10 rounded-full bg-accent text-white flex items-center justify-center shadow-lg hover:scale-110 transition"
                             >
                               <Play className="w-4 h-4 fill-white translate-x-0.5" />
                             </button>
                           </div>
                         </div>
-                        <p className="mt-2 text-xs font-semibold text-white truncate group-hover:text-[#FA586A] transition">
+                        <p className="mt-2 text-xs font-semibold text-white truncate group-hover:text-accent transition">
                           {album.title}
                         </p>
-                        <p className="text-[11px] text-[#71717A] truncate">
+                        <p className="text-[11px] text-textMuted truncate">
                           {album.artist}
                         </p>
                       </div>
@@ -1131,7 +1167,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                         onClick={() => onSelectArtist(artist.name)}
                         className="group flex flex-col items-center text-center cursor-pointer"
                       >
-                        <div className="relative w-28 h-28 rounded-full overflow-hidden bg-[#16161A] border border-white/[0.08] group-hover:border-[#FA586A]/50 transition shadow-md">
+                        <div className="relative w-28 h-28 rounded-full overflow-hidden bg-surface border border-white/[0.08] group-hover:border-accent/50 transition shadow-md">
                           {artworkUrl ? (
                             <img
                               src={artworkUrl}
@@ -1142,23 +1178,23 @@ export const SearchView: React.FC<SearchViewProps> = ({
                               }}
                             />
                           ) : (
-                            <div className="w-full h-full flex items-center justify-center text-[#71717A]">
+                            <div className="w-full h-full flex items-center justify-center text-textMuted">
                               <Users className="w-8 h-8" />
                             </div>
                           )}
                           <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
                             <button
                               onClick={(e) => handlePlayArtist(artist, e)}
-                              className="w-8 h-8 rounded-full bg-[#FA586A] text-white flex items-center justify-center shadow-lg hover:scale-110 transition"
+                              className="w-8 h-8 rounded-full bg-accent text-white flex items-center justify-center shadow-lg hover:scale-110 transition"
                             >
                               <Play className="w-3.5 h-3.5 fill-white translate-x-0.5" />
                             </button>
                           </div>
                         </div>
-                        <p className="mt-2.5 text-xs font-semibold text-white truncate max-w-full group-hover:text-[#FA586A] transition">
+                        <p className="mt-2.5 text-xs font-semibold text-white truncate max-w-full group-hover:text-accent transition">
                           {artist.name}
                         </p>
-                        <p className="text-[10px] text-[#71717A]">
+                        <p className="text-[10px] text-textMuted">
                           {artist.trackCount} {artist.trackCount === 1 ? "song" : "songs"}
                         </p>
                       </div>
@@ -1174,15 +1210,15 @@ export const SearchView: React.FC<SearchViewProps> = ({
                     <div
                       key={pl.id}
                       onClick={() => onSelectPlaylist(pl.id)}
-                      className="group p-4 bg-[#16161A] hover:bg-[#1C1C22] border border-white/[0.08] hover:border-white/[0.18] rounded-2xl cursor-pointer transition shadow-sm"
+                      className="group p-4 bg-surface hover:bg-surfaceActive border border-white/[0.08] hover:border-white/[0.18] rounded-2xl cursor-pointer transition shadow-sm"
                     >
                       <div className="flex items-center justify-between mb-2">
-                        <ListMusic className="w-5 h-5 text-[#FA586A]" />
-                        <span className="text-[10px] text-[#71717A] font-mono">
+                        <ListMusic className="w-5 h-5 text-accent" />
+                        <span className="text-[10px] text-textMuted font-mono">
                           {pl.track_ids.length} songs
                         </span>
                       </div>
-                      <h3 className="text-sm font-bold text-white truncate group-hover:text-[#FA586A] transition">
+                      <h3 className="text-sm font-bold text-white truncate group-hover:text-accent transition">
                         {pl.name}
                       </h3>
                     </div>

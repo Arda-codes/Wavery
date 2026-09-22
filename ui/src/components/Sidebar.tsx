@@ -358,27 +358,27 @@ const SidebarInner: React.FC<SidebarProps> = ({
               onClick={() => onNavigate("liked")}
               className={`w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all group ${
                 isLikedActive
-                  ? "bg-gradient-to-r from-[#FA586A]/15 to-transparent text-white border border-[#FA586A]/30 shadow-sm"
+                  ? "bg-white/[0.10] text-white border border-white/[0.08] shadow-sm"
                   : "text-[#A1A1AA] hover:text-white hover:bg-white/[0.04]"
               }`}
             >
               <Heart
                 className={`w-4 h-4 transition-colors ${
                   isLikedActive
-                    ? "text-[#FA586A] fill-[#FA586A]"
-                    : "text-[#FA586A]/70 group-hover:text-[#FA586A]"
+                    ? "text-accent fill-accent"
+                    : "text-textMuted group-hover:text-accent"
                 }`}
               />
               <span className="truncate">Liked Songs</span>
               {isLikedPlaying && (
                 <span className="inline-flex items-center ml-1" title="Currently Playing from Liked Songs">
-                  <EqualizerWave isPlaying={isPlaying} size="xs" color="bg-[#FA586A]" />
+                  <EqualizerWave isPlaying={isPlaying} size="xs" color="bg-accent" />
                 </span>
               )}
               <span
                 className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-mono transition-colors ${
                   isLikedActive
-                    ? "bg-[#FA586A] text-white font-bold shadow-sm shadow-[#FA586A]/30"
+                    ? "bg-accent text-white font-bold shadow-sm"
                     : "bg-white/[0.06] text-[#71717A] group-hover:text-[#A1A1AA]"
                 }`}
               >
@@ -614,7 +614,7 @@ const SidebarInner: React.FC<SidebarProps> = ({
         <div className="fixed inset-0 z-50 lg:hidden flex">
           {/* Subtle Frosted Backdrop Overlay */}
           <div
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity animate-fade-in"
             onClick={() => setMobileSidebarOpen(false)}
             aria-hidden="true"
           />
@@ -622,15 +622,12 @@ const SidebarInner: React.FC<SidebarProps> = ({
           {/* Slide-out Drawer Pane */}
           <aside
             onContextMenu={handleSidebarNavContextMenu}
-            className="relative w-72 max-w-[85vw] bg-[#0F0F13]/98 border-r border-white/[0.10] p-4 flex flex-col justify-between select-none shadow-2xl overflow-y-auto z-50 animate-fade-in"
+            className="relative w-72 max-w-[85vw] bg-[#0F0F13]/98 border-r border-white/[0.10] p-4 flex flex-col justify-between select-none shadow-2xl overflow-y-auto z-50 animate-drawer-in-left"
           >
             {/* Mobile Header with Brand & Close Button */}
             <div className="flex items-center justify-between pb-3 border-b border-white/[0.06] mb-3 flex-shrink-0">
-              <div className="flex items-center space-x-2.5">
-                <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-[#FA586A] to-[#E0284F] flex items-center justify-center font-bold text-white shadow-sm">
-                  <span className="text-[10px] font-black tracking-tighter">W</span>
-                </div>
-                <span className="font-bold text-sm text-white">Wavery</span>
+              <div className="flex items-center">
+                <span className="font-bold text-sm text-white tracking-tight">Wavery</span>
               </div>
               <button
                 type="button"

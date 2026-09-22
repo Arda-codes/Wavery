@@ -46,7 +46,7 @@ const Submenu: React.FC<SubmenuProps> = ({ items, parentRect, onCloseAll }) => {
         top: `${coords.y}px`,
         zIndex: 10000,
       }}
-      className="bg-[#1C1C22]/95 backdrop-blur-2xl border border-white/[0.12] rounded-2xl p-1.5 shadow-2xl shadow-black/90 min-w-[200px] max-w-[280px] max-h-[380px] overflow-y-auto animate-fadeIn select-none"
+      className="bg-[#1C1C22]/95 backdrop-blur-2xl border border-white/[0.12] rounded-2xl p-1.5 shadow-2xl shadow-black/90 min-w-[200px] max-w-[280px] max-h-[380px] overflow-y-auto animate-menu-in select-none"
     >
       {items.map((item) => {
         if (item.divider) {
@@ -199,7 +199,7 @@ export const ContextMenu: React.FC = () => {
           top: `${adjustedPos.y}px`,
           zIndex: 9999,
         }}
-        className="bg-[#16161C]/95 backdrop-blur-2xl border border-white/[0.12] rounded-2xl p-1.5 shadow-2xl shadow-black/90 min-w-[210px] max-w-[300px] select-none animate-fadeIn text-xs"
+        className="bg-[#16161C]/95 backdrop-blur-2xl border border-white/[0.12] rounded-2xl p-1.5 shadow-2xl shadow-black/90 min-w-[210px] max-w-[300px] select-none animate-menu-in text-xs"
       >
         {items.map((item) => {
           if (item.divider) {

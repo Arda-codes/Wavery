@@ -743,3 +743,109 @@ async fn test_delete_track_endpoint_and_artwork_cache_eviction() {
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
+
+#[tokio::test]
+async fn test_server_update_track_metadata_and_lyrics() {
+    let temp_dir = std::env::temp_dir().join(format!("wavery_track_meta_{}", uuid::Uuid::new_v4()));
+    let lib_dir = temp_dir.join("library");
+    let db_path = temp_dir.join("library.db");
+    fs::create_dir_all(&lib_dir).unwrap();
+
+    let mut manager = SqliteLibraryManager::new(lib_dir.clone(), db_path).unwrap();
+    let song_path = temp_dir.join("sample.mp3");
+    {
+        let mut f = File::create(&song_path).unwrap();
+        f.write_all(&[0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xAA, 0xBB, 0xCC, 0xDD]).unwrap();
+    }
+
+    let track = manager.import_track(&song_path, ImportStrategy::Copy).await.unwrap();
+    let state = Arc::new(AppState::new(
+        Arc::new(tokio::sync::Mutex::new(manager)),
+        LoftyMetadataReader::new(),
+        None,
+    ));
+    let app = build_router(state.clone());
+
+    let payload = serde_json::json!({
+        "track_id": track.id,
+        "title": "New Title",
+        "artist": "New Artist",
+        "album": "New Album",
+        "lyrics": "[00:01.00] Test Lyric",
+        "write_tags": false,
+    });
+
+    let req = Request::builder()
+        .method("POST")
+        .uri("/api/tracks/metadata")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(payload.to_string()))
+        .unwrap();
+
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    let bytes = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let updated: wavery_core::models::Track = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(updated.metadata.title.as_deref(), Some("New Title"));
+    assert_eq!(updated.metadata.artist.as_deref(), Some("New Artist"));
+    assert_eq!(updated.metadata.album.as_deref(), Some("New Album"));
+    assert_eq!(updated.metadata.lyrics.as_deref(), Some("[00:01.00] Test Lyric"));
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[tokio::test]
+async fn test_server_update_artist_metadata_batch_rename() {
+    let temp_dir = std::env::temp_dir().join(format!("wavery_artist_meta_{}", uuid::Uuid::new_v4()));
+    let lib_dir = temp_dir.join("library");
+    let db_path = temp_dir.join("library.db");
+    fs::create_dir_all(&lib_dir).unwrap();
+
+    let mut manager = SqliteLibraryManager::new(lib_dir.clone(), db_path).unwrap();
+    let song_path = temp_dir.join("sample.mp3");
+    {
+        let mut f = File::create(&song_path).unwrap();
+        f.write_all(&[0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xAA, 0xBB, 0xCC, 0xDD]).unwrap();
+    }
+
+    let track = manager.import_track(&song_path, ImportStrategy::Copy).await.unwrap();
+    // Set initial artist name
+    let mut initial_meta = track.metadata.clone();
+    initial_meta.artist = Some("Original Band".to_string());
+    initial_meta.album_artist = Some("Original Band".to_string());
+    let _ = manager.update_track_metadata(&track.id, &initial_meta, false).await.unwrap();
+
+    let state = Arc::new(AppState::new(
+        Arc::new(tokio::sync::Mutex::new(manager)),
+        LoftyMetadataReader::new(),
+        None,
+    ));
+    let app = build_router(state.clone());
+
+    let payload = serde_json::json!({
+        "original_name": "Original Band",
+        "new_name": "Renamed Band",
+        "update_album_artist": true,
+        "write_tags": false,
+    });
+
+    let req = Request::builder()
+        .method("POST")
+        .uri("/api/artists/metadata")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(payload.to_string()))
+        .unwrap();
+
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    let bytes = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let updated: Vec<wavery_core::models::Track> = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(updated.len(), 1);
+    assert_eq!(updated[0].metadata.artist.as_deref(), Some("Renamed Band"));
+    assert_eq!(updated[0].metadata.album_artist.as_deref(), Some("Renamed Band"));
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+

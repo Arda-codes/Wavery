@@ -114,3 +114,24 @@ export interface PlayHistoryEntry {
   trackId: string;
   playedAt: number;
 }
+
+export interface UpdateTrackMetadataPayload {
+  track_id: string;
+  title?: string;
+  artist?: string;
+  album?: string;
+  album_artist?: string;
+  track_number?: number;
+  disc_number?: number;
+  year?: number;
+  genre?: string;
+  lyrics?: string;
+  write_tags?: boolean;
+}
+
+export interface UpdateArtistMetadataPayload {
+  original_name: string;
+  new_name: string;
+  update_album_artist?: boolean;
+  write_tags?: boolean;
+}

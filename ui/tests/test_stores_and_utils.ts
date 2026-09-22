@@ -524,6 +524,12 @@ export async function runStoresAndUtilsTests(jiti: any) {
     ["Artist A, Artist B", "Artist A"],
     ["Artist 1 / Artist 2 feat. Artist 3", "Artist 1"],
     ["The Beatles (Remastered)", "The Beatles (Remastered)"],
+    ["Tyler, The Creator", "Tyler, The Creator"],
+    ["Tyler, The Creator; Kali Uchis", "Tyler, The Creator"],
+    ["Tyler, The Creator feat. Kali Uchis", "Tyler, The Creator"],
+    ["Earth, Wind & Fire", "Earth, Wind & Fire"],
+    ["AC/DC", "AC/DC"],
+    ["Crosby, Stills, Nash & Young", "Crosby, Stills, Nash & Young"],
   ];
 
   for (const [input, expected] of primaryCases) {
@@ -543,6 +549,12 @@ export async function runStoresAndUtilsTests(jiti: any) {
     ["Artist A / Artist B; Artist C & Artist D", ["Artist A", "Artist B", "Artist C", "Artist D"]],
     ["Artist A ft. Artist B with Artist C vs. Artist D", ["Artist A", "Artist B", "Artist C", "Artist D"]],
     ["Artist A & artist a & ARTIST A", ["Artist A"]], // Case-insensitive deduplication
+    ["Tyler, The Creator", ["Tyler, The Creator"]],
+    ["Tyler, The Creator; Kali Uchis", ["Tyler, The Creator", "Kali Uchis"]],
+    ["Tyler, The Creator feat. Kali Uchis", ["Tyler, The Creator", "Kali Uchis"]],
+    ["Tyler, The Creator, Kali Uchis", ["Tyler, The Creator", "Kali Uchis"]],
+    ["Earth, Wind & Fire", ["Earth, Wind & Fire"]],
+    ["AC/DC", ["AC/DC"]],
   ];
 
   for (const [input, expected] of splitCases) {
@@ -565,6 +577,15 @@ export async function runStoresAndUtilsTests(jiti: any) {
   assert(
     singleTokens.length === 1 && singleTokens[0].text === "Daft Punk" && singleTokens[0].isArtist === true,
     "parseArtistTokens('Daft Punk') returns single artist token"
+  );
+
+  const tylerTokens = parseArtistTokens("Tyler, The Creator; Kali Uchis");
+  assert(
+    tylerTokens.length === 3 &&
+    tylerTokens[0].text === "Tyler, The Creator" && tylerTokens[0].isArtist === true &&
+    tylerTokens[1].text.includes(";") && tylerTokens[1].isArtist === false &&
+    tylerTokens[2].text === "Kali Uchis" && tylerTokens[2].isArtist === true,
+    "parseArtistTokens correctly tokenizes 'Tyler, The Creator; Kali Uchis' into 2 artist tokens and 1 delimiter"
   );
 
   const featTokens = parseArtistTokens("Daft Punk feat. Pharrell Williams & Nile Rodgers");

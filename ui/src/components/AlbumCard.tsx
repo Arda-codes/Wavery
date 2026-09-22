@@ -162,7 +162,7 @@ const AlbumCardInner: React.FC<AlbumCardProps> = ({
       onClick={() => onSelectAlbum(album.title, album.artist)}
       onContextMenu={handleContextMenu}
       style={{ contain: "content" }}
-      className="group cursor-pointer bg-[#16161A] hover:bg-[#202026] border border-white/[0.06] hover:border-white/[0.12] rounded-2xl p-3.5 flex flex-col transition-all duration-200 shadow-sm hover:shadow-xl select-none"
+      className="group cursor-pointer bg-[#16161A] hover:bg-[#202026] border border-white/[0.06] hover:border-white/[0.12] rounded-2xl p-3.5 flex flex-col transition-[background-color,border-color,box-shadow,transform] duration-250 ease-[cubic-bezier(0.16,1,0.3,1)] shadow-sm hover:shadow-xl hover:-translate-y-0.5 select-none"
     >
       {/* Cover Art */}
       <div className="aspect-square rounded-xl bg-[#1C1C22] overflow-hidden mb-3 relative flex items-center justify-center border border-white/[0.06] shadow-md">
@@ -170,7 +170,7 @@ const AlbumCardInner: React.FC<AlbumCardProps> = ({
           <img
             src={artworkUrl}
             alt={album.title}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 ease-out"
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform"
             loading="lazy"
             decoding="async"
             onError={() => setImgError(true)}
@@ -184,7 +184,7 @@ const AlbumCardInner: React.FC<AlbumCardProps> = ({
             e.stopPropagation();
             onPlayAlbum(album);
           }}
-          className="absolute bottom-2.5 right-2.5 w-10 h-10 rounded-full bg-[#FA586A] text-white flex items-center justify-center opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200 shadow-xl shadow-black/60 hover:scale-105 active:scale-95 z-10"
+          className="absolute bottom-2.5 right-2.5 w-10 h-10 rounded-full bg-[#FA586A] text-white flex items-center justify-center opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-250 ease-[cubic-bezier(0.16,1,0.3,1)] shadow-xl shadow-black/60 hover:scale-105 active:scale-95 z-10"
           title="Play Album"
         >
           <Play className="w-4 h-4 fill-white ml-0.5" />

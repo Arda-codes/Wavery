@@ -9,7 +9,6 @@ import { useArtwork } from "../utils/useArtwork";
 import { getFullTrackArtistString, formatDuration } from "../utils/library";
 import { parseLrc, getActiveLyricIndex } from "../utils/lyrics";
 import { ArtistLinks } from "./ArtistLinks";
-import { EqualizerWave } from "./EqualizerWave";
 import {
   X,
   Music,
@@ -19,7 +18,6 @@ import {
   Trash2,
   Play,
   Pause,
-  Sparkles,
   Mic2,
   Maximize2,
   Heart,
@@ -28,8 +26,10 @@ import {
   ChevronRight,
   CornerDownRight,
   Copy,
+  FilePenLine,
   Infinity,
 } from "lucide-react";
+import { SongMetadataModal } from "./SongMetadataModal";
 
 interface QueueItemRowProps {
   track: Track;
@@ -144,6 +144,7 @@ export const NowPlayingDrawer: React.FC = () => {
 
   const artworkUrl = useArtwork(currentTrack?.id);
   const lyricsContainerRef = useRef<HTMLDivElement>(null);
+  const [trackToEdit, setTrackToEdit] = useState<Track | null>(null);
 
   // Parse real lyrics only (no placeholder fallback)
   const lyrics = useMemo(() => {
@@ -321,6 +322,17 @@ export const NowPlayingDrawer: React.FC = () => {
             `${currentTrack.metadata.title || "Untitled"} - ${artistName}`
           );
         },
+      },
+      {
+        id: "divider-edit-meta-current",
+        label: "",
+        divider: true,
+      },
+      {
+        id: "edit-metadata-current",
+        label: "Edit Song Metadata...",
+        icon: FilePenLine,
+        onClick: () => setTrackToEdit(currentTrack),
       }
     );
 
@@ -434,6 +446,17 @@ export const NowPlayingDrawer: React.FC = () => {
             `${itemTrack.metadata.title || "Untitled"} - ${artistName}`
           );
         },
+      },
+      {
+        id: "divider-edit-meta-queue",
+        label: "",
+        divider: true,
+      },
+      {
+        id: "edit-metadata-queue",
+        label: "Edit Song Metadata...",
+        icon: FilePenLine,
+        onClick: () => setTrackToEdit(itemTrack),
       }
     );
 
@@ -444,13 +467,13 @@ export const NowPlayingDrawer: React.FC = () => {
     <>
       {/* Backdrop for viewports < 2xl */}
       <div
-        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 2xl:hidden"
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 2xl:hidden animate-fade-in"
         onClick={() => toggleDrawer()}
         aria-hidden="true"
       />
       <aside
         aria-label="Now Playing and Queue"
-        className="fixed 2xl:relative inset-y-0 right-0 z-50 2xl:z-20 w-full sm:w-80 lg:w-96 max-w-[100vw] bg-[#121216]/98 2xl:bg-[#121216]/95 border-l border-white/[0.08] backdrop-blur-2xl flex flex-col justify-between select-none flex-shrink-0 shadow-2xl animate-fade-in"
+        className="fixed 2xl:relative inset-y-0 right-0 z-50 2xl:z-20 w-full sm:w-80 lg:w-96 max-w-[100vw] bg-deck/98 2xl:bg-deck/95 border-l border-white/[0.08] backdrop-blur-2xl flex flex-col justify-between select-none flex-shrink-0 shadow-2xl animate-drawer-in-right"
       >
       {/* Drawer Header & Tab Selector */}
       <div className="px-5 py-3.5 border-b border-white/[0.06] flex items-center justify-between flex-shrink-0">
@@ -520,14 +543,6 @@ export const NowPlayingDrawer: React.FC = () => {
               ) : (
                 <Music className="w-16 h-16 text-[#71717A]/50" />
               )}
-              {isPlaying && (
-                <div className="absolute top-3 right-3 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md border border-white/10 flex items-center space-x-2 shadow-lg">
-                  <EqualizerWave isPlaying={true} size="xs" color="bg-[#FA586A]" />
-                  <span className="text-[10px] font-bold text-white uppercase tracking-wider">
-                    Playing
-                  </span>
-                </div>
-              )}
             </div>
 
             {/* Playing From Source Card */}
@@ -587,19 +602,14 @@ export const NowPlayingDrawer: React.FC = () => {
               )}
             </div>
 
-            {/* Format & Audio Quality Pill */}
+            {/* Format & Audio Quality Badge */}
             <div className="flex items-center justify-center gap-2 pt-1">
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/[0.06] border border-white/[0.08] text-[10.5px] font-bold text-white">
-                <Sparkles className="w-3 h-3 text-[#FA586A]" />
-                <span>
-                  {currentTrack.metadata.format.toUpperCase() === "FLAC" ||
-                  currentTrack.metadata.format.toUpperCase() === "WAV"
-                    ? "Lossless"
-                    : "High Quality"}
-                </span>
-                <span className="text-[#71717A]">
-                  • {currentTrack.metadata.format.toUpperCase()}
-                </span>
+              <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] bg-white/[0.06] border border-white/[0.10] text-[10px] font-semibold tracking-wider uppercase text-white/70">
+                {currentTrack.metadata.format.toUpperCase() === "FLAC" ||
+                currentTrack.metadata.format.toUpperCase() === "WAV"
+                  ? "Lossless"
+                  : "High Quality"}{" "}
+                • {currentTrack.metadata.format.toUpperCase()}
               </span>
             </div>
 
@@ -658,7 +668,7 @@ export const NowPlayingDrawer: React.FC = () => {
                 <h4 className="text-xs font-bold uppercase tracking-wider text-white">
                   Next In Queue
                 </h4>
-                <span className="text-[10px] font-bold text-[#71717A] bg-white/[0.06] px-2 py-0.5 rounded-full">
+                <span className="text-[10px] font-bold text-[#71717A] bg-white/[0.06] px-1.5 py-0.5 rounded-[4px] font-mono">
                   {upcomingQueue.length}
                 </span>
               </div>
@@ -768,7 +778,7 @@ export const NowPlayingDrawer: React.FC = () => {
                     <p
                       key={`${line.time}-${idx}`}
                       onClick={() => seek(line.time)}
-                      className={`cursor-pointer transition-all duration-300 transform origin-left ${
+                      className={`cursor-pointer transition-[transform,opacity,color] duration-250 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform transform origin-left select-none ${
                         isActive
                           ? "text-base font-extrabold text-white scale-105 translate-x-1.5 opacity-100"
                           : isPast
@@ -786,6 +796,13 @@ export const NowPlayingDrawer: React.FC = () => {
         )}
       </div>
     </aside>
+
+    {/* Edit Song Metadata Modal */}
+    <SongMetadataModal
+      isOpen={!!trackToEdit}
+      onClose={() => setTrackToEdit(null)}
+      track={trackToEdit}
+    />
   </>
   );
 };

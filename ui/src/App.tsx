@@ -32,7 +32,7 @@ import { NowPlayingDrawer } from "./components/NowPlayingDrawer";
 import { FullscreenPlayer } from "./components/FullscreenPlayer";
 import { ContextMenu } from "./components/ContextMenu";
 import { matchesKeyCombo, isEditableTarget } from "./utils/keybindings";
-import { Search, ExternalLink, Home, Menu, Library, ListMusic } from "lucide-react";
+import { Search, X, ExternalLink, Home, Menu, Library, ListMusic } from "lucide-react";
 
 export const App: React.FC = () => {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -151,6 +151,7 @@ export const App: React.FC = () => {
   const selectPlaylist = useNavigationStore((s) => s.selectPlaylist);
   const breadcrumbNavigate = useNavigationStore((s) => s.breadcrumbNavigate);
   const setGlobalSearch = useNavigationStore((s) => s.setGlobalSearch);
+  const addRecentSearch = useNavigationStore((s) => s.addRecentSearch);
 
   // Playlist detail tracks state
   const [playlistTracks, setPlaylistTracks] = useState<Track[]>([]);
@@ -517,18 +518,18 @@ export const App: React.FC = () => {
 
   if (isAppClosed) {
     return (
-      <div className="fixed inset-0 z-50 bg-[#0A0A0C] flex items-center justify-center text-white p-6 select-none">
+      <div className="fixed inset-0 z-50 bg-background flex items-center justify-center text-textPrimary p-6 select-none">
         <div className="text-center">
-          <p className="text-xl font-medium tracking-tight text-white/90">Wavery has closed</p>
+          <p className="text-xl font-medium tracking-tight text-textPrimary/90">Wavery has closed</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-[#0D0D10] text-[#FFFFFF] font-sans antialiased selection:bg-[#FA586A]/30 selection:text-white">
+    <div className="flex flex-col h-screen w-screen bg-background text-textPrimary font-sans antialiased selection:bg-accent/30 selection:text-white">
       {/* Top Desktop Chrome / Header */}
-      <header className="relative h-14 bg-[#0F0F13]/95 backdrop-blur-xl border-b border-white/[0.06] px-3 sm:px-5 flex items-center justify-between flex-shrink-0 z-30 select-none">
+      <header className="relative h-14 bg-sidebar/95 backdrop-blur-xl border-b border-white/[0.06] px-3 sm:px-5 flex items-center justify-between flex-shrink-0 z-30 select-none">
         {/* Left: Hamburger (mobile/tablet) + Brand Text */}
         <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-shrink-0 z-20">
           {/* Hamburger button on screens < lg */}
@@ -545,22 +546,22 @@ export const App: React.FC = () => {
           <button
             type="button"
             onClick={() => navigate("home")}
-            className="cursor-pointer flex-shrink-0 font-bold text-[15px] sm:text-base tracking-tight text-white hover:text-white/80 transition-colors focus:outline-none select-none"
+            className="cursor-pointer flex-shrink-0 font-bold text-[15px] sm:text-base tracking-tight text-white hover:text-white/80 transition-colors focus:outline-none select-none hidden sm:inline"
           >
             Wavery
           </button>
         </div>
 
-        {/* Center: Global Search Capsule (Completely centered regardless of left/right elements) */}
-        <div className="absolute left-1/2 -translate-x-1/2 w-[calc(100%-140px)] max-w-xs md:max-w-sm pointer-events-auto z-10">
-          <div className="relative group">
+        {/* Center: Global Search Bar (Prominent Spotlight-grade Apple HIG search bar) */}
+        <div className="absolute left-1/2 -translate-x-1/2 w-[calc(100%-96px)] sm:w-[calc(100%-160px)] md:w-full md:max-w-xl lg:max-w-2xl pointer-events-auto z-20 px-2 sm:px-0">
+          <div className="relative group flex items-center w-full">
             <Search
               onClick={() => {
                 if (viewMode !== "search") navigate("search");
                 searchInputRef.current?.focus();
                 searchInputRef.current?.select();
               }}
-              className="w-3.5 h-3.5 absolute left-3 top-2.5 text-[#71717A] group-focus-within:text-[#FA586A] transition-colors cursor-pointer"
+              className="w-4 h-4 sm:w-4.5 sm:h-4.5 absolute left-3.5 sm:left-4 text-textMuted group-focus-within:text-accent transition-colors duration-200 cursor-pointer pointer-events-auto flex-shrink-0"
             />
             <input
               ref={searchInputRef}
@@ -573,42 +574,62 @@ export const App: React.FC = () => {
                 setGlobalSearch(e.target.value);
                 if (viewMode !== "search") navigate("search");
               }}
-              placeholder="Search songs, albums..."
-              className="w-full bg-[#16161A] border border-white/[0.08] hover:border-white/[0.15] focus:border-[#FA586A]/60 rounded-full pl-8 sm:pl-9 pr-7 sm:pr-9 py-1.5 text-xs text-white placeholder-[#71717A] focus:outline-none focus:ring-2 focus:ring-[#FA586A]/20 transition-all shadow-inner"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && globalSearch.trim()) {
+                  addRecentSearch(globalSearch.trim());
+                } else if (e.key === "Escape") {
+                  if (globalSearch) {
+                    setGlobalSearch("");
+                  } else {
+                    searchInputRef.current?.blur();
+                  }
+                }
+              }}
+              placeholder="Search songs, albums, artists, playlists..."
+              className="w-full h-10 sm:h-10.5 bg-surface hover:bg-surfaceHover focus:bg-surfaceActive border border-white/[0.08] hover:border-white/[0.15] focus:border-accent rounded-full pl-10 sm:pl-11 pr-24 sm:pr-28 text-xs sm:text-sm text-textPrimary placeholder:text-textMuted focus:outline-none focus:ring-2 focus:ring-accent/30 transition-all duration-200 shadow-sm focus:shadow-md"
             />
-            {globalSearch ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setGlobalSearch("");
-                  searchInputRef.current?.focus();
-                }}
-                className="absolute right-2.5 top-2 text-[#71717A] hover:text-white text-xs transition"
-                title="Clear search"
-              >
-                ✕
-              </button>
-            ) : (
-              <span
-                onClick={() => {
-                  searchInputRef.current?.focus();
-                  searchInputRef.current?.select();
-                }}
-                className="hidden md:inline-block cursor-pointer absolute right-3 top-1.5 text-[10px] font-mono text-[#71717A] bg-white/[0.06] hover:bg-white/[0.12] hover:text-white px-1.5 py-0.5 rounded border border-white/[0.06] transition select-none"
-                title={`Focus search (${isMac ? "⌘K" : "Ctrl+K"})`}
-              >
-                {isMac ? "⌘K" : "Ctrl+K"}
-              </span>
-            )}
+            <div className="absolute right-2.5 sm:right-3.5 flex items-center space-x-1.5 pointer-events-auto">
+              {globalSearch ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGlobalSearch("");
+                      searchInputRef.current?.focus();
+                    }}
+                    className="w-6 h-6 rounded-full bg-white/[0.08] hover:bg-white/[0.18] active:scale-95 text-textMuted hover:text-white flex items-center justify-center transition-all focus:outline-none"
+                    title="Clear search (Esc)"
+                    aria-label="Clear search"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                  <span className="hidden sm:inline-flex items-center text-[10px] font-mono text-textMuted/70 bg-white/[0.04] px-1.5 py-0.5 rounded border border-white/[0.05]">
+                    ↵
+                  </span>
+                </>
+              ) : (
+                <span
+                  onClick={() => {
+                    if (viewMode !== "search") navigate("search");
+                    searchInputRef.current?.focus();
+                    searchInputRef.current?.select();
+                  }}
+                  className="hidden sm:inline-flex items-center cursor-pointer text-[11px] font-mono font-medium text-textMuted bg-white/[0.06] hover:bg-white/[0.12] hover:text-white px-2 py-0.5 rounded-md border border-white/[0.06] transition select-none"
+                  title={`Focus search (${isMac ? "⌘K" : "Ctrl+K"})`}
+                >
+                  {isMac ? "⌘K" : "Ctrl+K"}
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </header>
 
       {/* Linux WebKitGTK Performance Banner */}
       {playerAdapter.isTauri() && !isLinuxBannerDismissed && (
-        <div className="bg-[#16161A] border-b border-white/[0.07] px-6 py-2 flex items-center justify-between text-xs text-[#A1A1AA] flex-shrink-0">
+        <div className="bg-surface border-b border-white/[0.07] px-6 py-2 flex items-center justify-between text-xs text-textSecondary flex-shrink-0">
           <div className="flex items-center space-x-2.5 min-w-0">
-            <span className="flex h-2 w-2 rounded-full bg-[#FA586A] flex-shrink-0" />
+            <span className="flex h-2 w-2 rounded-full bg-accent flex-shrink-0" />
             <p className="truncate">
               <span className="font-semibold text-white">Linux note:</span> Open in your browser for smoother rendering if needed.
             </p>
@@ -618,15 +639,15 @@ export const App: React.FC = () => {
               onClick={() => {
                 usePlayerStore.getState().switchToWeb();
               }}
-              className="px-2.5 py-1 bg-[#24242C] hover:bg-[#30303A] text-white rounded-md font-semibold text-[11px] flex items-center space-x-1 transition border border-white/[0.08]"
+              className="px-2.5 py-1 bg-surfaceActive hover:bg-surfaceHover text-white rounded-md font-semibold text-[11px] flex items-center space-x-1 transition border border-white/[0.08]"
               title="Open in default browser"
             >
               <span>Open in Browser</span>
-              <ExternalLink className="w-3 h-3 ml-0.5 text-[#A1A1AA]" />
+              <ExternalLink className="w-3 h-3 ml-0.5 text-textSecondary" />
             </button>
             <button
               onClick={dismissLinuxBanner}
-              className="text-[#71717A] hover:text-white text-xs px-2 py-0.5 rounded hover:bg-white/[0.06] transition"
+              className="text-textMuted hover:text-white text-xs px-2 py-0.5 rounded hover:bg-white/[0.06] transition"
               title="Dismiss"
             >
               ✕
@@ -654,15 +675,16 @@ export const App: React.FC = () => {
         />
 
         {/* Center Content Pane */}
-        <main className="flex-1 flex flex-col bg-[#0D0D10] overflow-hidden min-h-0">
+        <main className="flex-1 flex flex-col bg-background overflow-hidden min-h-0">
           {/* Breadcrumb Navigation Trail */}
           <Breadcrumbs
             items={breadcrumbItems}
             onNavigate={breadcrumbNavigate}
           />
 
-          {/* View Routing */}
-          {viewMode === "home" && (
+          {/* View Routing with VSync smooth transition */}
+          <div key={viewMode} className="flex-1 flex flex-col min-h-0 overflow-hidden animate-fadeIn">
+            {viewMode === "home" && (
             <HomeView
               tracks={tracks}
               albums={albums}
@@ -786,7 +808,8 @@ export const App: React.FC = () => {
             />
           )}
 
-          {viewMode === "settings" && <SettingsView />}
+            {viewMode === "settings" && <SettingsView />}
+          </div>
         </main>
 
         {/* Apple Music Inspired Now Playing & Queue Drawer */}
@@ -799,13 +822,13 @@ export const App: React.FC = () => {
       {/* Mobile Bottom Navigation Bar (sm:hidden) */}
       <nav
         aria-label="Mobile Navigation"
-        className="sm:hidden h-14 bg-[#0E0E12]/95 backdrop-blur-2xl border-t border-white/[0.08] flex items-center justify-around flex-shrink-0 z-30 px-2 select-none"
+        className="sm:hidden h-14 bg-deck/95 backdrop-blur-2xl border-t border-white/[0.08] flex items-center justify-around flex-shrink-0 z-30 px-2 select-none"
       >
         <button
           type="button"
           onClick={() => navigate("home")}
           className={`flex flex-col items-center justify-center flex-1 py-1 transition-colors ${
-            viewMode === "home" ? "text-[#FA586A]" : "text-[#71717A] hover:text-white"
+            viewMode === "home" ? "text-accent" : "text-textMuted hover:text-textPrimary"
           }`}
         >
           <Home className="w-4 h-4 mb-0.5" />
@@ -819,7 +842,7 @@ export const App: React.FC = () => {
             searchInputRef.current?.focus();
           }}
           className={`flex flex-col items-center justify-center flex-1 py-1 transition-colors ${
-            viewMode === "search" ? "text-[#FA586A]" : "text-[#71717A] hover:text-white"
+            viewMode === "search" ? "text-accent" : "text-textMuted hover:text-textPrimary"
           }`}
         >
           <Search className="w-4 h-4 mb-0.5" />
@@ -830,7 +853,7 @@ export const App: React.FC = () => {
           type="button"
           onClick={() => navigate("tracks")}
           className={`flex flex-col items-center justify-center flex-1 py-1 transition-colors ${
-            viewMode === "tracks" ? "text-[#FA586A]" : "text-[#71717A] hover:text-white"
+            viewMode === "tracks" ? "text-accent" : "text-textMuted hover:text-textPrimary"
           }`}
         >
           <Library className="w-4 h-4 mb-0.5" />
@@ -842,8 +865,8 @@ export const App: React.FC = () => {
           onClick={() => navigate("playlists")}
           className={`flex flex-col items-center justify-center flex-1 py-1 transition-colors ${
             viewMode === "playlists" || viewMode === "playlist_detail"
-              ? "text-[#FA586A]"
-              : "text-[#71717A] hover:text-white"
+              ? "text-accent"
+              : "text-textMuted hover:text-textPrimary"
           }`}
         >
           <ListMusic className="w-4 h-4 mb-0.5" />
@@ -853,7 +876,7 @@ export const App: React.FC = () => {
         <button
           type="button"
           onClick={() => useNavigationStore.getState().toggleMobileSidebar()}
-          className="flex flex-col items-center justify-center flex-1 py-1 text-[#71717A] hover:text-white transition-colors"
+          className="flex flex-col items-center justify-center flex-1 py-1 text-textMuted hover:text-white transition-colors"
         >
           <Menu className="w-4 h-4 mb-0.5" />
           <span className="text-[10px] font-semibold">More</span>

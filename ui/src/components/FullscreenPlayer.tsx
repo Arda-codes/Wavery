@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useMemo, useState } from "react";
+import React, { useEffect, useRef, useMemo } from "react";
 import {
   Play,
   Pause,
@@ -13,12 +13,7 @@ import {
   Volume2,
   Volume1,
   VolumeX,
-  Sparkles,
-  Disc,
   Mic2,
-  ListMusic,
-  Library,
-  Users,
   Infinity,
 } from "lucide-react";
 import { usePlayerStore } from "../stores/playerStore";
@@ -29,20 +24,7 @@ import { useArtwork } from "../utils/useArtwork";
 import { getFullTrackArtistString } from "../utils/library";
 import { parseLrc, getActiveLyricIndex } from "../utils/lyrics";
 import { ArtistLinks } from "./ArtistLinks";
-import { EqualizerWave } from "./EqualizerWave";
-
-function formatTime(secs: number = 0): string {
-  if (isNaN(secs) || secs < 0) secs = 0;
-  const mins = Math.floor(secs / 60);
-  const remaining = Math.floor(secs % 60);
-  return `${mins}:${remaining < 10 ? "0" : ""}${remaining}`;
-}
-
-function formatRemainingTime(currentSecs: number, totalSecs: number): string {
-  if (isNaN(totalSecs) || totalSecs <= 0) return formatTime(currentSecs);
-  const diff = Math.max(0, totalSecs - currentSecs);
-  return `-${formatTime(diff)}`;
-}
+import { useVsyncScrubber, formatTime, formatRemainingTime } from "../hooks/useVsyncScrubber";
 
 export const FullscreenPlayer: React.FC = () => {
   const isOpen = useNavigationStore((s) => s.isFullscreenNowPlayingOpen);
@@ -83,11 +65,24 @@ export const FullscreenPlayer: React.FC = () => {
   const artworkUrl = useArtwork(currentTrack?.id);
   const lyricsContainerRef = useRef<HTMLDivElement>(null);
 
-  // Local drag state for scrubber
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragPos, setDragPos] = useState(0);
+  // VSync continuous interpolation hook for scrubber
+  const {
+    sliderRef,
+    currentTimeRef,
+    remainingTimeRef,
+    handlePointerDown,
+    handleChange,
+    handlePointerUp,
+    displayPos,
+  } = useVsyncScrubber({
+    positionSecs,
+    durationSecs,
+    isPlaying,
+    hasTrack: !!currentTrack,
+    showRemaining: true,
+    onSeek: seek,
+  });
 
-  const displayPos = isDragging ? dragPos : positionSecs;
   const maxDuration = durationSecs > 0 ? durationSecs : 100;
 
   // Keyboard Shortcuts (Esc to close, Space to toggle play)
@@ -155,22 +150,6 @@ export const FullscreenPlayer: React.FC = () => {
     return Volume2;
   }, [volume]);
 
-  const ContextIcon = useMemo(() => {
-    if (!playbackContext) return Disc;
-    switch (playbackContext.type) {
-      case "album":
-        return Disc;
-      case "playlist":
-        return ListMusic;
-      case "liked":
-        return Heart;
-      case "artist":
-        return Users;
-      case "tracks":
-      default:
-        return Library;
-    }
-  }, [playbackContext]);
 
   const handleContextClick = () => {
     if (!playbackContext) return;
@@ -199,52 +178,56 @@ export const FullscreenPlayer: React.FC = () => {
     }
   };
 
+  const enableGradients = useSettingsStore((s) => s.enableGradients);
+
   if (!isOpen || !currentTrack) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#0A0A0D] text-white flex flex-col justify-between overflow-hidden select-none animate-fade-in">
-      {/* Dynamic Ambient Background Blur */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-40">
-        <div className="absolute -top-1/4 -left-1/4 w-[90vw] h-[90vw] rounded-full bg-gradient-to-br from-[#FA586A]/30 via-[#E0284F]/15 to-transparent blur-[140px] animate-pulse" />
-        <div className="absolute -bottom-1/4 -right-1/4 w-[80vw] h-[80vw] rounded-full bg-gradient-to-tl from-[#5856D6]/20 via-[#FA586A]/10 to-transparent blur-[160px]" />
-      </div>
+    <div className="fixed inset-0 z-50 bg-background text-textPrimary flex flex-col justify-between overflow-hidden select-none animate-fade-in">
+      {/* Calm Ambient Background Depth */}
+      {enableGradients && (
+        <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-25">
+          <div className="absolute -top-1/4 -left-1/4 w-[90vw] h-[90vw] rounded-full bg-gradient-to-br from-accent/15 via-accent/5 to-transparent blur-[160px]" />
+          <div className="absolute -bottom-1/4 -right-1/4 w-[80vw] h-[80vw] rounded-full bg-gradient-to-tl from-surfaceHover/30 via-transparent to-transparent blur-[180px]" />
+        </div>
+      )}
 
       {/* Top Bar */}
       <header className="relative z-10 px-4 py-4 sm:px-8 sm:py-6 flex items-center justify-between flex-shrink-0">
-        <div className="flex items-center space-x-2.5 sm:space-x-3">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#FA586A] to-[#E0284F] flex items-center justify-center font-bold text-white shadow-lg shadow-[#FA586A]/30">
-            <span className="text-xs font-black tracking-tighter">W</span>
-          </div>
-          <span className="text-xs sm:text-sm font-bold text-[#A1A1AA] uppercase tracking-widest">
+        {/* Left: View Identifier (Clean typography without W icon) */}
+        <div className="flex items-center">
+          <span className="text-xs font-semibold text-textMuted uppercase tracking-widest select-none">
             Now Playing
           </span>
         </div>
 
-        {/* Center: Playing From Pill */}
-        {playbackContext && (
+        {/* Center: Playback Context (Apple Music Subdued Header) */}
+        {playbackContext ? (
           <button
             onClick={handleContextClick}
-            className="flex items-center space-x-1.5 sm:space-x-2 px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full bg-white/[0.08] hover:bg-white/[0.15] border border-white/10 backdrop-blur-md transition group shadow-sm max-w-[180px] sm:max-w-xs truncate"
+            className="flex flex-col items-center group transition text-center focus:outline-none max-w-[200px] sm:max-w-sm truncate"
             title={`Jump to ${playbackContext.name}`}
           >
-            <ContextIcon className="w-3.5 h-3.5 text-[#FA586A] flex-shrink-0" />
-            <span className="text-[10px] sm:text-[11px] text-[#A1A1AA] uppercase font-bold tracking-wider hidden sm:inline">
-              {playbackContext.type === "liked" ? "Liked Songs" : `Playing from ${playbackContext.type}`}:
+            <span className="text-[10px] sm:text-[10.5px] text-textMuted uppercase font-semibold tracking-wider transition-colors group-hover:text-textSecondary truncate">
+              {playbackContext.type === "liked" ? "Playing from Liked Songs" : `Playing from ${playbackContext.type}`}
             </span>
-            <span className="text-xs font-bold text-white group-hover:text-[#FA586A] transition-colors truncate">
+            <span className="text-xs sm:text-sm font-medium text-textSecondary group-hover:text-textPrimary transition-colors truncate">
               {playbackContext.name}
             </span>
           </button>
+        ) : (
+          <div />
         )}
 
+        {/* Right: Exit / Dismiss Button */}
         <div className="flex items-center space-x-2 sm:space-x-3">
-          <span className="text-xs text-[#71717A] hidden md:inline font-medium">
-            Press <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-white font-mono text-[11px]">ESC</kbd> to exit
+          <span className="text-xs text-textMuted hidden md:inline font-medium">
+            Press <kbd className="px-1.5 py-0.5 rounded bg-surfaceHover border border-borderSubtle text-textSecondary font-mono text-[10px]">Esc</kbd> to exit
           </span>
           <button
             onClick={closeFullscreen}
-            className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition hover:scale-105 active:scale-95 shadow-md"
-            title="Exit Fullscreen"
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-surfaceHover hover:bg-surfaceActive active:scale-95 text-textSecondary hover:text-textPrimary flex items-center justify-center transition shadow-sm border border-border focus:outline-none"
+            title="Exit Fullscreen (Esc)"
           >
             <Minimize2 className="w-4 h-4" />
           </button>
@@ -254,46 +237,38 @@ export const FullscreenPlayer: React.FC = () => {
       {/* Main Split Screen Area */}
       <main className="relative z-10 flex-1 flex flex-col lg:flex-row items-center justify-center px-4 sm:px-8 md:px-16 lg:px-24 gap-6 sm:gap-10 lg:gap-20 overflow-y-auto lg:overflow-hidden max-w-7xl mx-auto w-full">
         {/* Left Column: Huge Album Art & Credits */}
-        <div className="flex flex-col items-center lg:items-start text-center lg:text-left space-y-4 sm:space-y-6 max-w-md w-full flex-shrink-0">
-          <div className="relative aspect-square w-48 sm:w-64 md:w-80 lg:w-96 rounded-3xl bg-[#18181F] overflow-hidden shadow-2xl shadow-black/90 border border-white/10 group">
+        <div className="flex flex-col items-center lg:items-start text-center lg:text-left space-y-4 sm:space-y-6 max-w-lg w-full flex-shrink-0">
+          <div className="relative aspect-square w-48 sm:w-64 md:w-80 lg:w-96 rounded-2xl bg-surfaceActive/40 overflow-hidden shadow-2xl shadow-black/25 dark:shadow-black/90 border border-border group">
             {artworkUrl ? (
               <img
                 src={artworkUrl}
                 alt={currentTrack.metadata.title || "Artwork"}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
+                className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-500 ease-out"
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center bg-[#18181F]">
-                <Music className="w-16 h-16 sm:w-24 sm:h-24 text-[#71717A]/40" />
-              </div>
-            )}
-            {isPlaying && (
-              <div className="absolute top-4 right-4 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/15 flex items-center space-x-2 shadow-xl">
-                <EqualizerWave isPlaying={true} size="xs" color="bg-[#FA586A]" />
-                <span className="text-xs font-bold text-white uppercase tracking-wider">
-                  Live
-                </span>
+              <div className="w-full h-full flex items-center justify-center bg-surfaceActive/40">
+                <Music className="w-16 h-16 sm:w-24 sm:h-24 text-textMuted/40" />
               </div>
             )}
           </div>
 
           <div className="space-y-2 w-full">
-            <div className="flex items-center justify-center lg:justify-start gap-3">
-              <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-white tracking-tight truncate">
+            <div className="flex items-start justify-center lg:justify-start gap-3">
+              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-textPrimary tracking-tight leading-snug line-clamp-2">
                 {currentTrack.metadata.title || "Untitled"}
               </h1>
               <button
                 onClick={() => toggleLike(currentTrack.id)}
-                className={`p-1.5 rounded-full transition-transform active:scale-75 ${
-                  isLiked ? "text-[#FA586A] scale-110" : "text-[#71717A] hover:text-white"
+                className={`p-1.5 mt-1 rounded-lg transition-transform active:scale-75 focus:outline-none ${
+                  isLiked ? "text-accent scale-110" : "text-textMuted hover:text-textPrimary"
                 }`}
                 title={isLiked ? "Unlike song" : "Like song"}
               >
-                <Heart className={`w-5 h-5 ${isLiked ? "fill-[#FA586A]" : ""}`} />
+                <Heart className={`w-5 h-5 ${isLiked ? "fill-current" : ""}`} />
               </button>
             </div>
 
-            <div className="text-base text-[#A1A1AA] font-medium truncate">
+            <div className="text-base text-textSecondary font-medium truncate">
               <ArtistLinks
                 artistName={getFullTrackArtistString(currentTrack)}
                 onSelectArtist={(name) => {
@@ -301,8 +276,8 @@ export const FullscreenPlayer: React.FC = () => {
                   selectArtist(name);
                 }}
                 className="truncate"
-                linkClassName="hover:text-white hover:underline cursor-pointer transition-colors"
-                delimiterClassName="text-[#71717A]"
+                linkClassName="hover:text-textPrimary hover:underline cursor-pointer transition-colors"
+                delimiterClassName="text-textMuted"
               />
             </div>
 
@@ -315,28 +290,20 @@ export const FullscreenPlayer: React.FC = () => {
                     currentTrack.metadata.artist || ""
                   );
                 }}
-                className="text-xs text-[#71717A] hover:text-white cursor-pointer hover:underline truncate transition inline-flex items-center gap-1.5"
+                className="text-xs text-textMuted hover:text-textPrimary cursor-pointer hover:underline truncate transition inline-block"
               >
-                <Disc className="w-3.5 h-3.5 text-[#FA586A]" />
-                <span>
-                  {currentTrack.metadata.album}
-                  {currentTrack.metadata.year ? ` • ${currentTrack.metadata.year}` : ""}
-                </span>
+                {currentTrack.metadata.album}
+                {currentTrack.metadata.year ? ` • ${currentTrack.metadata.year}` : ""}
               </p>
             )}
 
-            <div className="pt-2 flex items-center justify-center lg:justify-start gap-2">
-              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/10 text-xs font-bold text-white">
-                <Sparkles className="w-3.5 h-3.5 text-[#FA586A]" />
-                <span>
-                  {currentTrack.metadata.format.toUpperCase() === "FLAC" ||
-                  currentTrack.metadata.format.toUpperCase() === "WAV"
-                    ? "Lossless"
-                    : "High Quality"}
-                </span>
-                <span className="text-[#A1A1AA]">
-                  • {currentTrack.metadata.format.toUpperCase()}
-                </span>
+            <div className="pt-1 flex items-center justify-center lg:justify-start">
+              <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] bg-surfaceHover border border-border text-[10px] font-semibold tracking-wider uppercase text-textSecondary">
+                {currentTrack.metadata.format.toUpperCase() === "FLAC" ||
+                currentTrack.metadata.format.toUpperCase() === "WAV"
+                  ? "Lossless"
+                  : "High Quality"}{" "}
+                • {currentTrack.metadata.format.toUpperCase()}
               </span>
             </div>
           </div>
@@ -344,31 +311,22 @@ export const FullscreenPlayer: React.FC = () => {
 
         {/* Right Column: Time-Synchronized Live Lyrics */}
         <div className="flex-1 w-full h-80 sm:h-96 lg:h-[500px] flex flex-col overflow-hidden relative">
-          <div className="flex items-center justify-between pb-3 border-b border-white/10 flex-shrink-0">
-            <span className="text-xs font-bold uppercase tracking-wider text-[#FA586A] flex items-center gap-2">
-              <Mic2 className="w-4 h-4" /> Lyrics
-            </span>
-            {lyrics.length > 0 && (
-              <span className="text-xs text-[#71717A]">Click any line to jump</span>
-            )}
-          </div>
-
           {lyrics.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center text-center p-8 space-y-3">
-              <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center shadow-lg">
-                <Mic2 className="w-7 h-7 text-[#71717A]/50" />
+              <div className="w-14 h-14 rounded-2xl bg-surfaceHover border border-border flex items-center justify-center shadow-lg">
+                <Mic2 className="w-6 h-6 text-textMuted/50" />
               </div>
-              <p className="text-sm font-bold text-[#A1A1AA]">
+              <p className="text-sm font-semibold text-textSecondary">
                 No lyrics found for this song
               </p>
-              <p className="text-xs text-[#71717A] max-w-xs">
-                Embedded LRC or tag lyrics will show up here during playback.
+              <p className="text-xs text-textMuted max-w-xs">
+                Embedded LRC or tag lyrics will appear here during playback.
               </p>
             </div>
           ) : (
             <div
               ref={lyricsContainerRef}
-              className="flex-1 overflow-y-auto space-y-5 py-24 scroll-smooth pr-4"
+              className="flex-1 overflow-y-auto space-y-6 py-24 scroll-smooth pr-4"
             >
               {lyrics.map((line, idx) => {
                 const isActive = idx === activeLyricIndex;
@@ -378,12 +336,12 @@ export const FullscreenPlayer: React.FC = () => {
                   <p
                     key={`${line.time}-${idx}`}
                     onClick={() => seek(line.time)}
-                    className={`cursor-pointer transition-all duration-300 transform origin-left select-none ${
+                    className={`cursor-pointer transition-[transform,opacity,color] duration-250 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform transform origin-left select-none ${
                       isActive
-                        ? "text-2xl sm:text-3xl md:text-4xl font-extrabold text-white scale-105 translate-x-2 text-shadow-lg opacity-100"
+                        ? "text-2xl sm:text-3xl md:text-4xl font-extrabold text-textPrimary scale-105 translate-x-2 text-shadow-lg opacity-100"
                         : isPast
-                        ? "text-lg sm:text-xl md:text-2xl font-bold text-white/35 hover:text-white/80 hover:translate-x-1"
-                        : "text-lg sm:text-xl md:text-2xl font-bold text-white/50 hover:text-white/80 hover:translate-x-1"
+                        ? "text-lg sm:text-xl md:text-2xl font-bold text-textMuted/40 hover:text-textSecondary hover:translate-x-1"
+                        : "text-lg sm:text-xl md:text-2xl font-bold text-textMuted hover:text-textPrimary hover:translate-x-1"
                     }`}
                   >
                     {line.text}
@@ -399,41 +357,42 @@ export const FullscreenPlayer: React.FC = () => {
       <footer className="relative z-10 px-4 py-4 sm:px-8 sm:py-6 max-w-5xl mx-auto w-full flex-shrink-0 space-y-3 sm:space-y-4">
         {/* Scrubber Bar */}
         <div className="w-full flex items-center space-x-2 sm:space-x-4 text-xs select-none">
-          <span className="w-10 sm:w-12 text-right font-mono text-xs sm:text-sm text-[#A1A1AA] tabular-nums">
+          <span
+            ref={currentTimeRef}
+            className="w-10 sm:w-12 text-right font-mono text-xs sm:text-sm text-textMuted tabular-nums"
+          >
             {formatTime(displayPos)}
           </span>
           <input
+            ref={sliderRef}
             type="range"
+            aria-label="Seek Position"
             min={0}
             max={maxDuration}
-            step={0.1}
-            value={displayPos}
-            onPointerDown={() => {
-              setIsDragging(true);
-              setDragPos(positionSecs);
-            }}
-            onChange={(e) => setDragPos(parseFloat(e.target.value))}
-            onPointerUp={() => {
-              if (isDragging) {
-                seek(dragPos);
-                setIsDragging(false);
-              }
-            }}
-            className="w-full wavery-slider"
+            step={0.05}
+            defaultValue={displayPos}
+            onPointerDown={handlePointerDown}
+            onChange={handleChange}
+            onPointerUp={handlePointerUp}
+            className="w-full wavery-slider focus-visible:ring-2 focus-visible:ring-accent focus:outline-none"
             style={{ "--slider-progress": `${maxDuration > 0 ? (displayPos / maxDuration) * 100 : 0}%` } as React.CSSProperties}
           />
-          <span className="w-10 sm:w-12 text-left font-mono text-xs sm:text-sm text-[#71717A] tabular-nums">
+          <span
+            ref={remainingTimeRef}
+            className="w-10 sm:w-12 text-left font-mono text-xs sm:text-sm text-textMuted tabular-nums"
+          >
             {formatRemainingTime(displayPos, durationSecs)}
           </span>
         </div>
 
         {/* Transport Controls & Volume */}
         <div className="flex items-center justify-between w-full pt-1">
-          {/* Left spacer / Volume (hidden on mobile, hardware buttons used) */}
+          {/* Left Volume */}
           <div className="hidden sm:flex items-center space-x-2 w-1/4">
             <button
               onClick={() => setVolume(volume > 0 ? 0 : 0.8)}
-              className="text-[#A1A1AA] hover:text-white transition p-1.5"
+              className="text-textMuted hover:text-textPrimary hover:bg-surfaceHover transition p-1.5 focus:outline-none rounded-lg"
+              title="Mute / Unmute"
             >
               <VolumeIcon className="w-4 h-4" />
             </button>
@@ -455,7 +414,7 @@ export const FullscreenPlayer: React.FC = () => {
               type="button"
               onClick={toggleShuffle}
               className={`p-2 rounded-xl transition ${
-                isShuffle ? "text-[#FA586A] bg-[#FA586A]/20" : "text-[#A1A1AA] hover:text-white"
+                isShuffle ? "text-accent bg-accent/15 hover:bg-accent/20" : "text-textMuted hover:text-textPrimary hover:bg-surfaceHover"
               }`}
               title="Shuffle"
             >
@@ -465,7 +424,7 @@ export const FullscreenPlayer: React.FC = () => {
             <button
               type="button"
               onClick={playPrevious}
-              className="text-white hover:scale-110 active:scale-95 transition p-2"
+              className="text-textSecondary hover:text-textPrimary hover:scale-110 active:scale-95 transition p-2 rounded-xl hover:bg-surfaceHover"
               title="Previous"
             >
               <SkipBack className="w-5 h-5 fill-current" />
@@ -474,20 +433,20 @@ export const FullscreenPlayer: React.FC = () => {
             <button
               type="button"
               onClick={isPlaying ? pause : resume}
-              className="w-12 h-12 rounded-full bg-white hover:scale-105 active:scale-95 text-black flex items-center justify-center transition shadow-2xl shadow-white/30"
+              className="w-12 h-12 rounded-full bg-textPrimary text-background hover:scale-105 active:scale-95 flex items-center justify-center transition shadow-xl"
               title={isPlaying ? "Pause" : "Play"}
             >
               {isPlaying ? (
-                <Pause className="w-5 h-5 fill-black text-black" />
+                <Pause className="w-5 h-5 fill-current" />
               ) : (
-                <Play className="w-5 h-5 ml-0.5 fill-black text-black" />
+                <Play className="w-5 h-5 ml-0.5 fill-current" />
               )}
             </button>
 
             <button
               type="button"
               onClick={playNext}
-              className="text-white hover:scale-110 active:scale-95 transition p-2"
+              className="text-textSecondary hover:text-textPrimary hover:scale-110 active:scale-95 transition p-2 rounded-xl hover:bg-surfaceHover"
               title="Next"
             >
               <SkipForward className="w-5 h-5 fill-current" />
@@ -498,8 +457,8 @@ export const FullscreenPlayer: React.FC = () => {
               onClick={cycleLoopMode}
               className={`p-2 rounded-xl transition ${
                 loopMode !== "Off"
-                  ? "text-[#FA586A] bg-[#FA586A]/20"
-                  : "text-[#A1A1AA] hover:text-white"
+                  ? "text-accent bg-accent/15 hover:bg-accent/20"
+                  : "text-textMuted hover:text-textPrimary hover:bg-surfaceHover"
               }`}
               title={`Repeat: ${loopMode}`}
             >
@@ -515,8 +474,8 @@ export const FullscreenPlayer: React.FC = () => {
               onClick={toggleAutoplay}
               className={`p-2 rounded-xl transition ${
                 isAutoplay
-                  ? "text-[#FA586A] bg-[#FA586A]/20"
-                  : "text-[#A1A1AA] hover:text-white"
+                  ? "text-accent bg-accent/15 hover:bg-accent/20"
+                  : "text-textMuted hover:text-textPrimary hover:bg-surfaceHover"
               }`}
               title={
                 isAutoplay
@@ -528,16 +487,8 @@ export const FullscreenPlayer: React.FC = () => {
             </button>
           </div>
 
-          {/* Right Exit Fullscreen Shortcut (hidden on mobile, top bar exit is always available) */}
-          <div className="hidden sm:flex items-center justify-end w-1/4">
-            <button
-              onClick={closeFullscreen}
-              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition"
-            >
-              <Minimize2 className="w-3.5 h-3.5" />
-              <span>Exit</span>
-            </button>
-          </div>
+          {/* Right Balanced Spacer (No redundant Exit button) */}
+          <div className="hidden sm:block w-1/4" />
         </div>
       </footer>
     </div>

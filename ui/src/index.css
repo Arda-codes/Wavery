@@ -78,18 +78,124 @@
   --color-text-muted: #71717A;
 }
 
+[data-theme="ocean"] {
+  --color-bg: #08131E;
+  --color-surface: #0E1D2D;
+  --color-surface-hover: #162C42;
+  --color-surface-active: #1E3A56;
+  --color-deck: rgba(10, 24, 38, 0.94);
+  --color-sidebar: rgba(8, 19, 30, 0.96);
+  --color-border: rgba(14, 165, 233, 0.20);
+  --color-border-subtle: rgba(14, 165, 233, 0.08);
+  --color-text-primary: #F0F9FF;
+  --color-text-secondary: #7DD3FC;
+  --color-text-muted: #38BDF8;
+}
+
+[data-theme="purple"] {
+  --color-bg: #0F0919;
+  --color-surface: #191029;
+  --color-surface-hover: #25183E;
+  --color-surface-active: #332252;
+  --color-deck: rgba(18, 11, 30, 0.94);
+  --color-sidebar: rgba(15, 9, 25, 0.96);
+  --color-border: rgba(168, 85, 247, 0.20);
+  --color-border-subtle: rgba(168, 85, 247, 0.08);
+  --color-text-primary: #FAF5FF;
+  --color-text-secondary: #C084FC;
+  --color-text-muted: #9333EA;
+}
+
+[data-theme="forest"] {
+  --color-bg: #0A130E;
+  --color-surface: #122018;
+  --color-surface-hover: #1A2E23;
+  --color-surface-active: #233E2F;
+  --color-deck: rgba(12, 23, 16, 0.94);
+  --color-sidebar: rgba(10, 19, 14, 0.96);
+  --color-border: rgba(16, 185, 129, 0.20);
+  --color-border-subtle: rgba(16, 185, 129, 0.08);
+  --color-text-primary: #F0FDF4;
+  --color-text-secondary: #6EE7B7;
+  --color-text-muted: #34D399;
+}
+
+[data-theme="mocha"] {
+  --color-bg: #1E1E2E;
+  --color-surface: #252538;
+  --color-surface-hover: #313244;
+  --color-surface-active: #45475A;
+  --color-deck: rgba(24, 24, 37, 0.95);
+  --color-sidebar: rgba(17, 17, 27, 0.96);
+  --color-border: rgba(203, 166, 247, 0.18);
+  --color-border-subtle: rgba(255, 255, 255, 0.05);
+  --color-text-primary: #CDD6F4;
+  --color-text-secondary: #A6ADC8;
+  --color-text-muted: #6C7086;
+}
+
+[data-theme="macchiato"] {
+  --color-bg: #24273A;
+  --color-surface: #2D3149;
+  --color-surface-hover: #363A55;
+  --color-surface-active: #494D64;
+  --color-deck: rgba(30, 32, 48, 0.95);
+  --color-sidebar: rgba(24, 25, 38, 0.96);
+  --color-border: rgba(245, 169, 127, 0.18);
+  --color-border-subtle: rgba(255, 255, 255, 0.05);
+  --color-text-primary: #CAD3F5;
+  --color-text-secondary: #A5ADCB;
+  --color-text-muted: #6E738D;
+}
+
+[data-theme="frappe"] {
+  --color-bg: #303446;
+  --color-surface: #393D52;
+  --color-surface-hover: #414559;
+  --color-surface-active: #51576D;
+  --color-deck: rgba(41, 44, 60, 0.95);
+  --color-sidebar: rgba(35, 38, 52, 0.96);
+  --color-border: rgba(140, 170, 238, 0.18);
+  --color-border-subtle: rgba(255, 255, 255, 0.05);
+  --color-text-primary: #C6D0F5;
+  --color-text-secondary: #A5ADCE;
+  --color-text-muted: #737994;
+}
+
+[data-theme="latte"] {
+  --color-bg: #EFF1F5;
+  --color-surface: #FFFFFF;
+  --color-surface-hover: #E6E9EF;
+  --color-surface-active: #DCE0E8;
+  --color-deck: rgba(230, 233, 239, 0.96);
+  --color-sidebar: rgba(239, 241, 245, 0.98);
+  --color-border: rgba(30, 102, 245, 0.15);
+  --color-border-subtle: rgba(0, 0, 0, 0.04);
+  --color-text-primary: #4C4F69;
+  --color-text-secondary: #5C5F77;
+  --color-text-muted: #8C8FA1;
+}
+
 [data-theme="light"] input[type="text"],
-[data-theme="light"] textarea {
+[data-theme="light"] textarea,
+[data-theme="latte"] input[type="text"],
+[data-theme="latte"] textarea,
+[data-light-mode="true"] input[type="text"],
+[data-light-mode="true"] textarea {
   background-color: #FFFFFF !important;
   color: #18181B !important;
   border-color: rgba(0, 0, 0, 0.12) !important;
 }
 
-[data-theme="light"] ::-webkit-scrollbar-thumb {
+[data-theme="light"] ::-webkit-scrollbar-thumb,
+[data-theme="latte"] ::-webkit-scrollbar-thumb,
+[data-light-mode="true"] ::-webkit-scrollbar-thumb {
   background: rgba(0, 0, 0, 0.15);
 }
 
-[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover,
+[data-theme="latte"] ::-webkit-scrollbar-thumb:hover,
+[data-light-mode="true"] ::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 0, 0, 0.28);
 }
 
@@ -124,8 +230,13 @@ body {
   background: rgba(255, 255, 255, 0.28);
 }
 
-/* GPU hardware accelerated scrolling and containment */
-.overflow-y-auto {
+/* GPU hardware accelerated scrolling, containment and smooth VSync motion */
+html {
+  scroll-behavior: smooth;
+}
+
+.overflow-y-auto,
+.overflow-x-auto {
   overscroll-behavior: contain;
   transform: translateZ(0);
   -webkit-overflow-scrolling: touch;
@@ -135,7 +246,24 @@ img {
   content-visibility: auto;
 }
 
-/* Custom Spotify / Apple Music Range Slider */
+/* Apple HIG & VSync Hardware Acceleration Utilities */
+.hardware-accelerated,
+.will-change-transform {
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+.transition-smooth {
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.transition-spring {
+  transition-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Custom Spotify / Apple Music Range Slider with VSync Smooth Thumb */
 input[type="range"].wavery-slider {
   --slider-progress: 0%;
   --track-color: rgba(255, 255, 255, 0.12);
@@ -153,7 +281,9 @@ input[type="range"].wavery-slider {
   border-radius: 9999px;
   outline: none;
   cursor: pointer;
-  transition: height 120ms ease;
+  transform: translateZ(0);
+  will-change: background;
+  transition: height 160ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .group\/scrubber:hover input[type="range"].wavery-slider,
@@ -170,15 +300,16 @@ input[type="range"].wavery-slider::-webkit-slider-thumb {
   background: #FFFFFF;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(0, 0, 0, 0.08);
   opacity: 0;
-  transform: scale(0.7);
-  transition: opacity 120ms ease, transform 120ms ease;
+  transform: scale3d(0.7, 0.7, 1);
+  will-change: transform, opacity;
+  transition: opacity 160ms cubic-bezier(0.16, 1, 0.3, 1), transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .group\/scrubber:hover input[type="range"].wavery-slider::-webkit-slider-thumb,
 input[type="range"].wavery-slider:hover::-webkit-slider-thumb,
 input[type="range"].wavery-slider:active::-webkit-slider-thumb {
   opacity: 1;
-  transform: scale(1);
+  transform: scale3d(1, 1, 1);
 }
 
 input[type="range"].wavery-slider::-moz-range-track {
@@ -202,45 +333,120 @@ input[type="range"].wavery-slider::-moz-range-thumb {
   background: #FFFFFF;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(0, 0, 0, 0.08);
   opacity: 0;
-  transform: scale(0.7);
-  transition: opacity 120ms ease, transform 120ms ease;
+  transform: scale3d(0.7, 0.7, 1);
+  will-change: transform, opacity;
+  transition: opacity 160ms cubic-bezier(0.16, 1, 0.3, 1), transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .group\/scrubber:hover input[type="range"].wavery-slider::-moz-range-thumb,
 input[type="range"].wavery-slider:hover::-moz-range-thumb,
 input[type="range"].wavery-slider:active::-moz-range-thumb {
   opacity: 1;
-  transform: scale(1);
+  transform: scale3d(1, 1, 1);
 }
+
+/* =========================================================
+   HARDWARE-ACCELERATED VSYNC KEYFRAMES & UTILITIES
+   ========================================================= */
 
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translate3d(0, 6px, 0);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translate3d(0, 0, 0);
   }
 }
 
-.animate-fade-in {
-  animation: fadeIn 150ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+.animate-fade-in,
+.animate-fadeIn {
+  animation: fadeIn 180ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: opacity, transform;
+}
+
+@keyframes scaleUp {
+  from {
+    opacity: 0;
+    transform: scale3d(0.96, 0.96, 1);
+  }
+  to {
+    opacity: 1;
+    transform: scale3d(1, 1, 1);
+  }
+}
+
+.animate-scaleUp,
+.animate-scale-up {
+  animation: scaleUp 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: opacity, transform;
+  transform-origin: center center;
+}
+
+@keyframes drawerSlideInRight {
+  from {
+    opacity: 0.85;
+    transform: translate3d(100%, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.animate-drawer-in-right {
+  animation: drawerSlideInRight 260ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes drawerSlideInLeft {
+  from {
+    opacity: 0.85;
+    transform: translate3d(-100%, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.animate-drawer-in-left {
+  animation: drawerSlideInLeft 260ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes menuPopIn {
+  from {
+    opacity: 0;
+    transform: scale3d(0.96, 0.96, 1) translate3d(0, -4px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: scale3d(1, 1, 1) translate3d(0, 0, 0);
+  }
+}
+
+.animate-menu-in {
+  animation: menuPopIn 140ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+  transform-origin: top left;
 }
 
 @keyframes tooltipFadeIn {
   from {
     opacity: 0;
-    transform: translate(-50%, 4px) scale(0.95);
+    transform: translate3d(-50%, 4px, 0) scale3d(0.95, 0.95, 1);
   }
   to {
     opacity: 1;
-    transform: translate(-50%, 0) scale(1);
+    transform: translate3d(-50%, 0, 0) scale3d(1, 1, 1);
   }
 }
 
 .animate-tooltip {
-  animation: tooltipFadeIn 120ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: tooltipFadeIn 140ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
 }
 
 /* =========================================================
@@ -248,48 +454,48 @@ input[type="range"].wavery-slider:active::-moz-range-thumb {
    Uses scaleY with origin-bottom for 0-reflow 144Hz animation
    ========================================================= */
 @keyframes wavery-eq-1 {
-  0%, 100% { transform: scaleY(0.25); }
-  50% { transform: scaleY(1.0); }
+  0%, 100% { transform: translate3d(0, 0, 0) scaleY(0.25); }
+  50% { transform: translate3d(0, 0, 0) scaleY(1.0); }
 }
 
 @keyframes wavery-eq-2 {
-  0%, 100% { transform: scaleY(0.85); }
-  35% { transform: scaleY(0.25); }
-  75% { transform: scaleY(1.0); }
+  0%, 100% { transform: translate3d(0, 0, 0) scaleY(0.85); }
+  35% { transform: translate3d(0, 0, 0) scaleY(0.25); }
+  75% { transform: translate3d(0, 0, 0) scaleY(1.0); }
 }
 
 @keyframes wavery-eq-3 {
-  0%, 100% { transform: scaleY(0.45); }
-  45% { transform: scaleY(1.0); }
-  80% { transform: scaleY(0.2); }
+  0%, 100% { transform: translate3d(0, 0, 0) scaleY(0.45); }
+  45% { transform: translate3d(0, 0, 0) scaleY(1.0); }
+  80% { transform: translate3d(0, 0, 0) scaleY(0.2); }
 }
 
 @keyframes wavery-eq-4 {
-  0%, 100% { transform: scaleY(0.95); }
-  30% { transform: scaleY(0.25); }
-  70% { transform: scaleY(0.75); }
+  0%, 100% { transform: translate3d(0, 0, 0) scaleY(0.95); }
+  30% { transform: translate3d(0, 0, 0) scaleY(0.25); }
+  70% { transform: translate3d(0, 0, 0) scaleY(0.75); }
 }
 
 .animate-wavery-eq-1 {
-  animation: wavery-eq-1 1.2s ease-in-out infinite;
+  animation: wavery-eq-1 1.2s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
   transform-origin: bottom;
   will-change: transform;
 }
 
 .animate-wavery-eq-2 {
-  animation: wavery-eq-2 1.05s ease-in-out infinite;
+  animation: wavery-eq-2 1.05s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
   transform-origin: bottom;
   will-change: transform;
 }
 
 .animate-wavery-eq-3 {
-  animation: wavery-eq-3 1.35s ease-in-out infinite;
+  animation: wavery-eq-3 1.35s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
   transform-origin: bottom;
   will-change: transform;
 }
 
 .animate-wavery-eq-4 {
-  animation: wavery-eq-4 1.15s ease-in-out infinite;
+  animation: wavery-eq-4 1.15s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
   transform-origin: bottom;
   will-change: transform;
 }
@@ -367,30 +573,52 @@ input[type="range"].wavery-slider:active::-moz-range-thumb {
 
 /* --- Text accent --- */
 .text-\[\#FA586A\] { color: var(--accent-color) !important; }
+.text-\[\#FA586A\]\/60 { color: color-mix(in srgb, var(--accent-color) 60%, transparent) !important; }
 .text-\[\#FA586A\]\/70 { color: color-mix(in srgb, var(--accent-color) 70%, transparent) !important; }
+.text-\[\#FA586A\]\/80 { color: color-mix(in srgb, var(--accent-color) 80%, transparent) !important; }
+.text-\[\#FA586A\]\/90 { color: color-mix(in srgb, var(--accent-color) 90%, transparent) !important; }
 .text-\[\#FF7A8A\] { color: color-mix(in srgb, var(--accent-color) 90%, white) !important; }
 
 /* --- Background accent --- */
 .bg-\[\#FA586A\] { background-color: var(--accent-color) !important; }
+.bg-\[\#FA586A\]\/5 { background-color: color-mix(in srgb, var(--accent-color) 5%, transparent) !important; }
 .bg-\[\#FA586A\]\/10 { background-color: color-mix(in srgb, var(--accent-color) 10%, transparent) !important; }
 .bg-\[\#FA586A\]\/15 { background-color: color-mix(in srgb, var(--accent-color) 15%, transparent) !important; }
 .bg-\[\#FA586A\]\/20 { background-color: color-mix(in srgb, var(--accent-color) 20%, transparent) !important; }
+.bg-\[\#FA586A\]\/25 { background-color: color-mix(in srgb, var(--accent-color) 25%, transparent) !important; }
 .bg-\[\#FA586A\]\/30 { background-color: color-mix(in srgb, var(--accent-color) 30%, transparent) !important; }
+.bg-\[\#FA586A\]\/40 { background-color: color-mix(in srgb, var(--accent-color) 40%, transparent) !important; }
+.bg-\[\#FA586A\]\/50 { background-color: color-mix(in srgb, var(--accent-color) 50%, transparent) !important; }
+.bg-\[\#FA586A\]\/60 { background-color: color-mix(in srgb, var(--accent-color) 60%, transparent) !important; }
+.bg-\[\#FA586A\]\/70 { background-color: color-mix(in srgb, var(--accent-color) 70%, transparent) !important; }
+.bg-\[\#FA586A\]\/80 { background-color: color-mix(in srgb, var(--accent-color) 80%, transparent) !important; }
+.bg-\[\#FA586A\]\/90 { background-color: color-mix(in srgb, var(--accent-color) 90%, transparent) !important; }
 
-/* --- Background accent hover --- */
+/* --- Background accent hover & states --- */
 .bg-\[\#E04859\] { background-color: var(--color-accent-hover) !important; }
+.hover\:bg-\[\#E04859\]:hover { background-color: var(--color-accent-hover) !important; }
+.hover\:bg-\[\#FA586A\]:hover { background-color: var(--accent-color) !important; }
+.hover\:bg-\[\#FA586A\]\/30:hover { background-color: color-mix(in srgb, var(--accent-color) 30%, transparent) !important; }
+.hover\:bg-\[\#FA586A\]\/90:hover,
+.hover\:bg-\[\#fa586a\]\/90:hover { background-color: color-mix(in srgb, var(--accent-color) 90%, transparent) !important; }
+.hover\:bg-\[\#e04557\]:hover,
+.hover\:bg-\[\#E03A30\]:hover { background-color: var(--color-accent-hover) !important; }
+.disabled\:hover\:bg-\[\#FA586A\]:disabled:hover { background-color: var(--accent-color) !important; }
 
 /* --- Border accent --- */
 .border-\[\#FA586A\] { border-color: var(--accent-color) !important; }
+.border-\[\#FA586A\]\/10 { border-color: color-mix(in srgb, var(--accent-color) 10%, transparent) !important; }
 .border-\[\#FA586A\]\/20 { border-color: color-mix(in srgb, var(--accent-color) 20%, transparent) !important; }
+.border-\[\#FA586A\]\/25 { border-color: color-mix(in srgb, var(--accent-color) 25%, transparent) !important; }
 .border-\[\#FA586A\]\/30 { border-color: color-mix(in srgb, var(--accent-color) 30%, transparent) !important; }
 .border-\[\#FA586A\]\/40 { border-color: color-mix(in srgb, var(--accent-color) 40%, transparent) !important; }
 .border-\[\#FA586A\]\/50 { border-color: color-mix(in srgb, var(--accent-color) 50%, transparent) !important; }
 .border-\[\#FA586A\]\/60 { border-color: color-mix(in srgb, var(--accent-color) 60%, transparent) !important; }
 .border-\[\#FA586A\]\/70 { border-color: color-mix(in srgb, var(--accent-color) 70%, transparent) !important; }
 
-/* --- Fill accent --- */
+/* --- Fill & Controls --- */
 .fill-\[\#FA586A\] { fill: var(--accent-color) !important; }
+.accent-\[\#FA586A\] { accent-color: var(--accent-color) !important; }
 
 /* --- Ring accent --- */
 .ring-\[\#FA586A\]\/20 { --tw-ring-color: color-mix(in srgb, var(--accent-color) 20%, transparent) !important; }
@@ -415,20 +643,21 @@ input[type="range"].wavery-slider:active::-moz-range-thumb {
 /* --- Gradient via-accent --- */
 .via-\[\#FA586A\]\/5  { --tw-gradient-via: color-mix(in srgb, var(--accent-color)  5%, transparent) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-via), var(--tw-gradient-to) !important; }
 .via-\[\#FA586A\]\/10 { --tw-gradient-via: color-mix(in srgb, var(--accent-color) 10%, transparent) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-via), var(--tw-gradient-to) !important; }
+.via-\[\#FA586A\]\/20 { --tw-gradient-via: color-mix(in srgb, var(--accent-color) 20%, transparent) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-via), var(--tw-gradient-to) !important; }
+.via-\[\#E0284F\] { --tw-gradient-via: var(--color-accent-hover) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-via), var(--tw-gradient-to) !important; }
+.via-\[\#E0284F\]\/10 { --tw-gradient-via: color-mix(in srgb, var(--color-accent-hover) 10%, transparent) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-via), var(--tw-gradient-to) !important; }
 
 /* --- Gradient to-accent (darker shade used as gradient endpoint) --- */
 /* #E0284F, #cc2043, #f84357 are all "dark accent" variants that appear
-   as gradient destinations alongside from-[#FA586A].  Map them to
+   as gradient destinations alongside from-[#FA586A]. Map them to
    --color-accent-hover so they scale with the chosen accent. */
+.to-\[\#FA586A\] { --tw-gradient-to: var(--accent-color) !important; }
 .to-\[\#E0284F\] { --tw-gradient-to: var(--color-accent-hover) !important; }
 .to-\[\#E04557\] { --tw-gradient-to: var(--color-accent-hover) !important; }
 .to-\[\#cc2043\]  { --tw-gradient-to: var(--color-accent-hover) !important; }
 .to-\[\#f84357\]  { --tw-gradient-to: var(--color-accent-hover) !important; }
 
 /* --- Hover-prefixed accent variants (Tailwind hover: prefix) --- */
-.hover\:bg-\[\#E04859\]:hover { background-color: var(--color-accent-hover) !important; }
-.hover\:bg-\[\#FA586A\]:hover { background-color: var(--accent-color) !important; }
-.hover\:bg-\[\#FA586A\]\/30:hover { background-color: color-mix(in srgb, var(--accent-color) 30%, transparent) !important; }
 .hover\:border-\[\#FA586A\]\/50:hover { border-color: color-mix(in srgb, var(--accent-color) 50%, transparent) !important; }
 .hover\:shadow-\[\#FA586A\]\/15:hover { --tw-shadow-color: color-mix(in srgb, var(--accent-color) 15%, transparent) !important; }
 .hover\:text-\[\#FA586A\]:hover { color: var(--accent-color) !important; }
@@ -459,8 +688,10 @@ input[type="range"].wavery-slider:active::-moz-range-thumb {
 /* --- Group-focus-within accent --- */
 .group-focus-within\:text-\[\#FA586A\]:is(:where(.group):focus-within *) { color: var(--accent-color) !important; }
 
-/* --- Selection accent (set via ::selection, not Tailwind class) --- */
+/* --- Selection accent --- */
 ::selection { background-color: color-mix(in srgb, var(--accent-color) 30%, transparent); color: white; }
+.selection\:bg-\[\#FA586A\]\/30::selection,
+.selection\:bg-\[\#FA586A\]\/30 *::selection { background-color: color-mix(in srgb, var(--accent-color) 30%, transparent) !important; }
 
 /* =========================================================
    DYNAMIC THEME SURFACE COLOR OVERRIDES
@@ -468,32 +699,56 @@ input[type="range"].wavery-slider:active::-moz-range-thumb {
    so OLED / Midnight / Light themes can override them.
    ========================================================= */
 
-/* --- Primary background (#0D0D10 = --color-bg) --- */
+/* --- Primary background (#0D0D10 / #0A0A0C / #0A0A0D = --color-bg) --- */
 .bg-\[\#0D0D10\] { background-color: var(--color-bg) !important; }
 .bg-\[\#0D0D10\]\/80 { background-color: color-mix(in srgb, var(--color-bg) 80%, transparent) !important; }
 .bg-\[\#0D0D10\]\/95 { background-color: color-mix(in srgb, var(--color-bg) 95%, transparent) !important; }
+.bg-\[\#0A0A0C\] { background-color: var(--color-bg) !important; }
 .bg-\[\#0A0A0D\] { background-color: var(--color-bg) !important; }
+.to-\[\#0D0D10\] { --tw-gradient-to: var(--color-bg) !important; }
 
 /* --- Sidebar (#0F0F12 / #0F0F13 = --color-sidebar) --- */
-.bg-\[\#0F0F13\]\/95 { background-color: var(--color-sidebar) !important; }
+.bg-\[\#0F0F13\] { background-color: var(--color-sidebar) !important; }
 .bg-\[\#0F0F13\]\/60 { background-color: color-mix(in srgb, var(--color-sidebar) 60%, transparent) !important; }
+.bg-\[\#0F0F13\]\/80 { background-color: color-mix(in srgb, var(--color-sidebar) 80%, transparent) !important; }
+.bg-\[\#0F0F13\]\/95 { background-color: var(--color-sidebar) !important; }
+.bg-\[\#0F0F13\]\/98 { background-color: color-mix(in srgb, var(--color-sidebar) 98%, transparent) !important; }
+.to-\[\#0F0F13\] { --tw-gradient-to: var(--color-sidebar) !important; }
 
-/* --- Deck (#121216 = --color-deck) --- */
+/* --- Deck (#121216 / #0E0E12 / #101014 = --color-deck) --- */
+.bg-\[\#0E0E12\] { background-color: var(--color-deck) !important; }
+.bg-\[\#0E0E12\]\/95 { background-color: color-mix(in srgb, var(--color-deck) 95%, transparent) !important; }
+.from-\[\#0E0E12\] { --tw-gradient-from: var(--color-deck) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, color-mix(in srgb, var(--color-deck) 0%, transparent)) !important; }
+.via-\[\#0E0E12\]\/60 { --tw-gradient-via: color-mix(in srgb, var(--color-deck) 60%, transparent) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-via), var(--tw-gradient-to) !important; }
+.bg-\[\#101014\] { background-color: var(--color-deck) !important; }
+.bg-\[\#101014\]\/95 { background-color: var(--color-deck) !important; }
+.bg-\[\#101014\]\/98 { background-color: color-mix(in srgb, var(--color-deck) 98%, transparent) !important; }
 .bg-\[\#121216\] { background-color: var(--color-deck) !important; }
 .bg-\[\#121216\]\/50 { background-color: color-mix(in srgb, var(--color-deck) 50%, transparent) !important; }
 .bg-\[\#121216\]\/60 { background-color: color-mix(in srgb, var(--color-deck) 60%, transparent) !important; }
 .bg-\[\#121216\]\/95 { background-color: var(--color-deck) !important; }
-.bg-\[\#101014\]\/95 { background-color: var(--color-deck) !important; }
+.bg-\[\#121216\]\/98 { background-color: color-mix(in srgb, var(--color-deck) 98%, transparent) !important; }
+@media (min-width: 1536px) {
+  .\32 xl\:bg-\[\#121216\]\/95 { background-color: color-mix(in srgb, var(--color-deck) 95%, transparent) !important; }
+}
+.to-\[\#121216\] { --tw-gradient-to: var(--color-deck) !important; }
 
-/* --- Surface (#16161A = --color-surface) --- */
+/* --- Surface (#16161A / #18181B / #18181C / #18181D = --color-surface) --- */
 .bg-\[\#16161A\] { background-color: var(--color-surface) !important; }
 .bg-\[\#16161A\]\/60 { background-color: color-mix(in srgb, var(--color-surface) 60%, transparent) !important; }
 .bg-\[\#16161A\]\/80 { background-color: color-mix(in srgb, var(--color-surface) 80%, transparent) !important; }
 .bg-\[\#16161C\]\/95 { background-color: color-mix(in srgb, var(--color-surface) 95%, transparent) !important; }
-
-/* --- Surface variants (slightly elevated surfaces) --- */
+.bg-\[\#18181B\] { background-color: var(--color-surface) !important; }
+.bg-\[\#18181C\] { background-color: var(--color-surface) !important; }
 .bg-\[\#18181D\] { background-color: var(--color-surface) !important; }
 .bg-\[\#18181F\] { background-color: var(--color-surface) !important; }
+.via-\[\#16161A\] { --tw-gradient-via: var(--color-surface) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-via), var(--tw-gradient-to) !important; }
+.via-\[\#16161A\]\/80 { --tw-gradient-via: color-mix(in srgb, var(--color-surface) 80%, transparent) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-via), var(--tw-gradient-to) !important; }
+
+/* --- Surface variants (slightly elevated surfaces) --- */
+.bg-\[\#141418\] { background-color: var(--color-surface-hover) !important; }
+.bg-\[\#1A1A20\] { background-color: var(--color-surface-hover) !important; }
+.bg-\[\#1A1A22\] { background-color: var(--color-surface-hover) !important; }
 .bg-\[\#1C1C22\] { background-color: var(--color-surface-hover) !important; }
 .bg-\[\#1C1C22\]\/95 { background-color: color-mix(in srgb, var(--color-surface-hover) 95%, transparent) !important; }
 .bg-\[\#202026\] { background-color: var(--color-surface-hover) !important; }
@@ -501,48 +756,358 @@ input[type="range"].wavery-slider:active::-moz-range-thumb {
 .bg-\[\#222228\] { background-color: var(--color-surface-hover) !important; }
 .bg-\[\#24242C\] { background-color: var(--color-surface-active) !important; }
 .bg-\[\#30303A\] { background-color: var(--color-surface-active) !important; }
+.bg-\[\#3F3F46\]\/60 { background-color: color-mix(in srgb, var(--color-surface-active) 60%, transparent) !important; }
+.from-\[\#1E1E24\] { --tw-gradient-from: var(--color-surface-active) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, color-mix(in srgb, var(--color-surface-active) 0%, transparent)) !important; }
+
+.hover\:bg-\[\#1A1A22\]:hover { background-color: var(--color-surface-hover) !important; }
+.hover\:bg-\[\#1C1C22\]:hover { background-color: var(--color-surface-hover) !important; }
+.hover\:bg-\[\#202026\]:hover { background-color: var(--color-surface-hover) !important; }
+.hover\:bg-\[\#30303A\]:hover { background-color: var(--color-surface-active) !important; }
 
 /* --- Text colors mapped to CSS variables --- */
+.text-\[\#52525B\] { color: var(--color-text-muted) !important; }
 .text-\[\#71717A\] { color: var(--color-text-muted) !important; }
 .text-\[\#71717A\]\/40 { color: color-mix(in srgb, var(--color-text-muted) 40%, transparent) !important; }
 .text-\[\#71717A\]\/50 { color: color-mix(in srgb, var(--color-text-muted) 50%, transparent) !important; }
 .text-\[\#71717A\]\/60 { color: color-mix(in srgb, var(--color-text-muted) 60%, transparent) !important; }
 .text-\[\#A1A1AA\] { color: var(--color-text-secondary) !important; }
+.text-\[\#D4D4D8\] { color: var(--color-text-secondary) !important; }
 .text-\[\#E4E4E7\] { color: var(--color-text-primary) !important; }
 .text-\[\#FFFFFF\] { color: var(--color-text-primary) !important; }
 
-/* --- Hover-prefixed text variants --- */
+/* --- Hover & Disabled text variants --- */
 .hover\:text-\[\#A1A1AA\]:hover { color: var(--color-text-secondary) !important; }
+.disabled\:hover\:text-\[\#71717A\]:disabled:hover { color: var(--color-text-muted) !important; }
+.disabled\:hover\:text-\[\#D4D4D8\]:disabled:hover { color: var(--color-text-secondary) !important; }
 .group-hover\:text-\[\#A1A1AA\]:is(:where(.group):hover *) { color: var(--color-text-secondary) !important; }
 .group-hover\:text-white:is(:where(.group):hover *) { color: var(--color-text-primary) !important; }
+.group-hover\/col\:text-\[\#71717A\]:is(:where(.group\/col):hover *) { color: var(--color-text-muted) !important; }
+
+/* --- Placeholders --- */
+input.placeholder-\[\#71717A\]::placeholder,
+textarea.placeholder-\[\#71717A\]::placeholder,
+.placeholder-\[\#71717A\]::placeholder { color: var(--color-text-muted) !important; }
+input.placeholder-\[\#52525B\]::placeholder,
+textarea.placeholder-\[\#52525B\]::placeholder,
+.placeholder-\[\#52525B\]::placeholder { color: var(--color-text-muted) !important; }
 
 /* --- Light theme: special text-white override since white text is invisible on light bg --- */
-[data-theme="light"] .text-white { color: var(--color-text-primary) !important; }
-[data-theme="light"] .hover\:text-white:hover { color: var(--color-text-primary) !important; }
-[data-theme="light"] .group-hover\:text-white:is(:where(.group):hover *) { color: var(--color-text-primary) !important; }
+[data-theme="light"] .text-white,
+[data-theme="latte"] .text-white,
+[data-light-mode="true"] .text-white { color: var(--color-text-primary) !important; }
+
+[data-theme="light"] .hover\:text-white:hover,
+[data-theme="latte"] .hover\:text-white:hover,
+[data-light-mode="true"] .hover\:text-white:hover { color: var(--color-text-primary) !important; }
+
+[data-theme="light"] .group-hover\:text-white:is(:where(.group):hover *),
+[data-theme="latte"] .group-hover\:text-white:is(:where(.group):hover *),
+[data-light-mode="true"] .group-hover\:text-white:is(:where(.group):hover *) { color: var(--color-text-primary) !important; }
+
+/* --- Light theme: semi-transparent white text overrides --- */
+[data-theme="light"] .text-white\/20,
+[data-theme="latte"] .text-white\/20,
+[data-light-mode="true"] .text-white\/20 { color: color-mix(in srgb, var(--color-text-primary) 20%, transparent) !important; }
+
+[data-theme="light"] .text-white\/30,
+[data-theme="latte"] .text-white\/30,
+[data-light-mode="true"] .text-white\/30 { color: color-mix(in srgb, var(--color-text-primary) 35%, transparent) !important; }
+
+[data-theme="light"] .text-white\/35,
+[data-theme="latte"] .text-white\/35,
+[data-light-mode="true"] .text-white\/35 { color: color-mix(in srgb, var(--color-text-primary) 40%, transparent) !important; }
+
+[data-theme="light"] .text-white\/40,
+[data-theme="latte"] .text-white\/40,
+[data-light-mode="true"] .text-white\/40 { color: color-mix(in srgb, var(--color-text-primary) 45%, transparent) !important; }
+
+[data-theme="light"] .text-white\/50,
+[data-theme="latte"] .text-white\/50,
+[data-light-mode="true"] .text-white\/50 { color: color-mix(in srgb, var(--color-text-primary) 55%, transparent) !important; }
+
+[data-theme="light"] .text-white\/60,
+[data-theme="latte"] .text-white\/60,
+[data-light-mode="true"] .text-white\/60 { color: color-mix(in srgb, var(--color-text-primary) 65%, transparent) !important; }
+
+[data-theme="light"] .text-white\/70,
+[data-theme="latte"] .text-white\/70,
+[data-light-mode="true"] .text-white\/70 { color: color-mix(in srgb, var(--color-text-primary) 75%, transparent) !important; }
+
+[data-theme="light"] .text-white\/80,
+[data-theme="latte"] .text-white\/80,
+[data-light-mode="true"] .text-white\/80 { color: color-mix(in srgb, var(--color-text-primary) 85%, transparent) !important; }
+
+[data-theme="light"] .text-white\/90,
+[data-theme="latte"] .text-white\/90,
+[data-light-mode="true"] .text-white\/90 { color: color-mix(in srgb, var(--color-text-primary) 92%, transparent) !important; }
+
+[data-theme="light"] .hover\:text-white\/60:hover,
+[data-theme="latte"] .hover\:text-white\/60:hover,
+[data-light-mode="true"] .hover\:text-white\/60:hover { color: color-mix(in srgb, var(--color-text-primary) 65%, transparent) !important; }
+
+[data-theme="light"] .hover\:text-white\/70:hover,
+[data-theme="latte"] .hover\:text-white\/70:hover,
+[data-light-mode="true"] .hover\:text-white\/70:hover { color: color-mix(in srgb, var(--color-text-primary) 75%, transparent) !important; }
+
+[data-theme="light"] .hover\:text-white\/80:hover,
+[data-theme="latte"] .hover\:text-white\/80:hover,
+[data-light-mode="true"] .hover\:text-white\/80:hover { color: color-mix(in srgb, var(--color-text-primary) 85%, transparent) !important; }
+
+[data-theme="light"] .group-hover\:text-white\/60:is(:where(.group):hover *),
+[data-theme="latte"] .group-hover\:text-white\/60:is(:where(.group):hover *),
+[data-light-mode="true"] .group-hover\:text-white\/60:is(:where(.group):hover *) { color: color-mix(in srgb, var(--color-text-primary) 65%, transparent) !important; }
 
 /* --- Light theme: border & bg white overrides --- */
-[data-theme="light"] .border-white\/\[0\.04\] { border-color: var(--color-border-subtle) !important; }
-[data-theme="light"] .border-white\/\[0\.06\] { border-color: var(--color-border) !important; }
-[data-theme="light"] .border-white\/\[0\.07\] { border-color: var(--color-border) !important; }
-[data-theme="light"] .border-white\/\[0\.08\] { border-color: var(--color-border) !important; }
-[data-theme="light"] .border-white\/5 { border-color: var(--color-border-subtle) !important; }
-[data-theme="light"] .border-white\/10 { border-color: var(--color-border) !important; }
-[data-theme="light"] .bg-white\/\[0\.04\] { background-color: rgba(0, 0, 0, 0.04) !important; }
-[data-theme="light"] .bg-white\/\[0\.06\] { background-color: rgba(0, 0, 0, 0.05) !important; }
-[data-theme="light"] .bg-white\/\[0\.08\] { background-color: rgba(0, 0, 0, 0.06) !important; }
-[data-theme="light"] .hover\:bg-white\/\[0\.04\]:hover { background-color: rgba(0, 0, 0, 0.04) !important; }
-[data-theme="light"] .hover\:bg-white\/\[0\.08\]:hover { background-color: rgba(0, 0, 0, 0.06) !important; }
-[data-theme="light"] .hover\:bg-white\/5:hover { background-color: rgba(0, 0, 0, 0.04) !important; }
-[data-theme="light"] .hover\:bg-white\/10:hover { background-color: rgba(0, 0, 0, 0.08) !important; }
+[data-theme="light"] .border-white\/\[0\.04\],
+[data-theme="latte"] .border-white\/\[0\.04\],
+[data-light-mode="true"] .border-white\/\[0\.04\] { border-color: var(--color-border-subtle) !important; }
+
+[data-theme="light"] .border-white\/\[0\.06\],
+[data-theme="latte"] .border-white\/\[0\.06\],
+[data-light-mode="true"] .border-white\/\[0\.06\] { border-color: var(--color-border) !important; }
+
+[data-theme="light"] .border-white\/\[0\.07\],
+[data-theme="latte"] .border-white\/\[0\.07\],
+[data-light-mode="true"] .border-white\/\[0\.07\] { border-color: var(--color-border) !important; }
+
+[data-theme="light"] .border-white\/\[0\.08\],
+[data-theme="latte"] .border-white\/\[0\.08\],
+[data-light-mode="true"] .border-white\/\[0\.08\],
+[data-theme="light"] .border-white\/\[0\.09\],
+[data-theme="latte"] .border-white\/\[0\.09\],
+[data-light-mode="true"] .border-white\/\[0\.09\] { border-color: var(--color-border) !important; }
+
+[data-theme="light"] .border-white\/\[0\.10\],
+[data-theme="latte"] .border-white\/\[0\.10\],
+[data-light-mode="true"] .border-white\/\[0\.10\],
+[data-theme="light"] .border-white\/\[0\.12\],
+[data-theme="latte"] .border-white\/\[0\.12\],
+[data-light-mode="true"] .border-white\/\[0\.12\],
+[data-theme="light"] .border-white\/\[0\.15\],
+[data-theme="latte"] .border-white\/\[0\.15\],
+[data-light-mode="true"] .border-white\/\[0\.15\],
+[data-theme="light"] .border-white\/\[0\.18\],
+[data-theme="latte"] .border-white\/\[0\.18\],
+[data-light-mode="true"] .border-white\/\[0\.18\] { border-color: var(--color-border) !important; }
+
+[data-theme="light"] .border-white\/5,
+[data-theme="latte"] .border-white\/5,
+[data-light-mode="true"] .border-white\/5 { border-color: var(--color-border-subtle) !important; }
+
+[data-theme="light"] .border-white\/10,
+[data-theme="latte"] .border-white\/10,
+[data-light-mode="true"] .border-white\/10 { border-color: var(--color-border) !important; }
+
+[data-theme="light"] .bg-white\/\[0\.04\],
+[data-theme="latte"] .bg-white\/\[0\.04\],
+[data-light-mode="true"] .bg-white\/\[0\.04\] { background-color: rgba(0, 0, 0, 0.04) !important; }
+
+[data-theme="light"] .bg-white\/\[0\.06\],
+[data-theme="latte"] .bg-white\/\[0\.06\],
+[data-light-mode="true"] .bg-white\/\[0\.06\] { background-color: rgba(0, 0, 0, 0.05) !important; }
+
+[data-theme="light"] .bg-white\/\[0\.08\],
+[data-theme="latte"] .bg-white\/\[0\.08\],
+[data-light-mode="true"] .bg-white\/\[0\.08\] { background-color: rgba(0, 0, 0, 0.06) !important; }
+
+[data-theme="light"] .bg-white\/\[0\.10\],
+[data-theme="latte"] .bg-white\/\[0\.10\],
+[data-light-mode="true"] .bg-white\/\[0\.10\],
+[data-theme="light"] .bg-white\/10,
+[data-theme="latte"] .bg-white\/10,
+[data-light-mode="true"] .bg-white\/10 { background-color: rgba(0, 0, 0, 0.08) !important; }
+
+[data-theme="light"] .bg-white\/\[0\.12\],
+[data-theme="latte"] .bg-white\/\[0\.12\],
+[data-light-mode="true"] .bg-white\/\[0\.12\] { background-color: rgba(0, 0, 0, 0.09) !important; }
+
+[data-theme="light"] .bg-white\/\[0\.14\],
+[data-theme="latte"] .bg-white\/\[0\.14\],
+[data-light-mode="true"] .bg-white\/\[0\.14\] { background-color: rgba(0, 0, 0, 0.11) !important; }
+
+[data-theme="light"] .bg-white\/\[0\.16\],
+[data-theme="latte"] .bg-white\/\[0\.16\],
+[data-light-mode="true"] .bg-white\/\[0\.16\] { background-color: rgba(0, 0, 0, 0.13) !important; }
+
+[data-theme="light"] .bg-white\/20,
+[data-theme="latte"] .bg-white\/20,
+[data-light-mode="true"] .bg-white\/20 { background-color: rgba(0, 0, 0, 0.15) !important; }
+
+[data-theme="light"] .hover\:bg-white\/\[0\.04\]:hover,
+[data-theme="latte"] .hover\:bg-white\/\[0\.04\]:hover,
+[data-light-mode="true"] .hover\:bg-white\/\[0\.04\]:hover { background-color: rgba(0, 0, 0, 0.04) !important; }
+
+[data-theme="light"] .hover\:bg-white\/\[0\.08\]:hover,
+[data-theme="latte"] .hover\:bg-white\/\[0\.08\]:hover,
+[data-light-mode="true"] .hover\:bg-white\/\[0\.08\]:hover { background-color: rgba(0, 0, 0, 0.06) !important; }
+
+[data-theme="light"] .hover\:bg-white\/5:hover,
+[data-theme="latte"] .hover\:bg-white\/5:hover,
+[data-light-mode="true"] .hover\:bg-white\/5:hover { background-color: rgba(0, 0, 0, 0.04) !important; }
+
+[data-theme="light"] .hover\:bg-white\/\[0\.10\]:hover,
+[data-theme="latte"] .hover\:bg-white\/\[0\.10\]:hover,
+[data-light-mode="true"] .hover\:bg-white\/\[0\.10\]:hover,
+[data-theme="light"] .hover\:bg-white\/10:hover,
+[data-theme="latte"] .hover\:bg-white\/10:hover,
+[data-light-mode="true"] .hover\:bg-white\/10:hover { background-color: rgba(0, 0, 0, 0.08) !important; }
+
+[data-theme="light"] .hover\:bg-white\/\[0\.12\]:hover,
+[data-theme="latte"] .hover\:bg-white\/\[0\.12\]:hover,
+[data-light-mode="true"] .hover\:bg-white\/\[0\.12\]:hover { background-color: rgba(0, 0, 0, 0.10) !important; }
+
+[data-theme="light"] .hover\:bg-white\/\[0\.14\]:hover,
+[data-theme="latte"] .hover\:bg-white\/\[0\.14\]:hover,
+[data-light-mode="true"] .hover\:bg-white\/\[0\.14\]:hover { background-color: rgba(0, 0, 0, 0.12) !important; }
+
+[data-theme="light"] .hover\:bg-white\/20:hover,
+[data-theme="latte"] .hover\:bg-white\/20:hover,
+[data-light-mode="true"] .hover\:bg-white\/20:hover { background-color: rgba(0, 0, 0, 0.16) !important; }
+
+/* --- Light theme: card dividers --- */
+[data-theme="light"] .divide-white\/\[0\.06\] > :not([hidden]) ~ :not([hidden]),
+[data-theme="latte"] .divide-white\/\[0\.06\] > :not([hidden]) ~ :not([hidden]),
+[data-light-mode="true"] .divide-white\/\[0\.06\] > :not([hidden]) ~ :not([hidden]),
+[data-theme="light"] .divide-white\/\[0\.04\] > :not([hidden]) ~ :not([hidden]),
+[data-theme="latte"] .divide-white\/\[0\.04\] > :not([hidden]) ~ :not([hidden]),
+[data-light-mode="true"] .divide-white\/\[0\.04\] > :not([hidden]) ~ :not([hidden]),
+[data-theme="light"] .divide-white\/\[0\.08\] > :not([hidden]) ~ :not([hidden]),
+[data-theme="latte"] .divide-white\/\[0\.08\] > :not([hidden]) ~ :not([hidden]),
+[data-light-mode="true"] .divide-white\/\[0\.08\] > :not([hidden]) ~ :not([hidden]),
+[data-theme="light"] .divide-white\/10 > :not([hidden]) ~ :not([hidden]),
+[data-theme="latte"] .divide-white\/10 > :not([hidden]) ~ :not([hidden]),
+[data-light-mode="true"] .divide-white\/10 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--color-border) !important;
+}
+
+/* --- Apple HIG Toggle Switch Component --- */
+.wavery-toggle-off {
+  background-color: #39393D;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.wavery-toggle-off:hover {
+  background-color: #48484C;
+}
+
+[data-theme="light"] .wavery-toggle-off,
+[data-theme="latte"] .wavery-toggle-off,
+[data-light-mode="true"] .wavery-toggle-off {
+  background-color: #E5E5EA !important;
+  border: 1px solid rgba(0, 0, 0, 0.15) !important;
+}
+[data-theme="light"] .wavery-toggle-off:hover,
+[data-theme="latte"] .wavery-toggle-off:hover,
+[data-light-mode="true"] .wavery-toggle-off:hover {
+  background-color: #D1D1D6 !important;
+}
+
+.wavery-toggle-knob-off {
+  background-color: #FFFFFF;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35), 0 1px 2px rgba(0, 0, 0, 0.20);
+}
+
+[data-theme="light"] .wavery-toggle-knob-off,
+[data-theme="latte"] .wavery-toggle-knob-off,
+[data-light-mode="true"] .wavery-toggle-knob-off {
+  background-color: #FFFFFF !important;
+  border: 1px solid rgba(0, 0, 0, 0.10) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25), 0 1px 1px rgba(0, 0, 0, 0.12) !important;
+}
+
+/* --- Apple HIG Segmented Pickers --- */
+.wavery-segment-track {
+  background-color: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+[data-theme="light"] .wavery-segment-track,
+[data-theme="latte"] .wavery-segment-track,
+[data-light-mode="true"] .wavery-segment-track {
+  background-color: rgba(0, 0, 0, 0.06) !important;
+  border: 1px solid rgba(0, 0, 0, 0.10) !important;
+}
+
+.wavery-segment-active {
+  background-color: rgba(255, 255, 255, 0.14);
+  color: #FFFFFF;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.20);
+}
+[data-theme="light"] .wavery-segment-active,
+[data-theme="latte"] .wavery-segment-active,
+[data-light-mode="true"] .wavery-segment-active {
+  background-color: #FFFFFF !important;
+  color: var(--color-text-primary) !important;
+  border: 1px solid rgba(0, 0, 0, 0.12) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 1px rgba(0, 0, 0, 0.06) !important;
+}
+
+.wavery-segment-inactive {
+  color: #71717A;
+}
+.wavery-segment-inactive:hover {
+  color: #FFFFFF;
+  background-color: rgba(255, 255, 255, 0.04);
+}
+[data-theme="light"] .wavery-segment-inactive:hover,
+[data-theme="latte"] .wavery-segment-inactive:hover,
+[data-light-mode="true"] .wavery-segment-inactive:hover {
+  color: var(--color-text-primary) !important;
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+
+/* --- Checkbox light mode contrast --- */
+[data-theme="light"] input[type="checkbox"],
+[data-theme="latte"] input[type="checkbox"],
+[data-light-mode="true"] input[type="checkbox"] {
+  border-color: rgba(0, 0, 0, 0.25) !important;
+  background-color: #FFFFFF !important;
+}
 
 /* --- Light theme: slider track color --- */
-[data-theme="light"] .wavery-slider { --track-color: rgba(0, 0, 0, 0.12) !important; }
+[data-theme="light"] .wavery-slider,
+[data-theme="latte"] .wavery-slider,
+[data-light-mode="true"] .wavery-slider { --track-color: rgba(0, 0, 0, 0.12) !important; }
 
 /* --- Light theme: placeholder text --- */
-[data-theme="light"] ::placeholder { color: rgba(0, 0, 0, 0.35) !important; }
+[data-theme="light"] ::placeholder,
+[data-theme="latte"] ::placeholder,
+[data-light-mode="true"] ::placeholder { color: rgba(0, 0, 0, 0.35) !important; }
 
-/* --- Danger color is not theme-dependent but stays consistent --- */
+/* --- Light theme: hero play button contrast --- */
+[data-theme="light"] .bg-white.text-black,
+[data-theme="latte"] .bg-white.text-black,
+[data-light-mode="true"] .bg-white.text-black {
+  background-color: var(--color-text-primary) !important;
+  color: var(--color-bg) !important;
+}
+[data-theme="light"] .bg-white.text-black svg,
+[data-theme="latte"] .bg-white.text-black svg,
+[data-light-mode="true"] .bg-white.text-black svg {
+  fill: var(--color-bg) !important;
+  color: var(--color-bg) !important;
+}
+
+/* --- Danger color is consistent and theme-aware --- */
 .text-\[\#FF453A\] { color: var(--color-danger) !important; }
+.hover\:text-\[\#FF453A\]:hover { color: var(--color-danger) !important; }
 .bg-\[\#FF453A\] { background-color: var(--color-danger) !important; }
+.bg-\[\#FF453A\]\/10 { background-color: color-mix(in srgb, var(--color-danger) 10%, transparent) !important; }
+.hover\:bg-\[\#FF453A\]\/10:hover { background-color: color-mix(in srgb, var(--color-danger) 10%, transparent) !important; }
+.border-\[\#FF453A\]\/30 { border-color: color-mix(in srgb, var(--color-danger) 30%, transparent) !important; }
 .shadow-\[\#FF453A\]\/25 { --tw-shadow-color: color-mix(in srgb, var(--color-danger) 25%, transparent) !important; }
+
+/* --- Interface Gradients Toggle Override --- */
+.no-gradients [class*="bg-gradient-"],
+.no-gradients .bg-gradient-to-t,
+.no-gradients .bg-gradient-to-b,
+.no-gradients .bg-gradient-to-r,
+.no-gradients .bg-gradient-to-l,
+.no-gradients .bg-gradient-to-tr,
+.no-gradients .bg-gradient-to-tl,
+.no-gradients .bg-gradient-to-br,
+.no-gradients .bg-gradient-to-bl,
+.no-gradients [class*="hover:bg-gradient-"]:hover {
+  background-image: none !important;
+}
+
+

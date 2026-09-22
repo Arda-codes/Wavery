@@ -35,10 +35,13 @@ fn test_config_defaults() {
     assert!(cfg.ui.show_lyrics_smooth_scroll);
     assert!(!cfg.ui.simplify_mode);
     assert!(!cfg.ui.is_linux_banner_dismissed);
+    assert!(cfg.ui.enable_gradients);
 
     // Library defaults
     assert!(cfg.library.scan_on_startup);
     assert!(cfg.library.supported_extensions.contains(&"flac".to_string()));
+    assert!(cfg.library.protected_artists.contains(&"Tyler, The Creator".to_string()));
+    assert!(cfg.library.protected_artists.contains(&"AC/DC".to_string()));
 
     // Server defaults
     assert_eq!(cfg.server.host, "127.0.0.1");
@@ -81,6 +84,7 @@ fn test_config_save_and_load_roundtrip() {
     cfg.keybinds.toggle_lyrics = "Alt+L".into();
     cfg.keybinds.seek_forward = "Shift+Right".into();
     cfg.keybinds.seek_backward = "Shift+Left".into();
+    cfg.library.protected_artists = vec!["Custom, Band".into()];
 
     save(&cfg_path, &cfg).unwrap();
     assert!(cfg_path.exists());
@@ -98,6 +102,7 @@ fn test_config_save_and_load_roundtrip() {
     assert_eq!(loaded.keybinds.toggle_lyrics, "Alt+L");
     assert_eq!(loaded.keybinds.seek_forward, "Shift+Right");
     assert_eq!(loaded.keybinds.seek_backward, "Shift+Left");
+    assert_eq!(loaded.library.protected_artists, vec!["Custom, Band".to_string()]);
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
@@ -110,6 +115,14 @@ fn test_config_theme_modes_all_variants() {
         (ThemeMode::System, "system"),
         (ThemeMode::Oled, "oled"),
         (ThemeMode::Midnight, "midnight"),
+        (ThemeMode::Ocean, "ocean"),
+        (ThemeMode::Purple, "purple"),
+        (ThemeMode::Forest, "forest"),
+        (ThemeMode::Mocha, "mocha"),
+        (ThemeMode::Macchiato, "macchiato"),
+        (ThemeMode::Frappe, "frappe"),
+        (ThemeMode::Latte, "latte"),
+        (ThemeMode::Custom, "custom"),
     ];
 
     for (mode_enum, mode_str) in cases {

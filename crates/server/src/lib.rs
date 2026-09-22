@@ -314,8 +314,34 @@ pub struct ImportFolderRequest {
 
 #[derive(Deserialize)]
 pub struct UpdateTrackMetadataRequest {
+    #[serde(alias = "trackId")]
     pub track_id: String,
-    pub metadata: wavery_core::models::TrackMetadata,
+    pub metadata: Option<wavery_core::models::TrackMetadata>,
+    pub title: Option<String>,
+    pub artist: Option<String>,
+    pub album: Option<String>,
+    #[serde(alias = "albumArtist")]
+    pub album_artist: Option<String>,
+    #[serde(alias = "trackNumber")]
+    pub track_number: Option<u32>,
+    #[serde(alias = "discNumber")]
+    pub disc_number: Option<u32>,
+    pub year: Option<i32>,
+    pub genre: Option<String>,
+    pub lyrics: Option<String>,
+    #[serde(alias = "writeTags")]
+    pub write_tags: Option<bool>,
+}
+
+#[derive(Deserialize)]
+pub struct UpdateArtistMetadataRequest {
+    #[serde(alias = "originalName")]
+    pub original_name: String,
+    #[serde(alias = "newName")]
+    pub new_name: String,
+    #[serde(alias = "updateAlbumArtist")]
+    pub update_album_artist: Option<bool>,
+    #[serde(alias = "writeTags")]
     pub write_tags: Option<bool>,
 }
 
@@ -373,6 +399,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route("/api/tracks/{id}/artwork", get(get_artwork_handler))
         .route("/api/tracks/metadata", post(update_track_metadata_handler))
         .route("/api/albums/metadata", post(update_album_metadata_handler))
+        .route("/api/artists/metadata", post(update_artist_metadata_handler))
         .route("/api/library/rebuild", post(rebuild_library_handler))
         .route("/api/library/vacuum", post(vacuum_library_handler))
         .route("/api/stream/{id}", get(stream_track_handler))
@@ -527,8 +554,109 @@ async fn update_track_metadata_handler(
 ) -> Result<Json<Track>, ServerError> {
     let mut lib = state.library.lock().await;
     let write_tags = req.write_tags.unwrap_or(true);
-    let updated = lib.update_track_metadata(&req.track_id, &req.metadata, write_tags).await?;
+    let mut meta = if let Some(m) = req.metadata {
+        m
+    } else {
+        let existing = lib
+            .get_track(&req.track_id)
+            .cloned()
+            .ok_or_else(|| ServerError::TrackNotFound(req.track_id.clone()))?;
+        existing.metadata
+    };
+
+    if let Some(title) = req.title {
+        meta.title = Some(title);
+    }
+    if let Some(artist) = req.artist {
+        meta.artist = Some(artist);
+    }
+    if let Some(album) = req.album {
+        meta.album = Some(album);
+    }
+    if let Some(album_artist) = req.album_artist {
+        meta.album_artist = Some(album_artist);
+    }
+    if let Some(track_number) = req.track_number {
+        meta.track_number = Some(track_number);
+    }
+    if let Some(disc_number) = req.disc_number {
+        meta.disc_number = Some(disc_number);
+    }
+    if let Some(year) = req.year {
+        meta.year = Some(year);
+    }
+    if let Some(genre) = req.genre {
+        meta.genre = Some(genre);
+    }
+    if let Some(lyrics) = req.lyrics {
+        meta.lyrics = if lyrics.trim().is_empty() {
+            None
+        } else {
+            Some(lyrics)
+        };
+    }
+
+    let updated = lib.update_track_metadata(&req.track_id, &meta, write_tags).await?;
     Ok(Json(updated))
+}
+
+async fn update_artist_metadata_handler(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<UpdateArtistMetadataRequest>,
+) -> Result<Json<Vec<Track>>, ServerError> {
+    let mut lib = state.library.lock().await;
+    let write_tags = req.write_tags.unwrap_or(true);
+    let update_album_artist = req.update_album_artist.unwrap_or(true);
+    let orig_lower = req.original_name.trim().to_lowercase();
+    let is_orig_unknown = orig_lower == "unknown artist" || orig_lower.is_empty();
+
+    let mut matching_track_ids: Vec<(String, bool, bool)> = Vec::new();
+    for track in lib.all_tracks() {
+        let artist_match = track
+            .metadata
+            .artist
+            .as_deref()
+            .map(|a| {
+                let a_trimmed = a.trim();
+                a_trimmed.to_lowercase() == orig_lower || (is_orig_unknown && a_trimmed.is_empty())
+            })
+            .unwrap_or(is_orig_unknown);
+
+        let album_artist_match = if update_album_artist {
+            track
+                .metadata
+                .album_artist
+                .as_deref()
+                .map(|a| {
+                    let a_trimmed = a.trim();
+                    a_trimmed.to_lowercase() == orig_lower || (is_orig_unknown && a_trimmed.is_empty())
+                })
+                .unwrap_or(false)
+        } else {
+            false
+        };
+
+        if artist_match || album_artist_match {
+            matching_track_ids.push((track.id.to_string(), artist_match, album_artist_match));
+        }
+    }
+
+    let mut updated_tracks = Vec::new();
+    for (track_id, artist_match, album_artist_match) in matching_track_ids {
+        if let Some(track) = lib.get_track(&track_id).cloned() {
+            let mut meta = track.metadata.clone();
+            if artist_match {
+                meta.artist = Some(req.new_name.clone());
+            }
+            if album_artist_match {
+                meta.album_artist = Some(req.new_name.clone());
+            }
+            let updated = lib.update_track_metadata(&track_id, &meta, write_tags).await?;
+            updated_tracks.push(updated);
+        }
+    }
+
+    Ok(Json(updated_tracks))
 }
 
 async fn update_album_metadata_handler(
@@ -1417,16 +1545,25 @@ async fn discord_clear_presence_handler(
     Json(serde_json::json!({ "ok": true }))
 }
 
+#[derive(Deserialize)]
+pub struct DiscordStatusQuery {
+    pub app_id: Option<String>,
+}
+
 /// `GET /api/discord/status`
 ///
 /// Returns the current Discord IPC connection status.
 async fn discord_status_handler(
     State(state): State<Arc<AppState>>,
+    axum::extract::Query(query): axum::extract::Query<DiscordStatusQuery>,
 ) -> impl IntoResponse {
     let handle = Arc::clone(&state.discord_handle);
     let status = tokio::task::spawn_blocking(move || {
         if let Ok(lock) = handle.try_read() {
-            if let Ok(rpc) = lock.try_lock() {
+            if let Ok(mut rpc) = lock.try_lock() {
+                if let Some(ref id) = query.app_id {
+                    rpc.set_app_id(Some(id));
+                }
                 return rpc.status();
             }
         }

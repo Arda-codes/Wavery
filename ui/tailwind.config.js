@@ -21,6 +21,8 @@ export default {
         textSecondary: "var(--color-text-secondary, #A1A1AA)",
         textMuted: "var(--color-text-muted, #71717A)",
         danger: "var(--color-danger, #FF453A)",
+        border: "var(--color-border, rgba(255, 255, 255, 0.08))",
+        borderSubtle: "var(--color-border-subtle, rgba(255, 255, 255, 0.04))",
       }
     },
   },

@@ -1,10 +1,258 @@
 import { create } from "zustand";
 import { playerAdapter } from "../services/adapter";
+import {
+  DEFAULT_PROTECTED_ARTISTS,
+  setProtectedArtists as setLibProtectedArtists,
+} from "../utils/library";
+import { useLibraryStore } from "./libraryStore";
 
-export type ThemeMode = "dark" | "light" | "oled" | "midnight";
+export type ThemeMode =
+  | "dark"
+  | "light"
+  | "oled"
+  | "midnight"
+  | "ocean"
+  | "purple"
+  | "forest"
+  | "mocha"
+  | "macchiato"
+  | "frappe"
+  | "latte"
+  | "system"
+  | "custom";
+
 export type ReplayGainMode = "off" | "track" | "album";
 export type AlbumGridSize = "compact" | "medium" | "spacious";
 export type RowDensity = "comfortable" | "compact";
+
+export interface CustomTheme {
+  id: string;
+  name: string;
+  isLight: boolean;
+  bg: string;
+  surface: string;
+  surfaceHover?: string;
+  surfaceActive?: string;
+  deck: string;
+  sidebar: string;
+  border: string;
+  textPrimary: string;
+  textSecondary: string;
+  textMuted: string;
+  accentColor: string;
+}
+
+export interface ThemePresetDefinition {
+  id: ThemeMode;
+  name: string;
+  desc: string;
+  category: "Standard" | "Atmospheric" | "Catppuccin" | "Special";
+  isLight: boolean;
+  bg: string;
+  surface: string;
+  deck: string;
+  sidebar: string;
+  border: string;
+  textPrimary: string;
+  textSecondary: string;
+  textMuted: string;
+  accentColor: string;
+}
+
+export const THEME_PRESETS: Record<string, ThemePresetDefinition> = {
+  system: {
+    id: "system",
+    name: "System",
+    desc: "Follows operating system dark/light appearance",
+    category: "Standard",
+    isLight: false,
+    bg: "#0D0D10",
+    surface: "#16161A",
+    deck: "rgba(18, 18, 22, 0.94)",
+    sidebar: "rgba(15, 15, 19, 0.96)",
+    border: "rgba(255, 255, 255, 0.08)",
+    textPrimary: "#FFFFFF",
+    textSecondary: "#A1A1AA",
+    textMuted: "#71717A",
+    accentColor: "#0A84FF",
+  },
+  oled: {
+    id: "oled",
+    name: "Black",
+    desc: "True pitch black for OLED displays",
+    category: "Standard",
+    isLight: false,
+    bg: "#000000",
+    surface: "#0A0A0C",
+    deck: "rgba(5, 5, 6, 0.96)",
+    sidebar: "#000000",
+    border: "rgba(255, 255, 255, 0.12)",
+    textPrimary: "#FFFFFF",
+    textSecondary: "#B4B4BC",
+    textMuted: "#80808C",
+    accentColor: "#FF375F",
+  },
+  light: {
+    id: "light",
+    name: "White",
+    desc: "Crisp, high-contrast Apple light theme",
+    category: "Standard",
+    isLight: true,
+    bg: "#F4F4F6",
+    surface: "#FFFFFF",
+    deck: "rgba(235, 236, 240, 0.96)",
+    sidebar: "rgba(240, 241, 245, 0.98)",
+    border: "rgba(0, 0, 0, 0.09)",
+    textPrimary: "#18181B",
+    textSecondary: "#52525B",
+    textMuted: "#71717A",
+    accentColor: "#0A84FF",
+  },
+  dark: {
+    id: "dark",
+    name: "Dark",
+    desc: "Deep graphite interface with soft contrast",
+    category: "Standard",
+    isLight: false,
+    bg: "#0D0D10",
+    surface: "#16161A",
+    deck: "rgba(18, 18, 22, 0.94)",
+    sidebar: "rgba(15, 15, 19, 0.96)",
+    border: "rgba(255, 255, 255, 0.08)",
+    textPrimary: "#FFFFFF",
+    textSecondary: "#A1A1AA",
+    textMuted: "#71717A",
+    accentColor: "#FA586A",
+  },
+  ocean: {
+    id: "ocean",
+    name: "Ocean",
+    desc: "Deep oceanic marine navy palette",
+    category: "Atmospheric",
+    isLight: false,
+    bg: "#08131E",
+    surface: "#0E1D2D",
+    deck: "rgba(10, 24, 38, 0.94)",
+    sidebar: "rgba(8, 19, 30, 0.96)",
+    border: "rgba(14, 165, 233, 0.20)",
+    textPrimary: "#F0F9FF",
+    textSecondary: "#7DD3FC",
+    textMuted: "#38BDF8",
+    accentColor: "#0EA5E9",
+  },
+  purple: {
+    id: "purple",
+    name: "Purple",
+    desc: "Nocturnal electric amethyst vibes",
+    category: "Atmospheric",
+    isLight: false,
+    bg: "#0F0919",
+    surface: "#191029",
+    deck: "rgba(18, 11, 30, 0.94)",
+    sidebar: "rgba(15, 9, 25, 0.96)",
+    border: "rgba(168, 85, 247, 0.20)",
+    textPrimary: "#FAF5FF",
+    textSecondary: "#C084FC",
+    textMuted: "#9333EA",
+    accentColor: "#A855F7",
+  },
+  forest: {
+    id: "forest",
+    name: "Forest",
+    desc: "Deep evergreen pine and Nordic emerald",
+    category: "Atmospheric",
+    isLight: false,
+    bg: "#0A130E",
+    surface: "#122018",
+    deck: "rgba(12, 23, 16, 0.94)",
+    sidebar: "rgba(10, 19, 14, 0.96)",
+    border: "rgba(16, 185, 129, 0.20)",
+    textPrimary: "#F0FDF4",
+    textSecondary: "#6EE7B7",
+    textMuted: "#34D399",
+    accentColor: "#10B981",
+  },
+  midnight: {
+    id: "midnight",
+    name: "Midnight",
+    desc: "Velvet midnight blue with rich indigo glow",
+    category: "Atmospheric",
+    isLight: false,
+    bg: "#080C14",
+    surface: "#0F172A",
+    deck: "rgba(13, 20, 36, 0.94)",
+    sidebar: "rgba(11, 16, 28, 0.96)",
+    border: "rgba(99, 102, 241, 0.20)",
+    textPrimary: "#F1F5F9",
+    textSecondary: "#94A3B8",
+    textMuted: "#64748B",
+    accentColor: "#6366F1",
+  },
+  mocha: {
+    id: "mocha",
+    name: "Mocha",
+    desc: "Catppuccin dark palette with Lavender accent",
+    category: "Catppuccin",
+    isLight: false,
+    bg: "#1E1E2E",
+    surface: "#252538",
+    deck: "rgba(24, 24, 37, 0.95)",
+    sidebar: "rgba(17, 17, 27, 0.96)",
+    border: "rgba(203, 166, 247, 0.18)",
+    textPrimary: "#CDD6F4",
+    textSecondary: "#A6ADC8",
+    textMuted: "#6C7086",
+    accentColor: "#CBA6F7",
+  },
+  macchiato: {
+    id: "macchiato",
+    name: "Macchiato",
+    desc: "Catppuccin rich midnight with Peach accent",
+    category: "Catppuccin",
+    isLight: false,
+    bg: "#24273A",
+    surface: "#2D3149",
+    deck: "rgba(30, 32, 48, 0.95)",
+    sidebar: "rgba(24, 25, 38, 0.96)",
+    border: "rgba(245, 169, 127, 0.18)",
+    textPrimary: "#CAD3F5",
+    textSecondary: "#A5ADCB",
+    textMuted: "#6E738D",
+    accentColor: "#F5A97F",
+  },
+  frappe: {
+    id: "frappe",
+    name: "Frappé",
+    desc: "Catppuccin balanced dark pastel with Sapphire accent",
+    category: "Catppuccin",
+    isLight: false,
+    bg: "#303446",
+    surface: "#393D52",
+    deck: "rgba(41, 44, 60, 0.95)",
+    sidebar: "rgba(35, 38, 52, 0.96)",
+    border: "rgba(140, 170, 238, 0.18)",
+    textPrimary: "#C6D0F5",
+    textSecondary: "#A5ADCE",
+    textMuted: "#737994",
+    accentColor: "#8CAAEE",
+  },
+  latte: {
+    id: "latte",
+    name: "Latte",
+    desc: "Catppuccin soothing warm light with Blue accent",
+    category: "Catppuccin",
+    isLight: true,
+    bg: "#EFF1F5",
+    surface: "#FFFFFF",
+    deck: "rgba(230, 233, 239, 0.96)",
+    sidebar: "rgba(239, 241, 245, 0.98)",
+    border: "rgba(30, 102, 245, 0.15)",
+    textPrimary: "#4C4F69",
+    textSecondary: "#5C5F77",
+    textMuted: "#8C8FA1",
+    accentColor: "#1E66F5",
+  },
+};
 
 export interface Keybindings {
   togglePlay: string;
@@ -39,16 +287,23 @@ interface SettingsData {
   themeMode: ThemeMode;
   accentColor: string;
   customColors: string[];
+  customTheme: CustomTheme | null;
+  savedCustomThemes: CustomTheme[];
   albumGridSize: AlbumGridSize;
   rowDensity: RowDensity;
   showVisualizer: boolean;
   showLyricsSmoothScroll: boolean;
   simplifyMode: boolean;
   isLinuxBannerDismissed: boolean;
+  enableGradients: boolean;
+
+  // Library & Metadata
+  protectedArtists: string[];
 
   // Integrations
   enableMediaSession: boolean;
   enableDiscordRpc: boolean;
+  discordAppId: string;
 
   // Keybindings
   keybindings: Keybindings;
@@ -57,9 +312,18 @@ interface SettingsData {
 interface SettingsState extends SettingsData {
   toggleSimplifyMode: () => void;
   setSimplifyMode: (enabled: boolean) => void;
+  setEnableGradients: (enabled: boolean) => void;
   dismissLinuxBanner: () => void;
   setLinuxBannerDismissed: (dismissed: boolean) => void;
   setSetting: <K extends keyof SettingsData>(key: K, value: SettingsData[K]) => void;
+  setThemePreset: (presetId: ThemeMode) => void;
+  saveCustomTheme: (theme: CustomTheme) => void;
+  deleteCustomTheme: (id: string) => void;
+  applyCustomTheme: (theme: CustomTheme) => void;
+  setProtectedArtists: (artists: string[]) => void;
+  addProtectedArtist: (artist: string) => void;
+  removeProtectedArtist: (artist: string) => void;
+  resetProtectedArtists: () => void;
   addCustomColor: (color: string) => void;
   removeCustomColor: (color: string) => void;
   resetToDefaults: () => void;
@@ -98,15 +362,21 @@ export const DEFAULT_SETTINGS: SettingsData = {
   themeMode: "dark",
   accentColor: "#FA586A",
   customColors: [],
+  customTheme: null,
+  savedCustomThemes: [],
   albumGridSize: "medium",
   rowDensity: "comfortable",
   showVisualizer: true,
   showLyricsSmoothScroll: true,
   simplifyMode: false,
   isLinuxBannerDismissed: false,
+  enableGradients: true,
+
+  protectedArtists: [...DEFAULT_PROTECTED_ARTISTS],
 
   enableMediaSession: true,
   enableDiscordRpc: false,
+  discordAppId: "",
 
   keybindings: DEFAULT_KEYBINDINGS,
 };
@@ -114,6 +384,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
 const STORAGE_KEY_SETTINGS = "wavery_user_settings";
 const STORAGE_KEY_SIMPLIFY = "wavery_simplify_mode";
 const STORAGE_KEY_LINUX_DISMISSED = "wavery_linux_banner_dismissed";
+const STORAGE_KEY_GRADIENTS = "wavery_enable_gradients";
 
 let cachedBackendConfig: any = null;
 
@@ -141,6 +412,11 @@ function mapBackendConfigToSettings(backendCfg: any): Partial<SettingsData> {
     if (typeof backendCfg.library.scan_on_startup === "boolean") {
       s.autoScanOnStartup = backendCfg.library.scan_on_startup;
     }
+    if (Array.isArray(backendCfg.library.protected_artists)) {
+      s.protectedArtists = backendCfg.library.protected_artists.filter(
+        (a: unknown) => typeof a === "string" && (a as string).trim().length > 0
+      );
+    }
   }
 
   if (backendCfg.audio) {
@@ -164,8 +440,13 @@ function mapBackendConfigToSettings(backendCfg: any): Partial<SettingsData> {
   if (backendCfg.theme) {
     if (typeof backendCfg.theme.mode === "string") {
       const mode = backendCfg.theme.mode.toLowerCase();
-      if (mode === "dark" || mode === "light" || mode === "oled" || mode === "midnight") {
-        s.themeMode = mode;
+      const validModes: ThemeMode[] = [
+        "dark", "light", "oled", "midnight", "ocean",
+        "purple", "forest", "mocha", "macchiato",
+        "frappe", "latte", "system", "custom"
+      ];
+      if (validModes.includes(mode as ThemeMode)) {
+        s.themeMode = mode as ThemeMode;
       }
     }
     if (typeof backendCfg.theme.accent === "string" && backendCfg.theme.accent.length > 0) {
@@ -177,6 +458,11 @@ function mapBackendConfigToSettings(backendCfg: any): Partial<SettingsData> {
       s.customColors = backendCfg.theme.custom_colors.filter(
         (c: unknown) => typeof c === "string" && (c as string).startsWith("#")
       );
+    }
+    if (typeof backendCfg.theme.custom_theme_json === "string") {
+      try {
+        s.customTheme = JSON.parse(backendCfg.theme.custom_theme_json);
+      } catch {}
     }
   }
 
@@ -198,6 +484,9 @@ function mapBackendConfigToSettings(backendCfg: any): Partial<SettingsData> {
     }
     if (typeof backendCfg.ui.is_linux_banner_dismissed === "boolean") {
       s.isLinuxBannerDismissed = backendCfg.ui.is_linux_banner_dismissed;
+    }
+    if (typeof backendCfg.ui.enable_gradients === "boolean") {
+      s.enableGradients = backendCfg.ui.enable_gradients;
     }
   }
 
@@ -223,6 +512,9 @@ function mapBackendConfigToSettings(backendCfg: any): Partial<SettingsData> {
     }
     if (typeof backendCfg.integrations.enable_discord_rpc === "boolean") {
       s.enableDiscordRpc = backendCfg.integrations.enable_discord_rpc;
+    }
+    if (typeof backendCfg.integrations.discord_app_id === "string") {
+      s.discordAppId = backendCfg.integrations.discord_app_id;
     }
   }
 
@@ -263,6 +555,7 @@ function mapSettingsToBackendConfig(data: SettingsData): any {
         "opus",
       ],
       scan_on_startup: data.autoScanOnStartup,
+      protected_artists: data.protectedArtists || [...DEFAULT_PROTECTED_ARTISTS],
     },
     server: {
       host: cachedBackendConfig?.server?.host || "127.0.0.1",
@@ -283,18 +576,20 @@ function mapSettingsToBackendConfig(data: SettingsData): any {
       show_lyrics_smooth_scroll: data.showLyricsSmoothScroll,
       simplify_mode: data.simplifyMode,
       is_linux_banner_dismissed: data.isLinuxBannerDismissed,
+      enable_gradients: data.enableGradients ?? true,
     },
     theme: {
       mode: data.themeMode,
-      background: "#121214",
+      background: data.customTheme?.bg || (THEME_PRESETS[data.themeMode]?.bg ?? "#121214"),
       accent: data.accentColor,
-      surface: "#1a1a1e",
-      surface_hover: "#26262b",
+      surface: data.customTheme?.surface || (THEME_PRESETS[data.themeMode]?.surface ?? "#1a1a1e"),
+      surface_hover: data.customTheme?.surfaceHover || "#26262b",
       primary: data.accentColor,
-      text_primary: "#f4f4f5",
-      text_muted: "#71717a",
+      text_primary: data.customTheme?.textPrimary || (THEME_PRESETS[data.themeMode]?.textPrimary ?? "#f4f4f5"),
+      text_muted: data.customTheme?.textMuted || (THEME_PRESETS[data.themeMode]?.textMuted ?? "#71717a"),
       error: "#ef4444",
       custom_colors: data.customColors || [],
+      custom_theme_json: data.customTheme ? JSON.stringify(data.customTheme) : undefined,
     },
     keybinds: {
       toggle_play: data.keybindings.togglePlay,
@@ -312,6 +607,7 @@ function mapSettingsToBackendConfig(data: SettingsData): any {
     integrations: {
       enable_media_session: data.enableMediaSession,
       enable_discord_rpc: data.enableDiscordRpc,
+      discord_app_id: data.discordAppId || undefined,
     },
   };
 }
@@ -320,6 +616,7 @@ function loadPersistedSettings(): SettingsData {
   let settings: SettingsData = { ...DEFAULT_SETTINGS };
 
   if (typeof localStorage === "undefined") {
+    setLibProtectedArtists(settings.protectedArtists);
     return settings;
   }
 
@@ -352,10 +649,16 @@ function loadPersistedSettings(): SettingsData {
     if (legacyDismissed !== null) {
       settings.isLinuxBannerDismissed = legacyDismissed === "true";
     }
+
+    const legacyGradients = localStorage.getItem(STORAGE_KEY_GRADIENTS);
+    if (legacyGradients !== null) {
+      settings.enableGradients = legacyGradients === "true";
+    }
   } catch {
     // Ignore storage errors
   }
 
+  setLibProtectedArtists(settings.protectedArtists || [...DEFAULT_PROTECTED_ARTISTS]);
   return settings;
 }
 
@@ -373,6 +676,7 @@ function persistSettings(data: SettingsData) {
       localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(data));
       localStorage.setItem(STORAGE_KEY_SIMPLIFY, String(data.simplifyMode));
       localStorage.setItem(STORAGE_KEY_LINUX_DISMISSED, String(data.isLinuxBannerDismissed));
+      localStorage.setItem(STORAGE_KEY_GRADIENTS, String(data.enableGradients));
     } catch {
       // Ignore storage write errors (e.g. quota exceeded)
     }
@@ -381,8 +685,34 @@ function persistSettings(data: SettingsData) {
 }
 
 
-function applyDomClasses(simplify: boolean, theme: ThemeMode, accent: string) {
+let mediaListenerAttached = false;
+function ensureSystemMediaListener() {
+  if (typeof window === "undefined" || !window.matchMedia || mediaListenerAttached) return;
+  mediaListenerAttached = true;
+  const mql = window.matchMedia("(prefers-color-scheme: dark)");
+  const handler = () => {
+    const s = useSettingsStore.getState();
+    if (s.themeMode === "system") {
+      applyDomClasses(s.simplifyMode, s.themeMode, s.accentColor, s.customTheme, s.enableGradients);
+    }
+  };
+  if (typeof mql.addEventListener === "function") {
+    mql.addEventListener("change", handler);
+  } else if (typeof (mql as unknown as { addListener: (cb: () => void) => void }).addListener === "function") {
+    (mql as unknown as { addListener: (cb: () => void) => void }).addListener(handler);
+  }
+}
+
+function applyDomClasses(
+  simplify: boolean,
+  theme: ThemeMode,
+  accent: string,
+  customTheme?: CustomTheme | null,
+  enableGradients: boolean = true
+) {
   if (typeof document === "undefined" || !document.documentElement) return;
+
+  ensureSystemMediaListener();
 
   if (document.documentElement.classList) {
     if (simplify) {
@@ -390,23 +720,83 @@ function applyDomClasses(simplify: boolean, theme: ThemeMode, accent: string) {
     } else {
       document.documentElement.classList.remove("simplify-mode");
     }
+    if (enableGradients) {
+      document.documentElement.classList.remove("no-gradients");
+    } else {
+      document.documentElement.classList.add("no-gradients");
+    }
+  }
+
+  let effectiveTheme: string = theme;
+  let isLight = false;
+
+  if (theme === "system") {
+    const prefersDark =
+      typeof window !== "undefined" &&
+      window.matchMedia &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches;
+    effectiveTheme = prefersDark ? "dark" : "light";
+    isLight = !prefersDark;
+  } else if (theme === "light" || theme === "latte") {
+    isLight = true;
+  } else if (theme === "custom" && customTheme) {
+    isLight = !!customTheme.isLight;
   }
 
   if (typeof document.documentElement.setAttribute === "function") {
-    document.documentElement.setAttribute("data-theme", theme);
+    document.documentElement.setAttribute("data-theme", effectiveTheme);
+    document.documentElement.setAttribute("data-light-mode", isLight ? "true" : "false");
   }
 
-  if (document.documentElement.style && typeof document.documentElement.style.setProperty === "function") {
-    document.documentElement.style.setProperty("--accent-color", accent);
-    document.documentElement.style.setProperty("--color-accent", accent);
-    document.documentElement.style.setProperty("--color-primary", accent);
-    document.documentElement.style.setProperty("--color-accent-hover", `color-mix(in srgb, ${accent} 85%, black)`);
+  const style = document.documentElement.style;
+  if (style && typeof style.setProperty === "function") {
+    style.setProperty("--accent-color", accent);
+    style.setProperty("--color-accent", accent);
+    style.setProperty("--color-primary", accent);
+    style.setProperty("--color-accent-hover", `color-mix(in srgb, ${accent} 85%, black)`);
+
+    if (theme === "custom" && customTheme) {
+      style.setProperty("--color-bg", customTheme.bg);
+      style.setProperty("--color-surface", customTheme.surface);
+      style.setProperty(
+        "--color-surface-hover",
+        customTheme.surfaceHover ||
+          `color-mix(in srgb, ${customTheme.surface} 85%, ${customTheme.isLight ? "black" : "white"})`
+      );
+      style.setProperty(
+        "--color-surface-active",
+        customTheme.surfaceActive ||
+          `color-mix(in srgb, ${customTheme.surface} 75%, ${customTheme.isLight ? "black" : "white"})`
+      );
+      style.setProperty("--color-deck", customTheme.deck);
+      style.setProperty("--color-sidebar", customTheme.sidebar);
+      style.setProperty("--color-border", customTheme.border);
+      style.setProperty(
+        "--color-border-subtle",
+        `color-mix(in srgb, ${customTheme.border} 50%, transparent)`
+      );
+      style.setProperty("--color-text-primary", customTheme.textPrimary);
+      style.setProperty("--color-text-secondary", customTheme.textSecondary);
+      style.setProperty("--color-text-muted", customTheme.textMuted);
+    } else {
+      style.removeProperty("--color-bg");
+      style.removeProperty("--color-surface");
+      style.removeProperty("--color-surface-hover");
+      style.removeProperty("--color-surface-active");
+      style.removeProperty("--color-deck");
+      style.removeProperty("--color-sidebar");
+      style.removeProperty("--color-border");
+      style.removeProperty("--color-border-subtle");
+      style.removeProperty("--color-text-primary");
+      style.removeProperty("--color-text-secondary");
+      style.removeProperty("--color-text-muted");
+    }
   }
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => {
   const initial = loadPersistedSettings();
-  applyDomClasses(initial.simplifyMode, initial.themeMode, initial.accentColor);
+  applyDomClasses(initial.simplifyMode, initial.themeMode, initial.accentColor, initial.customTheme, initial.enableGradients);
 
   return {
     ...initial,
@@ -415,15 +805,22 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
       const next = !get().simplifyMode;
       const updated: SettingsData = { ...get(), simplifyMode: next };
       persistSettings(updated);
-      applyDomClasses(next, updated.themeMode, updated.accentColor);
+      applyDomClasses(next, updated.themeMode, updated.accentColor, updated.customTheme, updated.enableGradients);
       set({ simplifyMode: next });
     },
 
     setSimplifyMode: (enabled: boolean) => {
       const updated: SettingsData = { ...get(), simplifyMode: enabled };
       persistSettings(updated);
-      applyDomClasses(enabled, updated.themeMode, updated.accentColor);
+      applyDomClasses(enabled, updated.themeMode, updated.accentColor, updated.customTheme, updated.enableGradients);
       set({ simplifyMode: enabled });
+    },
+
+    setEnableGradients: (enabled: boolean) => {
+      const updated: SettingsData = { ...get(), enableGradients: enabled };
+      persistSettings(updated);
+      applyDomClasses(updated.simplifyMode, updated.themeMode, updated.accentColor, updated.customTheme, enabled);
+      set({ enableGradients: enabled });
     },
 
     dismissLinuxBanner: () => {
@@ -446,11 +843,167 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
       };
       persistSettings(updated);
 
-      if (key === "simplifyMode" || key === "themeMode" || key === "accentColor") {
-        applyDomClasses(updated.simplifyMode, updated.themeMode, updated.accentColor);
+      if (
+        key === "simplifyMode" ||
+        key === "themeMode" ||
+        key === "accentColor" ||
+        key === "customTheme" ||
+        key === "enableGradients"
+      ) {
+        applyDomClasses(
+          updated.simplifyMode,
+          updated.themeMode,
+          updated.accentColor,
+          updated.customTheme,
+          updated.enableGradients
+        );
       }
 
       set({ [key]: value } as unknown as Partial<SettingsState>);
+    },
+
+    setThemePreset: (presetId: ThemeMode) => {
+      const preset = THEME_PRESETS[presetId];
+      const current = get();
+      if (preset) {
+        const updated: SettingsData = {
+          ...current,
+          themeMode: preset.id,
+          accentColor: preset.accentColor,
+        };
+        persistSettings(updated);
+        applyDomClasses(
+          updated.simplifyMode,
+          updated.themeMode,
+          updated.accentColor,
+          updated.customTheme,
+          updated.enableGradients
+        );
+        set({
+          themeMode: preset.id,
+          accentColor: preset.accentColor,
+        });
+      } else if (presetId === "custom") {
+        const customAccent = current.customTheme?.accentColor || current.accentColor;
+        const updated: SettingsData = {
+          ...current,
+          themeMode: "custom",
+          accentColor: customAccent,
+        };
+        persistSettings(updated);
+        applyDomClasses(updated.simplifyMode, "custom", customAccent, updated.customTheme, updated.enableGradients);
+        set({
+          themeMode: "custom",
+          accentColor: customAccent,
+        });
+      }
+    },
+
+    saveCustomTheme: (theme: CustomTheme) => {
+      const current = get();
+      const existingIndex = (current.savedCustomThemes || []).findIndex((t) => t.id === theme.id);
+      let updatedSaved: CustomTheme[];
+      if (existingIndex >= 0) {
+        updatedSaved = [...current.savedCustomThemes];
+        updatedSaved[existingIndex] = theme;
+      } else {
+        updatedSaved = [...(current.savedCustomThemes || []), theme];
+      }
+
+      const updated: SettingsData = {
+        ...current,
+        customTheme: theme,
+        savedCustomThemes: updatedSaved,
+        themeMode: "custom",
+        accentColor: theme.accentColor,
+      };
+      persistSettings(updated);
+      applyDomClasses(updated.simplifyMode, "custom", theme.accentColor, theme, updated.enableGradients);
+      set({
+        customTheme: theme,
+        savedCustomThemes: updatedSaved,
+        themeMode: "custom",
+        accentColor: theme.accentColor,
+      });
+    },
+
+    deleteCustomTheme: (id: string) => {
+      const current = get();
+      const updatedSaved = (current.savedCustomThemes || []).filter((t) => t.id !== id);
+      const isCurrentActive = current.customTheme?.id === id;
+      const nextCustom = isCurrentActive
+        ? updatedSaved.length > 0
+          ? updatedSaved[0]
+          : null
+        : current.customTheme;
+      const nextMode = isCurrentActive && !nextCustom ? "dark" : current.themeMode;
+      const nextAccent = nextCustom ? nextCustom.accentColor : current.accentColor;
+
+      const updated: SettingsData = {
+        ...current,
+        customTheme: nextCustom,
+        savedCustomThemes: updatedSaved,
+        themeMode: nextMode,
+        accentColor: nextAccent,
+      };
+      persistSettings(updated);
+      applyDomClasses(updated.simplifyMode, nextMode, nextAccent, nextCustom, updated.enableGradients);
+      set({
+        customTheme: nextCustom,
+        savedCustomThemes: updatedSaved,
+        themeMode: nextMode,
+        accentColor: nextAccent,
+      });
+    },
+
+    applyCustomTheme: (theme: CustomTheme) => {
+      const current = get();
+      const updated: SettingsData = {
+        ...current,
+        customTheme: theme,
+        themeMode: "custom",
+        accentColor: theme.accentColor,
+      };
+      persistSettings(updated);
+      applyDomClasses(updated.simplifyMode, "custom", theme.accentColor, theme, updated.enableGradients);
+      set({
+        customTheme: theme,
+        themeMode: "custom",
+        accentColor: theme.accentColor,
+      });
+    },
+
+    setProtectedArtists: (artists: string[]) => {
+      setLibProtectedArtists(artists);
+      const updated: SettingsData = { ...get(), protectedArtists: artists };
+      persistSettings(updated);
+      set({ protectedArtists: artists });
+      const lib = useLibraryStore.getState();
+      if (lib.tracks && lib.tracks.length > 0) {
+        lib.setTracks(lib.tracks);
+      }
+    },
+
+    addProtectedArtist: (artist: string) => {
+      const trimmed = artist.trim();
+      if (!trimmed) return;
+      const current = get().protectedArtists || [];
+      const lower = trimmed.toLowerCase();
+      if (!current.some((a) => a.toLowerCase() === lower)) {
+        const next = [...current, trimmed];
+        get().setProtectedArtists(next);
+      }
+    },
+
+    removeProtectedArtist: (artist: string) => {
+      const trimmed = artist.trim().toLowerCase();
+      const current = get().protectedArtists || [];
+      const next = current.filter((a) => a.trim().toLowerCase() !== trimmed);
+      get().setProtectedArtists(next);
+    },
+
+    resetProtectedArtists: () => {
+      get().setProtectedArtists([...DEFAULT_PROTECTED_ARTISTS]);
     },
 
     addCustomColor: (color: string) => {
@@ -461,7 +1014,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
         const next = [...current, normalized];
         const updated: SettingsData = { ...get(), customColors: next, accentColor: normalized };
         persistSettings(updated);
-        applyDomClasses(updated.simplifyMode, updated.themeMode, normalized);
+        applyDomClasses(updated.simplifyMode, updated.themeMode, normalized, updated.customTheme, updated.enableGradients);
         set({ customColors: next, accentColor: normalized });
       } else {
         get().setSetting("accentColor", normalized);
@@ -479,9 +1032,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
 
     resetToDefaults: () => {
       const reset = { ...DEFAULT_SETTINGS };
+      setLibProtectedArtists(reset.protectedArtists);
       persistSettings(reset);
-      applyDomClasses(reset.simplifyMode, reset.themeMode, reset.accentColor);
+      applyDomClasses(reset.simplifyMode, reset.themeMode, reset.accentColor, reset.customTheme, reset.enableGradients);
       set({ ...reset });
+      const lib = useLibraryStore.getState();
+      if (lib.tracks && lib.tracks.length > 0) {
+        lib.setTracks(lib.tracks);
+      }
     },
 
     exportConfigJson: () => {
@@ -500,14 +1058,19 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
         themeMode: state.themeMode,
         accentColor: state.accentColor,
         customColors: state.customColors || [],
+        customTheme: state.customTheme,
+        savedCustomThemes: state.savedCustomThemes || [],
         albumGridSize: state.albumGridSize,
         rowDensity: state.rowDensity,
         showVisualizer: state.showVisualizer,
         showLyricsSmoothScroll: state.showLyricsSmoothScroll,
         simplifyMode: state.simplifyMode,
         isLinuxBannerDismissed: state.isLinuxBannerDismissed,
+        enableGradients: state.enableGradients,
+        protectedArtists: state.protectedArtists,
         enableMediaSession: state.enableMediaSession,
         enableDiscordRpc: state.enableDiscordRpc,
+        discordAppId: state.discordAppId,
         keybindings: state.keybindings,
       };
       return JSON.stringify(exportable, null, 2);
@@ -527,9 +1090,19 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
           },
         };
 
+        if (merged.protectedArtists) {
+          setLibProtectedArtists(merged.protectedArtists);
+        }
+
         persistSettings(merged);
-        applyDomClasses(merged.simplifyMode, merged.themeMode, merged.accentColor);
+        applyDomClasses(merged.simplifyMode, merged.themeMode, merged.accentColor, merged.customTheme, merged.enableGradients);
         set({ ...merged });
+
+        const lib = useLibraryStore.getState();
+        if (lib.tracks && lib.tracks.length > 0) {
+          lib.setTracks(lib.tracks);
+        }
+
         return true;
       } catch {
         return false;
@@ -551,15 +1124,24 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
                 ...(mapped.keybindings || {}),
               },
             };
-            applyDomClasses(merged.simplifyMode, merged.themeMode, merged.accentColor);
+            if (merged.protectedArtists) {
+              setLibProtectedArtists(merged.protectedArtists);
+            }
+            applyDomClasses(merged.simplifyMode, merged.themeMode, merged.accentColor, merged.customTheme, merged.enableGradients);
             if (typeof localStorage !== "undefined") {
               try {
                 localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(merged));
                 localStorage.setItem(STORAGE_KEY_SIMPLIFY, String(merged.simplifyMode));
                 localStorage.setItem(STORAGE_KEY_LINUX_DISMISSED, String(merged.isLinuxBannerDismissed));
+                localStorage.setItem(STORAGE_KEY_GRADIENTS, String(merged.enableGradients));
               } catch {}
             }
             set({ ...merged });
+
+            const lib = useLibraryStore.getState();
+            if (lib.tracks && lib.tracks.length > 0) {
+              lib.setTracks(lib.tracks);
+            }
           }
         }
       } catch (e) {

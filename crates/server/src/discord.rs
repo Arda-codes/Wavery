@@ -19,9 +19,11 @@ use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
 
-/// Default Wavery Discord application ID.
-/// Created at https://discord.com/developers/applications (free).
-const DEFAULT_APP_ID: &str = "1354000000000000000";
+/// Default Discord application ID for Music Presence.
+/// Uses the registered Discord "Music" application ID ("1205619376275980288")
+/// which displays as "Listening to Music" / "Playing Music".
+/// Users can override this in Settings with their own Discord Developer Application ID.
+pub const DEFAULT_APP_ID: &str = "1205619376275980288";
 
 /// The "now playing" snapshot forwarded from the frontend.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -32,6 +34,8 @@ pub struct PresencePayload {
     pub position_secs: f64,
     pub duration_secs: f64,
     pub is_playing: bool,
+    #[serde(default)]
+    pub app_id: Option<String>,
 }
 
 /// Tracks whether the Discord IPC client is connected and operational.
@@ -58,17 +62,41 @@ impl DiscordRpcState {
     /// Creates a new disconnected state with the given (or default) application ID.
     #[must_use]
     pub fn new(app_id: Option<&str>) -> Self {
+        let effective_id = match app_id {
+            Some(id) if !id.trim().is_empty() => id.trim(),
+            _ => DEFAULT_APP_ID,
+        };
         Self {
             client: None,
             connected: false,
             discord_running: false,
-            app_id: app_id.unwrap_or(DEFAULT_APP_ID).to_string(),
+            app_id: effective_id.to_string(),
+        }
+    }
+
+    /// Sets or updates the Discord application ID.
+    /// Closes any existing client connection if the ID has changed.
+    pub fn set_app_id(&mut self, app_id: Option<&str>) {
+        let target = match app_id {
+            Some(id) if !id.trim().is_empty() => id.trim(),
+            _ => DEFAULT_APP_ID,
+        };
+        if target != self.app_id {
+            if let Some(ref mut client) = self.client {
+                let _ = client.close();
+            }
+            self.client = None;
+            self.connected = false;
+            self.app_id = target.to_string();
         }
     }
 
     /// Returns a `DiscordStatusPayload` snapshot of the current state.
-    #[must_use]
-    pub fn status(&self) -> DiscordStatusPayload {
+    /// Proactively attempts connection if not currently connected to reflect real state.
+    pub fn status(&mut self) -> DiscordStatusPayload {
+        if !self.connected {
+            self.ensure_connected();
+        }
         DiscordStatusPayload {
             connected: self.connected,
             discord_running: self.discord_running,
@@ -78,7 +106,7 @@ impl DiscordRpcState {
     /// Attempts to (re)connect to the Discord IPC socket.
     /// Returns `true` if the connection succeeded (or was already live).
     fn ensure_connected(&mut self) -> bool {
-        if self.connected {
+        if self.connected && self.client.is_some() {
             return true;
         }
 
@@ -89,16 +117,14 @@ impl DiscordRpcState {
                 self.client = Some(client);
                 self.connected = true;
                 self.discord_running = true;
-                tracing::info!("Discord RPC: connected to Discord IPC socket");
+                tracing::info!("Discord RPC: connected to Discord IPC socket with app_id={}", self.app_id);
                 true
             }
             Err(e) => {
                 // IPC not found typically means Discord is not running
-                tracing::debug!("Discord RPC: failed to connect — {e}");
+                tracing::debug!("Discord RPC: failed to connect ({}) — {e}", self.app_id);
                 self.client = None;
                 self.connected = false;
-                // Heuristically mark discord_running=false on first failure,
-                // or keep it true if we had a previous successful connection
                 self.discord_running = false;
                 false
             }
@@ -108,6 +134,10 @@ impl DiscordRpcState {
     /// Sets the Rich Presence activity.
     /// Automatically attempts reconnect if the client is not yet connected.
     pub fn set_activity(&mut self, payload: &PresencePayload) {
+        if let Some(ref custom_id) = payload.app_id {
+            self.set_app_id(Some(custom_id));
+        }
+
         if !self.ensure_connected() {
             return;
         }
@@ -125,17 +155,21 @@ impl DiscordRpcState {
             truncate(&format!("{} — {}", payload.artist, payload.album), 128)
         };
 
-        // Compute end timestamp from current unix time + remaining seconds
-        let now_secs = SystemTime::now()
+        // Discord expects timestamps in Unix epoch milliseconds
+        let now_millis = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_secs() as i64)
+            .map(|d| d.as_millis() as i64)
             .unwrap_or(0);
 
-        let remaining_secs = (payload.duration_secs - payload.position_secs).max(0.0) as i64;
-        let end_ts = now_secs + remaining_secs;
+        let pos_millis = (payload.position_secs.max(0.0) * 1000.0) as i64;
+        let dur_millis = (payload.duration_secs.max(0.0) * 1000.0) as i64;
+        let start_ts = now_millis.saturating_sub(pos_millis);
+        let end_ts = start_ts.saturating_add(dur_millis);
 
-        let timestamps = if payload.is_playing && remaining_secs > 0 {
-            activity::Timestamps::new().end(end_ts)
+        let timestamps = if payload.is_playing && dur_millis > 0 {
+            activity::Timestamps::new().start(start_ts).end(end_ts)
+        } else if payload.is_playing {
+            activity::Timestamps::new().start(start_ts)
         } else {
             activity::Timestamps::new()
         };
@@ -152,7 +186,7 @@ impl DiscordRpcState {
             Err(e) => {
                 tracing::warn!("Discord RPC: set_activity failed — {e}; marking disconnected");
                 self.connected = false;
-                self.discord_running = true; // Discord may still be running, just lost the socket
+                self.discord_running = false;
                 self.client = None;
             }
         }

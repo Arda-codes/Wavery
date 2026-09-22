@@ -42,6 +42,55 @@ export async function runSettingsComprehensiveTests() {
   store.setSetting("themeMode", "light");
   assert.strictEqual(useSettingsStore.getState().themeMode, "light");
 
+  // Theme presets (changes both theme and accent color)
+  store.setThemePreset("ocean");
+  assert.strictEqual(useSettingsStore.getState().themeMode, "ocean");
+  assert.strictEqual(useSettingsStore.getState().accentColor, "#0EA5E9");
+
+  store.setThemePreset("purple");
+  assert.strictEqual(useSettingsStore.getState().themeMode, "purple");
+  assert.strictEqual(useSettingsStore.getState().accentColor, "#A855F7");
+
+  store.setThemePreset("forest");
+  assert.strictEqual(useSettingsStore.getState().themeMode, "forest");
+  assert.strictEqual(useSettingsStore.getState().accentColor, "#10B981");
+
+  store.setThemePreset("mocha");
+  assert.strictEqual(useSettingsStore.getState().themeMode, "mocha");
+  assert.strictEqual(useSettingsStore.getState().accentColor, "#CBA6F7");
+
+  store.setThemePreset("latte");
+  assert.strictEqual(useSettingsStore.getState().themeMode, "latte");
+  assert.strictEqual(useSettingsStore.getState().accentColor, "#1E66F5");
+
+  // Custom Theme Maker operations
+  const customMockTheme = {
+    id: "test-theme-cyber",
+    name: "Cyber Sunset",
+    isLight: false,
+    bg: "#1A0022",
+    surface: "#260033",
+    deck: "#180020",
+    sidebar: "#120018",
+    border: "#FF007F",
+    textPrimary: "#FFFFFF",
+    textSecondary: "#FF80BF",
+    textMuted: "#CC0066",
+    accentColor: "#FF007F",
+  };
+  store.saveCustomTheme(customMockTheme);
+  assert.strictEqual(useSettingsStore.getState().themeMode, "custom");
+  assert.strictEqual(useSettingsStore.getState().accentColor, "#FF007F");
+  assert.strictEqual(useSettingsStore.getState().customTheme?.name, "Cyber Sunset");
+  assert.strictEqual(useSettingsStore.getState().savedCustomThemes.length, 1);
+
+  store.deleteCustomTheme("test-theme-cyber");
+  assert.strictEqual(useSettingsStore.getState().savedCustomThemes.length, 0);
+
+  // Set theme mode to light for subsequent export/import tests
+  store.setSetting("themeMode", "light");
+  assert.strictEqual(useSettingsStore.getState().themeMode, "light");
+
   // Accent color
   store.setSetting("accentColor", "#8B5CF6");
   assert.strictEqual(useSettingsStore.getState().accentColor, "#8B5CF6");
@@ -112,6 +161,7 @@ export async function runSettingsComprehensiveTests() {
   assert.strictEqual(parsed.themeMode, "light");
   assert.strictEqual(parsed.accentColor, "#8B5CF6");
   assert.strictEqual(parsed.keybindings.togglePlay, "k");
+  assert(Array.isArray(parsed.protectedArtists) && parsed.protectedArtists.includes("Tyler, The Creator"));
 
   // Reset to default
   store.resetToDefaults();
@@ -129,6 +179,28 @@ export async function runSettingsComprehensiveTests() {
   const badImport = store.importConfigJson("NOT_A_VALID_JSON");
   assert.strictEqual(badImport, false);
   console.log("  ✓ Export, Import and Validation verified");
+
+  // 4b. Testing Protected Artists Dynamic Customization
+  console.log("--- 4b. Testing Protected Artists Customization ---");
+  assert(useSettingsStore.getState().protectedArtists.includes("Tyler, The Creator"), "Default protected artists includes Tyler, The Creator");
+
+  // Add custom artist with comma and ampersand
+  store.addProtectedArtist("Custom, Experimental Band & Co");
+  assert(useSettingsStore.getState().protectedArtists.includes("Custom, Experimental Band & Co"), "Custom artist successfully added to protected list");
+
+  // Test duplicate addition is prevented
+  const countBefore = useSettingsStore.getState().protectedArtists.length;
+  store.addProtectedArtist("Custom, Experimental Band & Co");
+  assert.strictEqual(useSettingsStore.getState().protectedArtists.length, countBefore, "Duplicate artist not added");
+
+  // Remove custom artist
+  store.removeProtectedArtist("Custom, Experimental Band & Co");
+  assert(!useSettingsStore.getState().protectedArtists.includes("Custom, Experimental Band & Co"), "Custom artist successfully removed from protected list");
+
+  // Reset protected artists
+  store.resetProtectedArtists();
+  assert(useSettingsStore.getState().protectedArtists.includes("Tyler, The Creator"), "Reset restored default protected artists");
+  console.log("  ✓ Protected artists customization verified");
 
   // 5. Notifications Unit Validation
   console.log("--- 5. Testing Notification Handlers Resilience ---");

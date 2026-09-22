@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from "react";
 import { ArtistInfo } from "../types";
-import { Users, Disc, Music, Play, ListPlus, CornerDownRight, User, Copy } from "lucide-react";
+import { Users, Disc, Music, Play, ListPlus, CornerDownRight, User, Copy, FilePenLine } from "lucide-react";
 import { useArtwork } from "../utils/useArtwork";
 import { usePlayerStore } from "../stores/playerStore";
 import { useContextMenuStore, ContextMenuItem } from "../stores/contextMenuStore";
@@ -8,12 +8,14 @@ import { useContextMenuStore, ContextMenuItem } from "../stores/contextMenuStore
 interface ArtistCardProps {
   artist: ArtistInfo;
   onSelectArtist: (artistName: string) => void;
+  onEditArtist?: (artist: ArtistInfo) => void;
   artworkUrl?: string;
 }
 
 const ArtistCardInner: React.FC<ArtistCardProps> = ({
   artist,
   onSelectArtist,
+  onEditArtist,
   artworkUrl: propArtworkUrl,
 }) => {
   const fetchedArtwork = useArtwork(artist.artworkTrackId);
@@ -90,9 +92,25 @@ const ArtistCardInner: React.FC<ArtistCardProps> = ({
         },
       ];
 
+      if (onEditArtist) {
+        menuItems.push(
+          {
+            id: "divider-edit-artist",
+            label: "",
+            divider: true,
+          },
+          {
+            id: "edit-artist-metadata",
+            label: "Edit Artist Metadata...",
+            icon: FilePenLine,
+            onClick: () => onEditArtist(artist),
+          }
+        );
+      }
+
       openContextMenu(e, menuItems);
     },
-    [artist, onSelectArtist, setQueue, insertAfterCurrent, addToQueue, openContextMenu]
+    [artist, onSelectArtist, onEditArtist, setQueue, insertAfterCurrent, addToQueue, openContextMenu]
   );
 
   return (
@@ -100,10 +118,10 @@ const ArtistCardInner: React.FC<ArtistCardProps> = ({
       onClick={() => onSelectArtist(artist.name)}
       onContextMenu={handleContextMenu}
       style={{ contain: "content" }}
-      className="group cursor-pointer bg-[#16161A] hover:bg-[#202026] border border-white/[0.06] hover:border-white/[0.12] rounded-2xl p-4 flex flex-col items-center text-center transition-all duration-200 shadow-sm hover:shadow-xl select-none"
+      className="group cursor-pointer bg-[#16161A] hover:bg-[#202026] border border-white/[0.06] hover:border-white/[0.12] rounded-2xl p-4 flex flex-col items-center text-center transition-[background-color,border-color,box-shadow,transform] duration-250 ease-[cubic-bezier(0.16,1,0.3,1)] shadow-sm hover:shadow-xl hover:-translate-y-0.5 select-none"
     >
       {/* Artist Avatar Circle */}
-      <div className="w-28 h-28 rounded-full bg-[#1C1C22] overflow-hidden flex items-center justify-center mb-3.5 relative border border-white/[0.08] shadow-lg group-hover:scale-105 transition-transform duration-300 ease-out">
+      <div className="w-28 h-28 rounded-full bg-[#1C1C22] overflow-hidden flex items-center justify-center mb-3.5 relative border border-white/[0.08] shadow-lg group-hover:scale-105 transition-transform duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform">
         {artworkUrl && !imgError ? (
           <img
             src={artworkUrl}

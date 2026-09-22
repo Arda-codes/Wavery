@@ -56,11 +56,11 @@ export const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fadeIn">
-      <div className="bg-[#16161A] border border-white/[0.12] rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-scaleUp">
+      <div className="bg-surface border border-white/[0.12] rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-scaleUp">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.08]">
           <div className="flex items-center space-x-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#FA586A] to-[#E0284F] flex items-center justify-center text-white shadow-md shadow-[#FA586A]/20 flex-shrink-0">
+            <div className="w-8 h-8 rounded-xl bg-accent flex items-center justify-center text-white shadow-sm flex-shrink-0">
               <ListMusic className="w-4 h-4" />
             </div>
             <div className="min-w-0">

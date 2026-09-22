@@ -126,7 +126,7 @@ export const AlbumMetadataModal: React.FC<AlbumMetadataModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
       <div
-        className="bg-[#18181D] border border-white/[0.08] w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
+        className="bg-[#18181D] border border-white/[0.08] w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-scaleUp"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}

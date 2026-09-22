@@ -150,6 +150,7 @@ struct AppState {
     config: SyncMutex<Config>,
     artwork_cache: SyncMutex<ArtworkCache>,
     server_process: SyncMutex<Option<std::process::Child>>,
+    discord_handle: wavery_server::discord::DiscordHandle,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -193,6 +194,162 @@ async fn import_folder(
     let path = PathBuf::from(dir_path);
     let tracks = lib.import_directory(&path, strategy).await?;
     Ok(tracks)
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct UpdateTrackMetadataDto {
+    #[serde(alias = "trackId")]
+    pub track_id: String,
+    pub metadata: Option<wavery_core::models::TrackMetadata>,
+    pub title: Option<String>,
+    pub artist: Option<String>,
+    pub album: Option<String>,
+    #[serde(alias = "albumArtist")]
+    pub album_artist: Option<String>,
+    #[serde(alias = "trackNumber")]
+    pub track_number: Option<u32>,
+    #[serde(alias = "discNumber")]
+    pub disc_number: Option<u32>,
+    pub year: Option<i32>,
+    pub genre: Option<String>,
+    pub lyrics: Option<String>,
+    #[serde(alias = "writeTags")]
+    pub write_tags: Option<bool>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct UpdateArtistMetadataDto {
+    #[serde(alias = "originalName")]
+    pub original_name: String,
+    #[serde(alias = "newName")]
+    pub new_name: String,
+    #[serde(alias = "updateAlbumArtist")]
+    pub update_album_artist: Option<bool>,
+    #[serde(alias = "writeTags")]
+    pub write_tags: Option<bool>,
+}
+
+#[tauri::command]
+async fn update_track_metadata(
+    req: UpdateTrackMetadataDto,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<Track, IpcError> {
+    let lib_arc = state.library.as_ref().ok_or(IpcError::LibraryNotInitialized)?;
+    let mut lib = lib_arc.lock().await;
+    let write_tags = req.write_tags.unwrap_or(true);
+    let mut meta = if let Some(m) = req.metadata {
+        m
+    } else {
+        let existing = lib
+            .get_track(&req.track_id)
+            .cloned()
+            .ok_or_else(|| IpcError::TrackNotFound(req.track_id.clone()))?;
+        existing.metadata
+    };
+
+    if let Some(title) = req.title {
+        meta.title = Some(title);
+    }
+    if let Some(artist) = req.artist {
+        meta.artist = Some(artist);
+    }
+    if let Some(album) = req.album {
+        meta.album = Some(album);
+    }
+    if let Some(album_artist) = req.album_artist {
+        meta.album_artist = Some(album_artist);
+    }
+    if let Some(track_number) = req.track_number {
+        meta.track_number = Some(track_number);
+    }
+    if let Some(disc_number) = req.disc_number {
+        meta.disc_number = Some(disc_number);
+    }
+    if let Some(year) = req.year {
+        meta.year = Some(year);
+    }
+    if let Some(genre) = req.genre {
+        meta.genre = Some(genre);
+    }
+    if let Some(lyrics) = req.lyrics {
+        meta.lyrics = if lyrics.trim().is_empty() {
+            None
+        } else {
+            Some(lyrics)
+        };
+    }
+
+    let updated = lib
+        .update_track_metadata(&req.track_id, &meta, write_tags)
+        .await
+        .map_err(|e| IpcError::Library(e.to_string()))?;
+    Ok(updated)
+}
+
+#[tauri::command]
+async fn update_artist_metadata(
+    req: UpdateArtistMetadataDto,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<Vec<Track>, IpcError> {
+    let lib_arc = state.library.as_ref().ok_or(IpcError::LibraryNotInitialized)?;
+    let mut lib = lib_arc.lock().await;
+    let write_tags = req.write_tags.unwrap_or(true);
+    let update_album_artist = req.update_album_artist.unwrap_or(true);
+    let orig_lower = req.original_name.trim().to_lowercase();
+    let is_orig_unknown = orig_lower == "unknown artist" || orig_lower.is_empty();
+
+    let mut matching_track_ids: Vec<(String, bool, bool)> = Vec::new();
+    for track in lib.all_tracks() {
+        let artist_match = track
+            .metadata
+            .artist
+            .as_deref()
+            .map(|a| {
+                let a_trimmed = a.trim();
+                a_trimmed.to_lowercase() == orig_lower || (is_orig_unknown && a_trimmed.is_empty())
+            })
+            .unwrap_or(is_orig_unknown);
+
+        let album_artist_match = if update_album_artist {
+            track
+                .metadata
+                .album_artist
+                .as_deref()
+                .map(|a| {
+                    let a_trimmed = a.trim();
+                    a_trimmed.to_lowercase() == orig_lower || (is_orig_unknown && a_trimmed.is_empty())
+                })
+                .unwrap_or(false)
+        } else {
+            false
+        };
+
+        if artist_match || album_artist_match {
+            matching_track_ids.push((track.id.to_string(), artist_match, album_artist_match));
+        }
+    }
+
+    let mut updated_tracks = Vec::new();
+    for (track_id, artist_match, album_artist_match) in matching_track_ids {
+        if let Some(track) = lib.get_track(&track_id).cloned() {
+            let mut meta = track.metadata.clone();
+            if artist_match {
+                meta.artist = Some(req.new_name.clone());
+            }
+            if album_artist_match {
+                meta.album_artist = Some(req.new_name.clone());
+            }
+            let updated = lib
+                .update_track_metadata(&track_id, &meta, write_tags)
+                .await
+                .map_err(|e| IpcError::Library(e.to_string()))?;
+            updated_tracks.push(updated);
+        }
+    }
+
+    Ok(updated_tracks)
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -558,6 +715,69 @@ async fn export_config_json(
     };
     let json_str = serde_json::to_string_pretty(&config)?;
     Ok(json_str)
+}
+
+#[tauri::command]
+async fn update_discord_presence(
+    payload: wavery_server::discord::PresencePayload,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<(), IpcError> {
+    let handle = Arc::clone(&state.discord_handle);
+    tokio::task::spawn_blocking(move || {
+        if let Ok(lock) = handle.try_read() {
+            if let Ok(mut rpc) = lock.try_lock() {
+                rpc.set_activity(&payload);
+            }
+        }
+    })
+    .await
+    .map_err(|e| IpcError::Task(e.to_string()))?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn clear_discord_presence(
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<(), IpcError> {
+    let handle = Arc::clone(&state.discord_handle);
+    tokio::task::spawn_blocking(move || {
+        if let Ok(lock) = handle.try_read() {
+            if let Ok(mut rpc) = lock.try_lock() {
+                rpc.clear_activity();
+            }
+        }
+    })
+    .await
+    .map_err(|e| IpcError::Task(e.to_string()))?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn get_discord_status(
+    custom_app_id: Option<String>,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<wavery_server::discord::DiscordStatusPayload, IpcError> {
+    let handle = Arc::clone(&state.discord_handle);
+    let status = tokio::task::spawn_blocking(move || {
+        if let Ok(lock) = handle.try_read() {
+            if let Ok(mut rpc) = lock.try_lock() {
+                if let Some(ref id) = custom_app_id {
+                    rpc.set_app_id(Some(id));
+                }
+                return rpc.status();
+            }
+        }
+        wavery_server::discord::DiscordStatusPayload {
+            connected: false,
+            discord_running: false,
+        }
+    })
+    .await
+    .unwrap_or(wavery_server::discord::DiscordStatusPayload {
+        connected: false,
+        discord_running: false,
+    });
+    Ok(status)
 }
 
 fn find_project_root() -> PathBuf {
@@ -1165,6 +1385,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         config: SyncMutex::new(config.clone()),
         artwork_cache: SyncMutex::new(ArtworkCache::new(MAX_ARTWORK_CACHE_ENTRIES)),
         server_process: SyncMutex::new(None),
+        discord_handle: wavery_server::discord::new_discord_handle(None),
     });
 
     let app = tauri::Builder::default()
@@ -1439,6 +1660,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             save_config,
             import_config_json,
             export_config_json,
+            update_track_metadata,
+            update_artist_metadata,
             update_album_metadata,
             rebuild_library,
             vacuum_library,
@@ -1459,7 +1682,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             delete_playlist,
             add_tracks_to_playlist,
             remove_track_from_playlist,
-            save_playlist
+            save_playlist,
+            update_discord_presence,
+            clear_discord_presence,
+            get_discord_status
         ])
         .build(tauri::generate_context!())?;
 
@@ -1931,6 +2157,7 @@ mod tests {
             config: SyncMutex::new(cfg),
             artwork_cache: SyncMutex::new(ArtworkCache::new(MAX_ARTWORK_CACHE_ENTRIES)),
             server_process: SyncMutex::new(None),
+            discord_handle: wavery_server::discord::new_discord_handle(None),
         };
 
         let minimize = state.config.lock().general.minimize_to_tray;

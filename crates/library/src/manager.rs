@@ -661,6 +661,7 @@ impl LibraryManager for SqliteLibraryManager {
         self.tracks_cache[pos].metadata.disc_number = metadata.disc_number;
         self.tracks_cache[pos].metadata.year = metadata.year;
         self.tracks_cache[pos].metadata.genre = metadata.genre.clone();
+        self.tracks_cache[pos].metadata.lyrics = metadata.lyrics.clone();
 
         Ok(self.tracks_cache[pos].clone())
     }

@@ -51,11 +51,11 @@ const AlbumDetailInner: React.FC<AlbumDetailProps> = ({
   }, [album, onPlayAlbum, setQueue, albumContext]);
 
   return (
-    <div className="flex-1 flex flex-col overflow-y-auto bg-[#0D0D10]">
+    <div className="flex-1 flex flex-col overflow-y-auto bg-background">
       {/* Album Header Banner */}
-      <div className="bg-gradient-to-b from-[#FA586A]/20 via-[#16161A]/80 to-[#0D0D10] p-4 sm:p-6 md:p-8 border-b border-white/[0.06] flex flex-col md:flex-row items-center md:items-end gap-5 sm:gap-7 flex-shrink-0">
+      <div className="bg-gradient-to-b from-accent/[0.08] to-transparent p-4 sm:p-6 md:p-8 border-b border-white/[0.06] flex flex-col md:flex-row items-center md:items-end gap-5 sm:gap-7 flex-shrink-0">
         {/* Cover Art */}
-        <div className="w-36 h-36 sm:w-44 sm:h-44 md:w-48 md:h-48 rounded-2xl bg-[#1C1C22] overflow-hidden shadow-2xl shadow-black/80 flex items-center justify-center flex-shrink-0 border border-white/[0.08]">
+        <div className="w-36 h-36 sm:w-44 sm:h-44 md:w-48 md:h-48 rounded-2xl bg-surface overflow-hidden shadow-2xl shadow-black/80 flex items-center justify-center flex-shrink-0 border border-white/[0.08]">
           {coverArtwork && !coverError ? (
             <img
               src={coverArtwork}
@@ -77,7 +77,7 @@ const AlbumDetailInner: React.FC<AlbumDetailProps> = ({
               Album
             </p>
             {isThisAlbumPlaying && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#FA586A]/15 border border-[#FA586A]/30 text-[10px] font-bold text-[#FA586A] shadow-sm animate-fade-in">
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] bg-[#FA586A]/10 border border-[#FA586A]/25 text-[10px] font-semibold text-[#FA586A] uppercase tracking-wider animate-fade-in">
                 <EqualizerWave isPlaying={isPlaying} size="xs" color="bg-[#FA586A]" />
                 <span>Now Playing</span>
               </span>
@@ -122,14 +122,14 @@ const AlbumDetailInner: React.FC<AlbumDetailProps> = ({
           <div className="flex items-center justify-center md:justify-start gap-3">
             <button
               onClick={handlePlay}
-              className="inline-flex items-center gap-2 px-7 py-2.5 bg-[#FA586A] hover:bg-[#E04859] active:scale-95 text-white rounded-full text-xs font-bold shadow-xl shadow-[#FA586A]/25 transition"
+              className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#FA586A] hover:bg-[#E04859] active:scale-95 text-white rounded-xl text-xs font-bold shadow-lg shadow-[#FA586A]/20 transition"
             >
               <Play className="w-4 h-4 fill-white" />
               <span>{isThisAlbumPlaying && isPlaying ? "Restart Album" : "Play Album"}</span>
             </button>
             <button
               onClick={() => setIsEditModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-white/[0.08] hover:bg-white/[0.14] active:scale-95 text-white rounded-full text-xs font-bold transition border border-white/[0.08]"
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-white/[0.08] hover:bg-white/[0.14] active:scale-95 text-white rounded-xl text-xs font-semibold transition border border-white/[0.08]"
               title="Edit Album & Track Metadata"
             >
               <Pencil className="w-3.5 h-3.5 text-[#FA586A]" />
@@ -141,7 +141,7 @@ const AlbumDetailInner: React.FC<AlbumDetailProps> = ({
 
       {/* Album Tracks */}
       <div className="p-3 sm:p-6 pb-28 sm:pb-24">
-        <div className="bg-[#16161A]/60 rounded-2xl border border-white/[0.06] overflow-hidden shadow-md">
+        <div className="bg-surface/60 rounded-2xl border border-white/[0.06] overflow-hidden shadow-md">
           <TrackTable
             tracks={album.tracks}
             playbackContext={albumContext}

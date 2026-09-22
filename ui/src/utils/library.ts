@@ -24,42 +24,208 @@ export function formatTotalDuration(secs: number = 0): string {
 }
 
 /**
- * Extracts the clean primary artist name by stripping featured/collaborating artist suffixes.
- * E.g. "Daft Punk feat. Pharrell Williams" -> "Daft Punk"
- *      "Eminem ft. Rihanna" -> "Eminem"
- *      "Kanye West with Lupe Fiasco" -> "Kanye West"
+ * Curated list of iconic artist and band names that contain punctuation (commas, ampersands, slashes, exclamation points)
+ * as part of their atomic identity, preventing them from being mistakenly split into separate artists.
  */
-export function extractPrimaryArtist(raw: string = ""): string {
-  if (!raw || !raw.trim()) return "Unknown Artist";
-  let cleaned = raw.trim();
+export const DEFAULT_PROTECTED_ARTISTS: readonly string[] = [
+  "Crosby, Stills, Nash & Young",
+  "Crosby, Stills, Nash and Young",
+  "Crosby, Stills & Nash",
+  "Crosby, Stills and Nash",
+  "Earth, Wind & Fire",
+  "Earth, Wind and Fire",
+  "Blood, Sweat & Tears",
+  "Blood, Sweat and Tears",
+  "Emerson, Lake & Palmer",
+  "Emerson, Lake and Palmer",
+  "Peter, Paul and Mary",
+  "Peter, Paul & Mary",
+  "Tyler, The Creator",
+  "Tom Petty and the Heartbreakers",
+  "Tom Petty & The Heartbreakers",
+  "Grandmaster Flash and the Furious Five",
+  "Grandmaster Flash & the Furious Five",
+  "Frankie Lymon & The Teenagers",
+  "Frankie Lymon and the Teenagers",
+  "King Gizzard & The Lizard Wizard",
+  "King Gizzard and the Lizard Wizard",
+  "Bob Marley & The Wailers",
+  "Bob Marley and the Wailers",
+  "Sly & The Family Stone",
+  "Sly and the Family Stone",
+  "Toots and the Maytals",
+  "Toots & The Maytals",
+  "Siouxsie and the Banshees",
+  "Siouxsie & The Banshees",
+  "Huey Lewis & The News",
+  "Huey Lewis and the News",
+  "KC and the Sunshine Band",
+  "KC & The Sunshine Band",
+  "The Mamas & The Papas",
+  "The Mamas and the Papas",
+  "Derek & The Dominos",
+  "Derek and the Dominos",
+  "Echo & The Bunnymen",
+  "Echo and the Bunnymen",
+  "Katrina and the Waves",
+  "Katrina & The Waves",
+  "Marina and the Diamonds",
+  "Marina & The Diamonds",
+  "Florence + The Machine",
+  "Florence and the Machine",
+  "Joan Jett & the Blackhearts",
+  "Joan Jett and the Blackhearts",
+  "Sun Ra and His Intergalactic Solar Arkestra",
+  "Sun Ra and His Arkestra",
+  "Tony! Toni! Toné!",
+  "Tony! Toni! Tone!",
+  "Simon & Garfunkel",
+  "Captain & Tennille",
+  "Captain and Tennille",
+  "Hall & Oates",
+  "Sunn O)))",
+  "Panic! At The Disco",
+  "!!! (Chk Chk Chk)",
+  "$uicideboy$",
+  "AC/DC",
+];
 
-  // Strip featuring clauses
-  const featRegex = /\s+(?:feat\.?|ft\.?|featuring|with|vs\.?)\s+.+$/i;
-  cleaned = cleaned.replace(featRegex, "");
+export let PROTECTED_ARTISTS: string[] = [...DEFAULT_PROTECTED_ARTISTS];
 
-  // If delimited by comma / slash / ampersand, take the primary leading artist
-  const firstComma = cleaned.search(/[,/;&]/);
-  if (firstComma > 0) {
-    const candidate = cleaned.slice(0, firstComma).trim();
-    if (candidate.length > 0) {
-      cleaned = candidate;
-    }
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+let COMBINED_PROTECTED_REGEX: RegExp | null = null;
+
+function rebuildProtectedRegex() {
+  const sorted = [...PROTECTED_ARTISTS]
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+
+  if (sorted.length === 0) {
+    COMBINED_PROTECTED_REGEX = null;
+    return;
   }
 
-  return cleaned.trim() || raw.trim();
+  COMBINED_PROTECTED_REGEX = new RegExp(
+    `(?<![a-zA-Z0-9])(${sorted.map(escapeRegex).join("|")})(?![a-zA-Z0-9])`,
+    "gi"
+  );
+}
+
+rebuildProtectedRegex();
+
+/**
+ * Updates the active list of protected artists and rebuilds the matching regex.
+ */
+export function setProtectedArtists(artists: string[]): void {
+  const seen = new Set<string>();
+  const cleaned: string[] = [];
+  for (const a of artists) {
+    const trimmed = a.trim();
+    if (trimmed.length > 0) {
+      const lower = trimmed.toLowerCase();
+      if (!seen.has(lower)) {
+        seen.add(lower);
+        cleaned.push(trimmed);
+      }
+    }
+  }
+  PROTECTED_ARTISTS = cleaned;
+  rebuildProtectedRegex();
 }
 
 /**
- * Splits multi-artist strings into individual unique artist names.
+ * Returns a copy of the active protected artist names.
+ */
+export function getProtectedArtists(): string[] {
+  return [...PROTECTED_ARTISTS];
+}
+
+/**
+ * Resets the protected artist names back to the default list.
+ */
+export function resetProtectedArtists(): void {
+  PROTECTED_ARTISTS = [...DEFAULT_PROTECTED_ARTISTS];
+  rebuildProtectedRegex();
+}
+
+function maskProtectedArtists(raw: string): {
+  protectedText: string;
+  tokenMap: Map<string, string>;
+} {
+  const tokenMap = new Map<string, string>();
+  if (!COMBINED_PROTECTED_REGEX) {
+    return { protectedText: raw, tokenMap };
+  }
+
+  let tokenCounter = 0;
+
+  // Single-pass regex replacement across all protected artists
+  const protectedText = raw.replace(COMBINED_PROTECTED_REGEX, (match) => {
+    const placeholder = `__WAVERY_PROTECTED_ARTIST_${tokenCounter++}__`;
+    tokenMap.set(placeholder, match);
+    return placeholder;
+  });
+
+  return { protectedText, tokenMap };
+}
+
+function unmaskProtectedArtists(
+  text: string,
+  tokenMap: Map<string, string>
+): string {
+  if (tokenMap.size === 0) return text;
+  let result = text;
+  for (const [placeholder, original] of tokenMap.entries()) {
+    result = result.split(placeholder).join(original);
+  }
+  return result;
+}
+
+const DELIMITER_QUICK_CHECK = /[,/;&]|feat|ft\.|featuring|with|vs\./i;
+
+/**
+ * Extracts the clean primary artist name by stripping featured/collaborating artist suffixes.
+ * E.g. "Daft Punk feat. Pharrell Williams" -> "Daft Punk"
+ *      "Eminem ft. Rihanna" -> "Eminem"
+ *      "Tyler, The Creator; Kali Uchis" -> "Tyler, The Creator"
+ *      "Tyler, The Creator" -> "Tyler, The Creator"
+ */
+export function extractPrimaryArtist(raw: string = ""): string {
+  if (!raw || !raw.trim()) return "Unknown Artist";
+  const trimmed = raw.trim();
+  if (!DELIMITER_QUICK_CHECK.test(trimmed)) {
+    return trimmed;
+  }
+  const split = splitArtists(trimmed);
+  return split[0] || trimmed;
+}
+
+/**
+ * Splits multi-artist strings into individual unique artist names while preserving
+ * protected atomic artist names (such as "Tyler, The Creator" or "Earth, Wind & Fire").
  * E.g. "Daft Punk feat. Pharrell Williams & Nile Rodgers" -> ["Daft Punk", "Pharrell Williams", "Nile Rodgers"]
+ *      "Tyler, The Creator; Kali Uchis" -> ["Tyler, The Creator", "Kali Uchis"]
+ *      "Tyler, The Creator" -> ["Tyler, The Creator"]
  *      "Eminem, Rihanna" -> ["Eminem", "Rihanna"]
  *      "Artist A / Artist B; Artist C" -> ["Artist A", "Artist B", "Artist C"]
  */
 export function splitArtists(raw: string = ""): string[] {
   if (!raw || !raw.trim()) return ["Unknown Artist"];
+  const trimmed = raw.trim();
+
+  // Fast path: if no delimiter keywords or characters present, avoid regex passes
+  if (!DELIMITER_QUICK_CHECK.test(trimmed)) {
+    return [trimmed];
+  }
+
+  const { protectedText, tokenMap } = maskProtectedArtists(trimmed);
 
   // Replace common featuring keywords with delimiter
-  const normalized = raw
+  const normalized = protectedText
     .replace(/\s+(?:feat\.?|ft\.?|featuring|with|vs\.?)\s+/gi, " & ")
     .replace(/[;/]/g, " & ")
     .replace(/,\s*/g, " & ");
@@ -69,55 +235,58 @@ export function splitArtists(raw: string = ""): string[] {
   const artists: string[] = [];
 
   for (const part of parts) {
-    const trimmed = part.trim();
-    if (trimmed.length > 0) {
-      const lower = trimmed.toLowerCase();
+    const unmasked = unmaskProtectedArtists(part, tokenMap).trim();
+    if (unmasked.length > 0) {
+      const lower = unmasked.toLowerCase();
       if (!seen.has(lower)) {
         seen.add(lower);
-        artists.push(trimmed);
+        artists.push(unmasked);
       }
     }
   }
 
-  return artists.length > 0 ? artists : [raw.trim()];
+  return artists.length > 0 ? artists : [trimmed];
 }
 
 /**
  * Parses raw artist string into interactive artist name tokens and connective delimiters.
- * E.g. "Daft Punk feat. Pharrell Williams & Nile Rodgers" ->
+ * E.g. "Tyler, The Creator; Kali Uchis" ->
  * [
- *   { text: "Daft Punk", isArtist: true },
- *   { text: " feat. ", isArtist: false },
- *   { text: "Pharrell Williams", isArtist: true },
- *   { text: " & ", isArtist: false },
- *   { text: "Nile Rodgers", isArtist: true }
+ *   { text: "Tyler, The Creator", isArtist: true },
+ *   { text: "; ", isArtist: false },
+ *   { text: "Kali Uchis", isArtist: true }
  * ]
  */
-interface ArtistToken {
+export interface ArtistToken {
   text: string;
   isArtist: boolean;
 }
 
 export function parseArtistTokens(raw: string = ""): ArtistToken[] {
   if (!raw || !raw.trim()) return [{ text: "Unknown Artist", isArtist: true }];
-  
+  const trimmed = raw.trim();
+  if (!DELIMITER_QUICK_CHECK.test(trimmed)) {
+    return [{ text: trimmed, isArtist: true }];
+  }
+
+  const { protectedText, tokenMap } = maskProtectedArtists(trimmed);
   const regex = /(\s+(?:feat\.?|ft\.?|featuring|with|vs\.?)\s+|\s*[,/;&]\s*|\s+&\s+)/gi;
-  const parts = raw.split(regex);
+  const parts = protectedText.split(regex);
   const tokens: ArtistToken[] = [];
 
   for (const part of parts) {
     if (!part) continue;
     if (part.match(regex)) {
-      tokens.push({ text: part, isArtist: false });
+      tokens.push({ text: unmaskProtectedArtists(part, tokenMap), isArtist: false });
     } else {
-      const trimmed = part.trim();
-      if (trimmed.length > 0) {
-        tokens.push({ text: trimmed, isArtist: true });
+      const unmasked = unmaskProtectedArtists(part, tokenMap).trim();
+      if (unmasked.length > 0) {
+        tokens.push({ text: unmasked, isArtist: true });
       }
     }
   }
 
-  return tokens.length > 0 ? tokens : [{ text: raw.trim(), isArtist: true }];
+  return tokens.length > 0 ? tokens : [{ text: trimmed, isArtist: true }];
 }
 
 function getParentDir(filePath?: string): string {
@@ -203,12 +372,12 @@ export function extractArtistFromPath(filePath?: string, albumTitle?: string): s
 
 function isRosterString(s: string = ""): boolean {
   if (!s) return false;
-  return (
-    s.includes("/") ||
-    s.includes(";") ||
-    (s.includes(",") && s.split(",").length >= 3) ||
-    splitArtists(s).length >= 3
-  );
+  const lower = s.toLowerCase();
+  for (const pa of PROTECTED_ARTISTS) {
+    if (lower === pa.toLowerCase()) return false;
+  }
+  const split = splitArtists(s);
+  return split.length >= 3;
 }
 
 /**

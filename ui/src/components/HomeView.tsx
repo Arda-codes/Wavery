@@ -4,7 +4,6 @@ import { usePlayerStore } from "../stores/playerStore";
 import { useContextMenuStore, ContextMenuItem } from "../stores/contextMenuStore";
 import {
   Play,
-  Sparkles,
   ChevronRight,
   Heart,
   FolderPlus,
@@ -38,7 +37,6 @@ interface EditorialPick {
   badgeColor: string;
   title: string;
   subtitle: string;
-  gradient: string;
   artworkTrackId?: string;
   tracks: Track[];
   type: "album" | "station" | "mix" | "artist";
@@ -142,13 +140,12 @@ export const HomeView: React.FC<HomeViewProps> = ({
         return maxB - maxA;
       })[0];
 
-      picks.push({
+        picks.push({
         id: `pick-album-${newestAlbum.title}`,
         badge: "RECENT ADDITION",
         badgeColor: "bg-red-500/20 text-red-400 border-red-500/30",
         title: newestAlbum.title,
         subtitle: `${newestAlbum.artist} • ${newestAlbum.tracks.length} tracks`,
-        gradient: "from-amber-600/60 via-red-700/40 to-[#121216]",
         artworkTrackId: newestAlbum.artworkTrackId,
         tracks: newestAlbum.tracks,
         type: "album",
@@ -161,10 +158,9 @@ export const HomeView: React.FC<HomeViewProps> = ({
       picks.push({
         id: "pick-personal-favorites",
         badge: "FAVORITES",
-        badgeColor: "bg-[#FA586A]/20 text-[#FA586A] border-[#FA586A]/30",
+        badgeColor: "bg-accent/20 text-accent border-accent/30",
         title: "Your Favorites Station",
         subtitle: `${likedTracks.length} liked tracks from your collection`,
-        gradient: "from-[#FA586A]/70 via-rose-900/40 to-[#121216]",
         artworkTrackId: likedTracks[0]?.id,
         tracks: likedTracks,
         type: "station",
@@ -178,10 +174,9 @@ export const HomeView: React.FC<HomeViewProps> = ({
       picks.push({
         id: "pick-heavy-rotation",
         badge: "HEAVY ROTATION",
-        badgeColor: "bg-[#FA586A]/20 text-[#FA586A] border-[#FA586A]/30",
+        badgeColor: "bg-accent/20 text-accent border-accent/30",
         title: "Heavy Rotation",
         subtitle: `${historyTracks.length} recently played tracks`,
-        gradient: "from-[#FA586A]/70 via-rose-900/40 to-[#121216]",
         artworkTrackId: historyTracks[0]?.id,
         tracks: historyTracks,
         type: "station",
@@ -190,10 +185,9 @@ export const HomeView: React.FC<HomeViewProps> = ({
       picks.push({
         id: "pick-library-station",
         badge: "MADE FOR YOU",
-        badgeColor: "bg-[#FA586A]/20 text-[#FA586A] border-[#FA586A]/30",
+        badgeColor: "bg-accent/20 text-accent border-accent/30",
         title: "Your Library Station",
         subtitle: `Continuous mix from your ${tracks.length} library tracks`,
-        gradient: "from-[#FA586A]/70 via-rose-900/40 to-[#121216]",
         artworkTrackId: tracks[0]?.id,
         tracks: tracks.slice(0, 30),
         type: "station",
@@ -209,7 +203,6 @@ export const HomeView: React.FC<HomeViewProps> = ({
         badgeColor: "bg-blue-500/20 text-blue-400 border-blue-500/30",
         title: `${topArtist.name} Essentials`,
         subtitle: `${topArtist.trackCount} tracks across ${topArtist.albumCount} albums`,
-        gradient: "from-blue-600/60 via-indigo-900/40 to-[#121216]",
         artworkTrackId: topArtist.artworkTrackId,
         tracks: topArtist.tracks,
         type: "artist",
@@ -226,7 +219,6 @@ export const HomeView: React.FC<HomeViewProps> = ({
         badgeColor: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
         title: `${genre1.name} Collection`,
         subtitle: `${genre1.tracks.length} songs categorized as ${genre1.name}`,
-        gradient: "from-emerald-600/60 via-teal-900/40 to-[#121216]",
         artworkTrackId: genre1.tracks[0]?.id,
         tracks: genre1.tracks,
         type: "mix",
@@ -240,7 +232,6 @@ export const HomeView: React.FC<HomeViewProps> = ({
         badgeColor: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
         title: secondAlbum.title,
         subtitle: `${secondAlbum.artist} • ${secondAlbum.tracks.length} tracks`,
-        gradient: "from-emerald-600/60 via-teal-900/40 to-[#121216]",
         artworkTrackId: secondAlbum.artworkTrackId,
         tracks: secondAlbum.tracks,
         type: "album",
@@ -257,7 +248,6 @@ export const HomeView: React.FC<HomeViewProps> = ({
         badgeColor: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30",
         title: `${genre2.name} Mix`,
         subtitle: `${genre2.tracks.length} tracks from your collection`,
-        gradient: "from-cyan-600/60 via-blue-900/40 to-[#121216]",
         artworkTrackId: genre2.tracks[0]?.id,
         tracks: genre2.tracks,
         type: "mix",
@@ -270,7 +260,6 @@ export const HomeView: React.FC<HomeViewProps> = ({
         badgeColor: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30",
         title: secondArtist.name,
         subtitle: `${secondArtist.trackCount} tracks in your library`,
-        gradient: "from-cyan-600/60 via-blue-900/40 to-[#121216]",
         artworkTrackId: secondArtist.artworkTrackId,
         tracks: secondArtist.tracks,
         type: "artist",
@@ -380,7 +369,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   if (tracks.length === 0) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-8 text-center select-none overflow-y-auto">
-        <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-[#FA586A] to-[#E0284F] flex items-center justify-center text-white shadow-2xl shadow-[#FA586A]/30 mb-6 animate-pulse">
+        <div className="w-20 h-20 rounded-3xl bg-surfaceActive border border-white/[0.08] flex items-center justify-center text-accent mb-6 shadow-xl">
           <Music className="w-10 h-10" />
         </div>
         <h1 className="text-3xl font-extrabold text-white tracking-tight mb-2">
@@ -438,10 +427,10 @@ export const HomeView: React.FC<HomeViewProps> = ({
       <section className="space-y-3.5">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <Sparkles className="w-4 h-4 text-[#FA586A]" />
+            <Compass className="w-4 h-4 text-[#FA586A]" />
             <h2 className="text-lg font-bold text-white tracking-tight">Top Picks for You</h2>
           </div>
-          <span className="text-xs text-[#71717A] font-medium">Dynamic Selections</span>
+          <span className="text-xs text-[#71717A] font-medium">Curated</span>
         </div>
 
         {/* Horizontal Carousel / Flex Shelves */}
@@ -462,7 +451,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                     handlePlayPick(pick);
                   }
                 }}
-                className={`group relative h-[320px] rounded-2xl overflow-hidden cursor-pointer border border-white/[0.08] hover:border-white/[0.2] transition-all duration-300 hover:shadow-2xl hover:shadow-black/60 flex flex-col justify-between p-4 bg-gradient-to-b ${pick.gradient}`}
+                className="group relative h-[320px] rounded-2xl overflow-hidden cursor-pointer border border-white/[0.08] hover:border-white/[0.2] transition-all duration-300 hover:shadow-2xl hover:shadow-black/60 flex flex-col justify-between p-4 bg-surface hover:bg-surfaceHover"
               >
                 {/* Background Artwork Layer with Subtle Parallax & Overlay */}
                 {hasArtwork && artworkUrl && (
@@ -475,14 +464,14 @@ export const HomeView: React.FC<HomeViewProps> = ({
                         (e.target as HTMLElement).style.display = "none";
                       }}
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#0E0E12] via-[#0E0E12]/60 to-transparent" />
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-[0.5px]" />
                   </div>
                 )}
 
                 {/* Top Card Bar: Badge & Brandmark */}
                 <div className="relative z-10 flex items-center justify-between">
                   <span
-                    className={`text-[10px] font-black tracking-wider uppercase px-2 py-0.5 rounded-full border backdrop-blur-md ${pick.badgeColor}`}
+                    className={`text-[10px] font-semibold tracking-wider uppercase px-2 py-0.5 rounded-[4px] border backdrop-blur-md ${pick.badgeColor}`}
                   >
                     {pick.badge}
                   </span>
@@ -726,16 +715,16 @@ export const HomeView: React.FC<HomeViewProps> = ({
           {/* Liked Songs Card */}
           <div
             onClick={() => onNavigate("liked")}
-            className="group relative h-36 rounded-2xl overflow-hidden cursor-pointer border border-[#FA586A]/20 bg-gradient-to-br from-[#FA586A]/30 via-rose-950/40 to-[#121216] p-4 flex flex-col justify-between hover:border-[#FA586A]/50 transition-all hover:shadow-xl hover:shadow-[#FA586A]/15"
+            className="group relative h-36 rounded-2xl overflow-hidden cursor-pointer border border-white/[0.08] bg-surface hover:bg-surfaceHover hover:border-accent/40 hover:bg-gradient-to-br hover:from-accent/15 hover:to-transparent p-4 flex flex-col justify-between transition-all hover:shadow-xl"
           >
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold tracking-wider uppercase px-2 py-0.5 rounded-full bg-[#FA586A]/20 text-[#FA586A] border border-[#FA586A]/30">
+              <span className="text-[10px] font-bold tracking-wider uppercase px-2 py-0.5 rounded-full bg-accent/20 text-accent border border-accent/30">
                 FAVORITES
               </span>
-              <Heart className="w-6 h-6 text-[#FA586A] fill-[#FA586A] drop-shadow-md" />
+              <Heart className="w-6 h-6 text-accent fill-accent drop-shadow-md" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white group-hover:text-[#FA586A] transition-colors">
+              <h3 className="text-base font-bold text-white group-hover:text-accent transition-colors">
                 Liked Songs
               </h3>
               <p className="text-xs text-[#A1A1AA] mt-0.5">

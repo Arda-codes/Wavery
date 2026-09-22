@@ -13,6 +13,7 @@ import {
   Disc,
   Copy,
   FileText,
+  FilePenLine,
   Trash2,
   CornerDownRight,
 } from "lucide-react";
@@ -36,6 +37,7 @@ interface TrackRowProps {
   onAddToPlaylist?: (track: Track) => void;
   onRemoveFromPlaylist?: (trackId: string) => void;
   onDeleteTrack?: (track: Track) => void;
+  onEditMetadata?: (track: Track) => void;
   artworkUrl?: string;
   rowDensity?: RowDensity;
 }
@@ -52,6 +54,7 @@ const TrackRowInner: React.FC<TrackRowProps> = ({
   onAddToPlaylist,
   onRemoveFromPlaylist,
   onDeleteTrack,
+  onEditMetadata,
   artworkUrl: propArtworkUrl,
   rowDensity = "comfortable",
 }) => {
@@ -248,6 +251,24 @@ const TrackRowInner: React.FC<TrackRowProps> = ({
         );
       }
 
+      if (onEditMetadata) {
+        menuItems.push(
+          {
+            id: "divider-edit-metadata",
+            label: "",
+            divider: true,
+          },
+          {
+            id: "edit-track-metadata",
+            label: "Edit Song Metadata...",
+            icon: FilePenLine,
+            onClick: () => {
+              onEditMetadata(track);
+            },
+          }
+        );
+      }
+
       if (onDeleteTrack) {
         menuItems.push(
           {
@@ -284,6 +305,7 @@ const TrackRowInner: React.FC<TrackRowProps> = ({
       onAddToPlaylist,
       onRemoveFromPlaylist,
       onDeleteTrack,
+      onEditMetadata,
       insertAfterCurrent,
       addToQueue,
       toggleLike,
@@ -303,7 +325,7 @@ const TrackRowInner: React.FC<TrackRowProps> = ({
       style={style}
       onDoubleClick={() => onPlay(track, index)}
       onContextMenu={handleContextMenu}
-      className={`grid grid-cols-[36px_minmax(0,1fr)_auto] md:grid-cols-[40px_minmax(160px,1fr)_140px_80px] lg:grid-cols-[44px_minmax(180px,1fr)_150px_150px_90px] xl:grid-cols-[48px_minmax(180px,1fr)_160px_160px_80px_110px] gap-2 sm:gap-3 px-3 sm:px-6 items-center group cursor-pointer hover:bg-white/[0.06] transition-all border-b border-white/[0.03] select-none ${
+      className={`grid grid-cols-[36px_minmax(0,1fr)_auto] md:grid-cols-[40px_minmax(160px,1fr)_140px_80px] lg:grid-cols-[44px_minmax(180px,1fr)_150px_150px_90px] xl:grid-cols-[48px_minmax(180px,1fr)_160px_160px_80px_110px] gap-2 sm:gap-3 px-3 sm:px-6 items-center group cursor-pointer hover:bg-white/[0.06] transition-colors duration-150 ease-out border-b border-white/[0.03] select-none ${
         isCompact ? "text-[11px]" : "text-xs"
       } ${
         isSelected ? "bg-white/[0.08] text-[#FA586A]" : "text-white"

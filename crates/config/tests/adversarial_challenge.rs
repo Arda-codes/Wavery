@@ -13,13 +13,21 @@ fn create_temp_dir(prefix: &str) -> PathBuf {
 }
 
 #[test]
-fn challenge_theme_modes_all_five_variants_exhaustive() {
+fn challenge_theme_modes_all_variants_exhaustive() {
     let expected_variants = [
         (ThemeMode::Dark, "dark"),
         (ThemeMode::Light, "light"),
         (ThemeMode::System, "system"),
         (ThemeMode::Oled, "oled"),
         (ThemeMode::Midnight, "midnight"),
+        (ThemeMode::Ocean, "ocean"),
+        (ThemeMode::Purple, "purple"),
+        (ThemeMode::Forest, "forest"),
+        (ThemeMode::Mocha, "mocha"),
+        (ThemeMode::Macchiato, "macchiato"),
+        (ThemeMode::Frappe, "frappe"),
+        (ThemeMode::Latte, "latte"),
+        (ThemeMode::Custom, "custom"),
     ];
 
     for (mode, str_val) in expected_variants {
@@ -55,7 +63,7 @@ fn challenge_theme_modes_all_five_variants_exhaustive() {
     }
 
     // Invalid theme modes must fail cleanly
-    let invalid_themes = ["DARK", "Midnight", "oled_dark", "Solarized", "custom", "123"];
+    let invalid_themes = ["DARK", "Midnight", "oled_dark", "Solarized", "neon_punk", "123"];
     for invalid in invalid_themes {
         let toml_in = format!("[theme]\nmode = \"{}\"\n", invalid);
         let res: Result<Config, _> = toml::from_str(&toml_in);

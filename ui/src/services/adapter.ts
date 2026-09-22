@@ -1,7 +1,14 @@
 //! Universal API and Audio Adapter for Wavery.
 //! Abstracts Tauri IPC and Browser HTTP Streaming under a single contract.
 
-import { Track, PlayerStatus, ImportStrategy, Playlist } from "../types";
+import {
+  Track,
+  PlayerStatus,
+  ImportStrategy,
+  Playlist,
+  UpdateTrackMetadataPayload,
+  UpdateArtistMetadataPayload,
+} from "../types";
 import { useSettingsStore } from "../stores/settingsStore";
 
 export interface AudioPlayerAdapter {
@@ -22,6 +29,8 @@ export interface AudioPlayerAdapter {
   search(query: string): Promise<Track[]>;
   getArtwork(trackId: string): Promise<string | null>;
   getArtworkUrl(trackId: string): string;
+  updateTrackMetadata(payload: UpdateTrackMetadataPayload): Promise<Track>;
+  updateArtistMetadata(payload: UpdateArtistMetadataPayload): Promise<Track[]>;
   updateAlbumMetadata(payload: UpdateAlbumMetadataPayload): Promise<Track[]>;
   rebuildLibrary(): Promise<Track[]>;
   vacuumDatabase(): Promise<void>;
@@ -401,6 +410,26 @@ class BrowserAudioPlayer implements AudioPlayerAdapter {
     return `/api/tracks/${encodeURIComponent(trackId)}/artwork`;
   }
 
+  async updateTrackMetadata(payload: UpdateTrackMetadataPayload): Promise<Track> {
+    const res = await fetch("/api/tracks/metadata", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  }
+
+  async updateArtistMetadata(payload: UpdateArtistMetadataPayload): Promise<Track[]> {
+    const res = await fetch("/api/artists/metadata", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  }
+
   async updateAlbumMetadata(payload: UpdateAlbumMetadataPayload): Promise<Track[]> {
     const res = await fetch("/api/albums/metadata", {
       method: "POST",
@@ -734,6 +763,16 @@ class TauriAudioPlayer implements AudioPlayerAdapter {
   async search(query: string): Promise<Track[]> {
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke<Track[]>("search_tracks", { query });
+  }
+
+  async updateTrackMetadata(payload: UpdateTrackMetadataPayload): Promise<Track> {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<Track>("update_track_metadata", { req: payload });
+  }
+
+  async updateArtistMetadata(payload: UpdateArtistMetadataPayload): Promise<Track[]> {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<Track[]>("update_artist_metadata", { req: payload });
   }
 
   async updateAlbumMetadata(payload: UpdateAlbumMetadataPayload): Promise<Track[]> {

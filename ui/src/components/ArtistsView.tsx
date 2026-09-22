@@ -3,6 +3,7 @@ import { ArtistInfo, ArtistSortKey, SortDirection } from "../types";
 import { sortArtists } from "../utils/library";
 import { useSettingsStore } from "../stores/settingsStore";
 import { ArtistCard } from "./ArtistCard";
+import { ArtistMetadataModal } from "./ArtistMetadataModal";
 import { Users, ArrowUpDown, Search } from "lucide-react";
 
 interface ArtistsViewProps {
@@ -20,6 +21,7 @@ const ArtistsViewInner: React.FC<ArtistsViewProps> = ({
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const [sortKey, setSortKey] = useState<ArtistSortKey>("name");
   const [sortDir, setSortDir] = useState<SortDirection>("asc");
+  const [editingArtist, setEditingArtist] = useState<ArtistInfo | null>(null);
 
   const gridClass = useMemo(() => {
     switch (albumGridSize) {
@@ -120,10 +122,18 @@ const ArtistsViewInner: React.FC<ArtistsViewProps> = ({
               key={artist.name}
               artist={artist}
               onSelectArtist={onSelectArtist}
+              onEditArtist={setEditingArtist}
             />
           ))}
         </div>
       </div>
+
+      {/* Edit Artist Metadata Modal */}
+      <ArtistMetadataModal
+        artist={editingArtist}
+        isOpen={!!editingArtist}
+        onClose={() => setEditingArtist(null)}
+      />
     </div>
   );
 };

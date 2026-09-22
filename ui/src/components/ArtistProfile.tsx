@@ -4,9 +4,10 @@ import { formatTotalDuration } from "../utils/library";
 import { TrackTable } from "./TrackTable";
 import { AlbumCard } from "./AlbumCard";
 import { AlbumMetadataModal } from "./AlbumMetadataModal";
+import { ArtistMetadataModal } from "./ArtistMetadataModal";
 import { usePlayerStore } from "../stores/playerStore";
 import { useArtwork } from "../utils/useArtwork";
-import { Users, Play, Disc, Music, Clock } from "lucide-react";
+import { Users, Play, Disc, Music, Clock, FilePenLine } from "lucide-react";
 import { EqualizerWave } from "./EqualizerWave";
 
 interface ArtistProfileProps {
@@ -30,6 +31,7 @@ const ArtistProfileInner: React.FC<ArtistProfileProps> = ({
   const avatarArtwork = useArtwork(artist.artworkTrackId);
   const [avatarError, setAvatarError] = useState(false);
   const [editingAlbum, setEditingAlbum] = useState<AlbumInfo | null>(null);
+  const [isEditingArtist, setIsEditingArtist] = useState(false);
 
   const artistContext = useMemo<PlaybackContext>(
     () => ({
@@ -90,11 +92,11 @@ const ArtistProfileInner: React.FC<ArtistProfileProps> = ({
   }, [artist.albums]);
 
   return (
-    <div className="flex-1 flex flex-col overflow-y-auto bg-[#0D0D10]">
+    <div className="flex-1 flex flex-col overflow-y-auto bg-background">
       {/* Hero Banner */}
-      <div className="bg-gradient-to-b from-[#FA586A]/20 via-[#16161A]/80 to-[#0D0D10] p-4 sm:p-6 md:p-8 border-b border-white/[0.06] flex flex-col md:flex-row items-center md:items-end gap-5 sm:gap-7 flex-shrink-0">
+      <div className="bg-gradient-to-b from-accent/[0.08] to-transparent p-4 sm:p-6 md:p-8 border-b border-white/[0.06] flex flex-col md:flex-row items-center md:items-end gap-5 sm:gap-7 flex-shrink-0">
         {/* Large Avatar */}
-        <div className="w-32 h-32 sm:w-36 sm:h-36 md:w-40 md:h-40 rounded-full bg-[#1C1C22] overflow-hidden shadow-2xl shadow-black/80 flex items-center justify-center flex-shrink-0 border-2 border-white/[0.12]">
+        <div className="w-32 h-32 sm:w-36 sm:h-36 md:w-40 md:h-40 rounded-full bg-surface overflow-hidden shadow-2xl shadow-black/80 flex items-center justify-center flex-shrink-0 border-2 border-white/[0.12]">
           {avatarArtwork && !avatarError ? (
             <img
               src={avatarArtwork}
@@ -116,7 +118,7 @@ const ArtistProfileInner: React.FC<ArtistProfileProps> = ({
               Artist Profile
             </p>
             {isArtistPlaying && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#FA586A]/15 border border-[#FA586A]/30 text-[10px] font-bold text-[#FA586A] shadow-sm animate-fade-in">
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] bg-[#FA586A]/10 border border-[#FA586A]/25 text-[10px] font-semibold text-[#FA586A] uppercase tracking-wider animate-fade-in">
                 <EqualizerWave isPlaying={isPlaying} size="xs" color="bg-[#FA586A]" />
                 <span>Now Playing</span>
               </span>
@@ -152,13 +154,23 @@ const ArtistProfileInner: React.FC<ArtistProfileProps> = ({
             </span>
           </div>
 
-          <button
-            onClick={handlePlayArtist}
-            className="inline-flex items-center gap-2 px-7 py-2.5 bg-[#FA586A] hover:bg-[#E04859] active:scale-95 text-white rounded-full text-xs font-bold shadow-xl shadow-[#FA586A]/25 transition"
-          >
-            <Play className="w-4 h-4 fill-white" />
-            <span>{isArtistPlaying && isPlaying ? "Restart Artist" : "Play Artist"}</span>
-          </button>
+          <div className="flex flex-wrap items-center justify-center md:justify-start gap-3">
+            <button
+              onClick={handlePlayArtist}
+              className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#FA586A] hover:bg-[#E04859] active:scale-95 text-white rounded-xl text-xs font-bold shadow-lg shadow-[#FA586A]/20 transition"
+            >
+              <Play className="w-4 h-4 fill-white" />
+              <span>{isArtistPlaying && isPlaying ? "Restart Artist" : "Play Artist"}</span>
+            </button>
+            <button
+              onClick={() => setIsEditingArtist(true)}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-white/[0.06] hover:bg-white/[0.12] active:scale-95 text-white/90 hover:text-white rounded-xl text-xs font-semibold border border-white/[0.08] transition"
+              title="Edit Artist Metadata"
+            >
+              <FilePenLine className="w-3.5 h-3.5 text-[#A1A1AA]" />
+              <span>Edit Artist</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -253,6 +265,21 @@ const ArtistProfileInner: React.FC<ArtistProfileProps> = ({
           onClose={() => setEditingAlbum(null)}
         />
       )}
+
+      {/* Artist Metadata Modal */}
+      <ArtistMetadataModal
+        artist={artist}
+        isOpen={isEditingArtist}
+        onClose={() => setIsEditingArtist(false)}
+        onSaved={(updatedTracks) => {
+          if (updatedTracks.length > 0) {
+            const newName = updatedTracks[0].metadata.artist || artist.name;
+            if (newName && newName !== artist.name) {
+              onSelectArtist(newName);
+            }
+          }
+        }}
+      />
     </div>
   );
 };

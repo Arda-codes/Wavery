@@ -14,7 +14,6 @@ import {
   Heart,
   Music,
   ListMusic,
-  Sparkles,
   Mic2,
   Maximize2,
   Disc,
@@ -33,19 +32,7 @@ import { useArtwork } from "../utils/useArtwork";
 import { getFullTrackArtistString } from "../utils/library";
 import { ArtistLinks } from "./ArtistLinks";
 import { EqualizerWave } from "./EqualizerWave";
-
-function formatTime(secs: number = 0): string {
-  if (isNaN(secs) || secs < 0) secs = 0;
-  const mins = Math.floor(secs / 60);
-  const remaining = Math.floor(secs % 60);
-  return `${mins}:${remaining < 10 ? "0" : ""}${remaining}`;
-}
-
-function formatRemainingTime(currentSecs: number, totalSecs: number): string {
-  if (isNaN(totalSecs) || totalSecs <= 0) return formatTime(currentSecs);
-  const diff = Math.max(0, totalSecs - currentSecs);
-  return `-${formatTime(diff)}`;
-}
+import { useVsyncScrubber, formatTime, formatRemainingTime } from "../hooks/useVsyncScrubber";
 
 /**
  * 1. TrackInfo Subcomponent
@@ -311,14 +298,13 @@ const TrackInfoInner: React.FC = () => {
 
               {formatBadge && (
                 <span
-                  className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-[4px] text-[8.5px] font-bold tracking-wider uppercase flex-shrink-0 border leading-none ${
+                  className={`inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[8.5px] font-bold tracking-wider uppercase flex-shrink-0 border leading-none ${
                     formatBadge.isLossless
                       ? "bg-[#FA586A]/15 text-[#FA586A] border-[#FA586A]/30"
                       : "bg-white/[0.06] text-[#A1A1AA] border-white/[0.08]"
                   }`}
                   title={`${formatBadge.fmt} ${formatBadge.isLossless ? "Lossless Audio" : "High Quality"}`}
                 >
-                  {formatBadge.isLossless && <Sparkles className="w-2.5 h-2.5" />}
                   {formatBadge.fmt}
                 </span>
               )}
@@ -476,7 +462,7 @@ const PlayControlsInner: React.FC = () => {
         aria-label="Previous Track"
         onClick={playPrevious}
         disabled={!canSkipBack}
-        className="w-8 h-8 rounded-full flex items-center justify-center text-[#D4D4D8] hover:text-white hover:bg-white/[0.08] active:scale-90 transition-all duration-150 focus-visible:ring-2 focus-visible:ring-accent focus:outline-none disabled:opacity-20 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[#D4D4D8]"
+        className="w-8 h-8 rounded-full flex items-center justify-center text-textSecondary hover:text-textPrimary hover:bg-white/[0.08] active:scale-90 transition-all duration-150 focus-visible:ring-2 focus-visible:ring-accent focus:outline-none disabled:opacity-20 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-textSecondary"
         title="Previous Track"
       >
         <SkipBack className="w-4 h-4 fill-current" />
@@ -489,7 +475,7 @@ const PlayControlsInner: React.FC = () => {
           aria-label="Pause"
           onClick={pause}
           disabled={!hasTrack}
-          className="w-10 h-10 sm:w-10 sm:h-10 rounded-full bg-white hover:bg-[#F4F4F6] text-black flex items-center justify-center transition-all duration-150 shadow-[0_2px_12px_rgba(0,0,0,0.3)] hover:scale-105 active:scale-95 focus-visible:ring-2 focus-visible:ring-accent focus:outline-none disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:shadow-none"
+          className="w-10 h-10 sm:w-10 sm:h-10 rounded-full bg-white hover:bg-white/90 text-black flex items-center justify-center transition-all duration-150 shadow-[0_2px_12px_rgba(0,0,0,0.3)] hover:scale-105 active:scale-95 focus-visible:ring-2 focus-visible:ring-accent focus:outline-none disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:shadow-none"
           title="Pause (Space)"
         >
           <Pause className="w-4 h-4 fill-black text-black" />
@@ -500,7 +486,7 @@ const PlayControlsInner: React.FC = () => {
           aria-label="Play"
           onClick={handlePlayToggle}
           disabled={!hasTrack}
-          className="w-10 h-10 sm:w-10 sm:h-10 rounded-full bg-white hover:bg-[#F4F4F6] text-black flex items-center justify-center transition-all duration-150 shadow-[0_2px_12px_rgba(0,0,0,0.3)] hover:scale-105 active:scale-95 focus-visible:ring-2 focus-visible:ring-accent focus:outline-none disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:shadow-none"
+          className="w-10 h-10 sm:w-10 sm:h-10 rounded-full bg-white hover:bg-white/90 text-black flex items-center justify-center transition-all duration-150 shadow-[0_2px_12px_rgba(0,0,0,0.3)] hover:scale-105 active:scale-95 focus-visible:ring-2 focus-visible:ring-accent focus:outline-none disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:shadow-none"
           title={hasTrack ? "Play (Space)" : "No song selected"}
         >
           <Play className="w-4 h-4 ml-0.5 fill-black text-black" />
@@ -513,7 +499,7 @@ const PlayControlsInner: React.FC = () => {
         aria-label="Next Track"
         onClick={playNext}
         disabled={!canSkipForward}
-        className="w-8 h-8 rounded-full flex items-center justify-center text-[#D4D4D8] hover:text-white hover:bg-white/[0.08] active:scale-90 transition-all duration-150 focus-visible:ring-2 focus-visible:ring-accent focus:outline-none disabled:opacity-20 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[#D4D4D8]"
+        className="w-8 h-8 rounded-full flex items-center justify-center text-textSecondary hover:text-textPrimary hover:bg-white/[0.08] active:scale-90 transition-all duration-150 focus-visible:ring-2 focus-visible:ring-accent focus:outline-none disabled:opacity-20 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-textSecondary"
         title="Next Track"
       >
         <SkipForward className="w-4 h-4 fill-current" />
@@ -584,7 +570,8 @@ const PlayControls = React.memo(PlayControlsInner);
 
 /**
  * 3. Scrubber Subcomponent
- * Isolates 500ms position updates with local dragging state & hover timestamp tooltip for smooth 60fps interaction.
+ * Uses useVsyncScrubber for display-refresh-rate (VSync: 60Hz/120Hz/144Hz) continuous progress
+ * with zero-jank direct DOM updates and zero React re-render overhead during playback.
  */
 const ScrubberInner: React.FC = () => {
   const currentTrack = usePlayerStore((s) => s.currentTrack);
@@ -593,6 +580,7 @@ const ScrubberInner: React.FC = () => {
     (s) =>
       s.status.duration_secs || s.currentTrack?.metadata.duration?.secs || 0
   );
+  const isPlaying = usePlayerStore((s) => s.status.state === "Playing");
   const seek = usePlayerStore((s) => s.seek);
 
   const hasTrack = !!currentTrack;
@@ -600,36 +588,30 @@ const ScrubberInner: React.FC = () => {
   // Toggle between remaining time (-3:02) and total duration (3:57)
   const [showRemaining, setShowRemaining] = useState(true);
 
-  // Local drag state to isolate high-speed slider sliding without thumb snapping
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragPos, setDragPos] = useState(0);
+  // VSync 144Hz continuous interpolation hook
+  const {
+    sliderRef,
+    currentTimeRef,
+    remainingTimeRef,
+    handlePointerDown,
+    handleChange,
+    handlePointerUp,
+    displayPos,
+  } = useVsyncScrubber({
+    positionSecs,
+    durationSecs,
+    isPlaying,
+    hasTrack,
+    showRemaining,
+    onSeek: seek,
+  });
 
   // Hover scrub preview tooltip state
   const [hoverTime, setHoverTime] = useState<number | null>(null);
   const [hoverX, setHoverX] = useState<number>(0);
   const scrubberContainerRef = useRef<HTMLDivElement>(null);
 
-  const displayPos = isDragging ? dragPos : positionSecs;
   const maxDuration = durationSecs > 0 ? durationSecs : 100;
-
-  const handlePointerDown = useCallback(() => {
-    if (!hasTrack) return;
-    setIsDragging(true);
-    setDragPos(positionSecs);
-  }, [hasTrack, positionSecs]);
-
-  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!hasTrack) return;
-    const val = parseFloat(e.target.value);
-    setDragPos(val);
-  }, [hasTrack]);
-
-  const handlePointerUp = useCallback(() => {
-    if (isDragging && hasTrack) {
-      seek(dragPos);
-      setIsDragging(false);
-    }
-  }, [isDragging, hasTrack, dragPos, seek]);
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
@@ -653,8 +635,11 @@ const ScrubberInner: React.FC = () => {
         !hasTrack ? "opacity-35" : ""
       }`}
     >
-      {/* Current Position Timestamp */}
-      <span className="w-10 sm:w-11 text-right font-mono text-[11px] text-[#A1A1AA] tabular-nums flex-shrink-0 select-none">
+      {/* Current Position Timestamp (interpolated on rAF) */}
+      <span
+        ref={currentTimeRef}
+        className="w-10 sm:w-11 text-right font-mono text-[11px] text-[#A1A1AA] tabular-nums flex-shrink-0 select-none"
+      >
         {hasTrack ? formatTime(displayPos) : "0:00"}
       </span>
 
@@ -676,13 +661,14 @@ const ScrubberInner: React.FC = () => {
         )}
 
         <input
+          ref={sliderRef}
           type="range"
           aria-label="Seek Position"
           min={0}
           max={maxDuration}
-          step={0.1}
+          step={0.05}
           disabled={!hasTrack}
-          value={hasTrack ? displayPos : 0}
+          defaultValue={hasTrack ? displayPos : 0}
           onPointerDown={handlePointerDown}
           onChange={handleChange}
           onPointerUp={handlePointerUp}
@@ -706,11 +692,13 @@ const ScrubberInner: React.FC = () => {
         className="w-10 sm:w-11 text-left font-mono text-[11px] text-[#71717A] hover:text-[#A1A1AA] tabular-nums flex-shrink-0 cursor-pointer select-none transition-colors disabled:cursor-not-allowed disabled:hover:text-[#71717A]"
         title={showRemaining ? "Remaining time (click for total)" : "Total duration (click for remaining)"}
       >
-        {hasTrack
-          ? showRemaining
-            ? formatRemainingTime(displayPos, durationSecs)
-            : formatTime(durationSecs)
-          : "0:00"}
+        <span ref={remainingTimeRef}>
+          {hasTrack
+            ? showRemaining
+              ? formatRemainingTime(displayPos, durationSecs)
+              : formatTime(durationSecs)
+            : "0:00"}
+        </span>
       </button>
     </div>
   );
@@ -976,7 +964,7 @@ const MobilePlayerBarInner: React.FC = () => {
             e.stopPropagation();
             playNext();
           }}
-          className="w-8 h-8 rounded-full flex items-center justify-center text-[#D4D4D8] hover:text-white active:scale-90 transition disabled:opacity-20 disabled:cursor-not-allowed"
+          className="w-8 h-8 rounded-full flex items-center justify-center text-textSecondary hover:text-textPrimary active:scale-90 transition disabled:opacity-20 disabled:cursor-not-allowed"
         >
           <SkipForward className="w-4 h-4 fill-current" />
         </button>

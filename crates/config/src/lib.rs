@@ -23,7 +23,7 @@ pub enum ConfigError {
 }
 
 /// Root application configuration.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct Config {
     pub general: GeneralConfig,
@@ -74,6 +74,7 @@ pub struct LibraryConfig {
     pub cache_directory: PathBuf,
     pub supported_extensions: Vec<String>,
     pub scan_on_startup: bool,
+    pub protected_artists: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -97,6 +98,8 @@ pub struct ThemeConfig {
     pub accent: String,
     pub error: String,
     pub custom_colors: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_theme_json: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -108,6 +111,14 @@ pub enum ThemeMode {
     System,
     Oled,
     Midnight,
+    Ocean,
+    Purple,
+    Forest,
+    Mocha,
+    Macchiato,
+    Frappe,
+    Latte,
+    Custom,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -144,35 +155,72 @@ pub struct UiConfig {
     pub show_lyrics_smooth_scroll: bool,
     pub simplify_mode: bool,
     pub is_linux_banner_dismissed: bool,
+    pub enable_gradients: bool,
 }
 
-impl Default for Config {
-    fn default() -> Self {
-        let (managed_dir, db_path, cache_dir) = resolve_default_paths();
-
-        Self {
-            general: GeneralConfig::default(),
-            audio: AudioConfig::default(),
-            library: LibraryConfig {
-                managed_directory: managed_dir,
-                database_path: db_path,
-                cache_directory: cache_dir,
-                supported_extensions: vec![
-                    "mp3".into(),
-                    "flac".into(),
-                    "ogg".into(),
-                    "opus".into(),
-                    "m4a".into(),
-                    "wav".into(),
-                ],
-                scan_on_startup: true,
-            },
-            server: ServerConfig::default(),
-            theme: ThemeConfig::default(),
-            keybinds: KeybindsConfig::default(),
-            ui: UiConfig::default(),
-        }
-    }
+pub fn default_protected_artists() -> Vec<String> {
+    vec![
+        "Crosby, Stills, Nash & Young".into(),
+        "Crosby, Stills, Nash and Young".into(),
+        "Crosby, Stills & Nash".into(),
+        "Crosby, Stills and Nash".into(),
+        "Earth, Wind & Fire".into(),
+        "Earth, Wind and Fire".into(),
+        "Blood, Sweat & Tears".into(),
+        "Blood, Sweat and Tears".into(),
+        "Emerson, Lake & Palmer".into(),
+        "Emerson, Lake and Palmer".into(),
+        "Peter, Paul and Mary".into(),
+        "Peter, Paul & Mary".into(),
+        "Tyler, The Creator".into(),
+        "Tom Petty and the Heartbreakers".into(),
+        "Tom Petty & The Heartbreakers".into(),
+        "Grandmaster Flash and the Furious Five".into(),
+        "Grandmaster Flash & the Furious Five".into(),
+        "Frankie Lymon & The Teenagers".into(),
+        "Frankie Lymon and the Teenagers".into(),
+        "King Gizzard & The Lizard Wizard".into(),
+        "King Gizzard and the Lizard Wizard".into(),
+        "Bob Marley & The Wailers".into(),
+        "Bob Marley and the Wailers".into(),
+        "Sly & The Family Stone".into(),
+        "Sly and the Family Stone".into(),
+        "Toots and the Maytals".into(),
+        "Toots & The Maytals".into(),
+        "Siouxsie and the Banshees".into(),
+        "Siouxsie & The Banshees".into(),
+        "Huey Lewis & The News".into(),
+        "Huey Lewis and the News".into(),
+        "KC and the Sunshine Band".into(),
+        "KC & The Sunshine Band".into(),
+        "The Mamas & The Papas".into(),
+        "The Mamas and the Papas".into(),
+        "Derek & The Dominos".into(),
+        "Derek and the Dominos".into(),
+        "Echo & The Bunnymen".into(),
+        "Echo and the Bunnymen".into(),
+        "Katrina and the Waves".into(),
+        "Katrina & The Waves".into(),
+        "Marina and the Diamonds".into(),
+        "Marina & The Diamonds".into(),
+        "Florence + The Machine".into(),
+        "Florence and the Machine".into(),
+        "Joan Jett & the Blackhearts".into(),
+        "Joan Jett and the Blackhearts".into(),
+        "Sun Ra and His Intergalactic Solar Arkestra".into(),
+        "Sun Ra and His Arkestra".into(),
+        "Tony! Toni! Toné!".into(),
+        "Tony! Toni! Tone!".into(),
+        "Simon & Garfunkel".into(),
+        "Captain & Tennille".into(),
+        "Captain and Tennille".into(),
+        "Hall & Oates".into(),
+        "Sunn O)))".into(),
+        "Panic! At The Disco".into(),
+        "!!! (Chk Chk Chk)".into(),
+        "$uicideboy$".into(),
+        "AC/DC".into(),
+    ]
 }
 
 impl Default for GeneralConfig {
@@ -219,6 +267,7 @@ impl Default for UiConfig {
             show_lyrics_smooth_scroll: true,
             simplify_mode: false,
             is_linux_banner_dismissed: false,
+            enable_gradients: true,
         }
     }
 }
@@ -239,6 +288,7 @@ impl Default for LibraryConfig {
                 "wav".into(),
             ],
             scan_on_startup: true,
+            protected_artists: default_protected_artists(),
         }
     }
 }
@@ -266,6 +316,7 @@ impl Default for ThemeConfig {
             accent: "#00D2D3".into(),
             error: "#FF5252".into(),
             custom_colors: Vec::new(),
+            custom_theme_json: None,
         }
     }
 }

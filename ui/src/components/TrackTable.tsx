@@ -8,6 +8,7 @@ import { useSettingsStore } from "../stores/settingsStore";
 import { TrackRow } from "./TrackRow";
 import { AddToPlaylistModal } from "./AddToPlaylistModal";
 import { DeleteTrackModal } from "./DeleteTrackModal";
+import { SongMetadataModal } from "./SongMetadataModal";
 import {
   Music,
   Clock,
@@ -29,6 +30,7 @@ interface TrackTableProps {
   onAddToPlaylist?: (track: Track) => void;
   onRemoveTrack?: (trackId: string) => void;
   onDeleteTrack?: (track: Track) => void;
+  onEditTrack?: (track: Track) => void;
 }
 
 const TrackTableInner: React.FC<TrackTableProps> = ({
@@ -41,6 +43,7 @@ const TrackTableInner: React.FC<TrackTableProps> = ({
   onAddToPlaylist: customAddToPlaylist,
   onRemoveTrack,
   onDeleteTrack: customDeleteTrack,
+  onEditTrack: customEditTrack,
 }) => {
   const rowDensity = useSettingsStore((s) => s.rowDensity);
   const rowHeight = rowDensity === "compact" ? 34 : 44;
@@ -59,6 +62,9 @@ const TrackTableInner: React.FC<TrackTableProps> = ({
   // Delete Track modal state
   const [trackToDelete, setTrackToDelete] = useState<Track | null>(null);
   const deleteTrack = useLibraryStore((s) => s.deleteTrack);
+
+  // Edit Track modal state
+  const [trackToEdit, setTrackToEdit] = useState<Track | null>(null);
 
   // Fine-grained selector subscriptions — avoids 500ms polling re-renders
   const currentTrackId = usePlayerStore((s) => s.currentTrackId);
@@ -156,6 +162,17 @@ const TrackTableInner: React.FC<TrackTableProps> = ({
       }
     },
     [customDeleteTrack]
+  );
+
+  const handleEditTrackClick = useCallback(
+    (track: Track) => {
+      if (customEditTrack) {
+        customEditTrack(track);
+      } else {
+        setTrackToEdit(track);
+      }
+    },
+    [customEditTrack]
   );
 
   const handleConfirmDelete = useCallback(
@@ -343,6 +360,7 @@ const TrackTableInner: React.FC<TrackTableProps> = ({
                 onAddToPlaylist={handleOpenAddToPlaylist}
                 onRemoveFromPlaylist={onRemoveTrack}
                 onDeleteTrack={handleDeleteTrackClick}
+                onEditMetadata={handleEditTrackClick}
                 artworkUrl={getArtworkUrl ? getArtworkUrl(track.id) : undefined}
                 rowDensity={rowDensity}
               />
@@ -372,6 +390,13 @@ const TrackTableInner: React.FC<TrackTableProps> = ({
         onClose={() => setTrackToDelete(null)}
         track={trackToDelete}
         onConfirm={handleConfirmDelete}
+      />
+
+      {/* Edit Song Metadata Modal */}
+      <SongMetadataModal
+        isOpen={!!trackToEdit}
+        onClose={() => setTrackToEdit(null)}
+        track={trackToEdit}
       />
     </div>
   );

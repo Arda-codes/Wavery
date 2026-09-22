@@ -1918,7 +1918,7 @@ export const SettingsView: React.FC = () => {
             <p className="text-xs text-[#A1A1AA] leading-relaxed">
               This clears the database index and rescans all audio files directly from your music folder.
               <br /><br />
-              <span className="text-amber-300 font-semibold">
+              <span className="text-amber-800 dark:text-amber-300 font-semibold">
                 ⚠️ Metadata edits that were not saved to audio file tags (ID3/FLAC) will be reset.
               </span>
             </p>

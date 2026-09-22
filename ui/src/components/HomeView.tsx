@@ -140,12 +140,12 @@ export const HomeView: React.FC<HomeViewProps> = ({
         return maxB - maxA;
       })[0];
 
-        picks.push({
+      picks.push({
         id: `pick-album-${newestAlbum.title}`,
         badge: "RECENT ADDITION",
         badgeColor: "bg-red-500/20 text-red-400 border-red-500/30",
         title: newestAlbum.title,
-        subtitle: `${newestAlbum.artist} • ${newestAlbum.tracks.length} tracks`,
+        subtitle: `${newestAlbum.artist} • ${newestAlbum.tracks.length} ${newestAlbum.tracks.length === 1 ? "track" : "tracks"}`,
         artworkTrackId: newestAlbum.artworkTrackId,
         tracks: newestAlbum.tracks,
         type: "album",
@@ -159,8 +159,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
         id: "pick-personal-favorites",
         badge: "FAVORITES",
         badgeColor: "bg-accent/20 text-accent border-accent/30",
-        title: "Your Favorites Station",
-        subtitle: `${likedTracks.length} liked tracks from your collection`,
+        title: "Favorites Station",
+        subtitle: `${likedTracks.length} favorite ${likedTracks.length === 1 ? "song" : "songs"}`,
         artworkTrackId: likedTracks[0]?.id,
         tracks: likedTracks,
         type: "station",
@@ -176,7 +176,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
         badge: "HEAVY ROTATION",
         badgeColor: "bg-accent/20 text-accent border-accent/30",
         title: "Heavy Rotation",
-        subtitle: `${historyTracks.length} recently played tracks`,
+        subtitle: `${historyTracks.length} recent ${historyTracks.length === 1 ? "track" : "tracks"}`,
         artworkTrackId: historyTracks[0]?.id,
         tracks: historyTracks,
         type: "station",
@@ -186,8 +186,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
         id: "pick-library-station",
         badge: "MADE FOR YOU",
         badgeColor: "bg-accent/20 text-accent border-accent/30",
-        title: "Your Library Station",
-        subtitle: `Continuous mix from your ${tracks.length} library tracks`,
+        title: "Library Station",
+        subtitle: `${tracks.length} ${tracks.length === 1 ? "track" : "tracks"} • Endless mix`,
         artworkTrackId: tracks[0]?.id,
         tracks: tracks.slice(0, 30),
         type: "station",
@@ -202,7 +202,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
         badge: "ARTIST SPOTLIGHT",
         badgeColor: "bg-blue-500/20 text-blue-400 border-blue-500/30",
         title: `${topArtist.name} Essentials`,
-        subtitle: `${topArtist.trackCount} tracks across ${topArtist.albumCount} albums`,
+        subtitle: `${topArtist.trackCount} ${topArtist.trackCount === 1 ? "track" : "tracks"} • ${topArtist.albumCount} ${topArtist.albumCount === 1 ? "album" : "albums"}`,
         artworkTrackId: topArtist.artworkTrackId,
         tracks: topArtist.tracks,
         type: "artist",
@@ -217,8 +217,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
         id: `pick-genre-${genre1.name}`,
         badge: "GENRE SPOTLIGHT",
         badgeColor: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
-        title: `${genre1.name} Collection`,
-        subtitle: `${genre1.tracks.length} songs categorized as ${genre1.name}`,
+        title: `${genre1.name} Essentials`,
+        subtitle: `${genre1.tracks.length} ${genre1.tracks.length === 1 ? "track" : "tracks"}`,
         artworkTrackId: genre1.tracks[0]?.id,
         tracks: genre1.tracks,
         type: "mix",
@@ -231,7 +231,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
         badge: "DISCOVER ALBUM",
         badgeColor: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
         title: secondAlbum.title,
-        subtitle: `${secondAlbum.artist} • ${secondAlbum.tracks.length} tracks`,
+        subtitle: `${secondAlbum.artist} • ${secondAlbum.tracks.length} ${secondAlbum.tracks.length === 1 ? "track" : "tracks"}`,
         artworkTrackId: secondAlbum.artworkTrackId,
         tracks: secondAlbum.tracks,
         type: "album",
@@ -247,7 +247,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
         badge: "GENRE MIX",
         badgeColor: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30",
         title: `${genre2.name} Mix`,
-        subtitle: `${genre2.tracks.length} tracks from your collection`,
+        subtitle: `${genre2.tracks.length} ${genre2.tracks.length === 1 ? "track" : "tracks"}`,
         artworkTrackId: genre2.tracks[0]?.id,
         tracks: genre2.tracks,
         type: "mix",
@@ -259,7 +259,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
         badge: "FEATURING",
         badgeColor: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30",
         title: secondArtist.name,
-        subtitle: `${secondArtist.trackCount} tracks in your library`,
+        subtitle: `${secondArtist.trackCount} ${secondArtist.trackCount === 1 ? "track" : "tracks"}`,
         artworkTrackId: secondArtist.artworkTrackId,
         tracks: secondArtist.tracks,
         type: "artist",
@@ -433,8 +433,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
           <span className="text-xs text-[#71717A] font-medium">Curated</span>
         </div>
 
-        {/* Horizontal Carousel / Flex Shelves */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+        {/* Horizontal Carousel on Mobile/Tablet, 5-col Grid on Wide Desktop */}
+        <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-none snap-x snap-mandatory 2xl:grid 2xl:grid-cols-5 2xl:overflow-visible">
           {editorialPicks.map((pick) => {
             const hasArtwork = Boolean(pick.artworkTrackId);
             const artworkUrl = pick.artworkTrackId ? getArtworkUrl(pick.artworkTrackId) : null;
@@ -451,7 +451,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                     handlePlayPick(pick);
                   }
                 }}
-                className="group relative h-[320px] rounded-2xl overflow-hidden cursor-pointer border border-white/[0.08] hover:border-white/[0.2] transition-all duration-300 hover:shadow-2xl hover:shadow-black/60 flex flex-col justify-between p-4 bg-surface hover:bg-surfaceHover"
+                className="group relative h-[300px] w-[240px] sm:w-[250px] 2xl:w-auto flex-shrink-0 snap-start rounded-2xl overflow-hidden cursor-pointer border border-white/[0.08] hover:border-white/[0.2] transition-all duration-300 hover:shadow-2xl hover:shadow-black/60 flex flex-col justify-between p-4 bg-surface hover:bg-surfaceHover"
               >
                 {/* Background Artwork Layer with Subtle Parallax & Overlay */}
                 {hasArtwork && artworkUrl && (
@@ -468,18 +468,13 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   </div>
                 )}
 
-                {/* Top Card Bar: Badge & Brandmark */}
-                <div className="relative z-10 flex items-center justify-between">
+                {/* Top Card Bar: Badge */}
+                <div className="relative z-10 flex items-center">
                   <span
                     className={`text-[10px] font-semibold tracking-wider uppercase px-2 py-0.5 rounded-[4px] border backdrop-blur-md ${pick.badgeColor}`}
                   >
                     {pick.badge}
                   </span>
-                  <div className="flex items-center space-x-1 opacity-75 group-hover:opacity-100 transition">
-                    <span className="text-[11px] font-bold text-white/80 tracking-tighter font-sans">
-                      Wavery
-                    </span>
-                  </div>
                 </div>
 
                 {/* Center / Ambient Icon Graphic */}
@@ -499,12 +494,18 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 </div>
 
                 {/* Bottom Card Content: Title, Subtitle, and Hover Play Pill */}
-                <div className="relative z-10 flex items-end justify-between">
-                  <div className="min-w-0 pr-2">
-                    <h3 className="text-base font-bold text-white leading-tight line-clamp-2 group-hover:text-white transition">
+                <div className="relative z-10 flex items-end justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <h3
+                      className="text-sm sm:text-base font-bold text-white leading-snug line-clamp-2 group-hover:text-white transition"
+                      title={pick.title}
+                    >
                       {pick.title}
                     </h3>
-                    <p className="text-xs text-white/75 mt-1 line-clamp-1">
+                    <p
+                      className="text-xs text-white/70 mt-1 truncate"
+                      title={pick.subtitle}
+                    >
                       {pick.subtitle}
                     </p>
                   </div>

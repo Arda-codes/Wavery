@@ -1840,7 +1840,7 @@ export const SettingsView: React.FC = () => {
                   </div>
                   <div>
                     <h3 className="text-lg font-black text-white tracking-tight">Wavery</h3>
-                    <p className="text-xs text-accent font-semibold">Version 0.2.0 • Beta</p>
+                    <p className="text-xs text-accent font-semibold">Version 0.2.1 • Beta</p>
                     <p className="text-[11px] text-[#71717A] mt-0.5">
                       Local-first music player built with Rust, Tauri v2, and React. No accounts, no telemetry, no internet required.
                     </p>
@@ -1886,13 +1886,13 @@ export const SettingsView: React.FC = () => {
                 </div>
 
                 <div className="p-4 bg-[#121216] border border-white/[0.06] rounded-xl space-y-1.5 text-xs">
-                  <p className="font-bold text-white">What's new in 0.2.0 Beta:</p>
+                  <p className="font-bold text-white">What's new in 0.2.1 Beta:</p>
                   <ul className="text-[11px] leading-relaxed text-[#71717A] space-y-1 mt-1">
-                    <li>• Home view with recently played and library highlights</li>
-                    <li>• Full-featured Search with genre/decade browsing and Top Result card</li>
-                    <li>• Play History view with chronological listening timeline</li>
-                    <li>• Dual-mode: native desktop (Tauri IPC) or browser streaming (Axum)</li>
-                    <li>• Dead code sweep and dependency cleanup across all workspace crates</li>
+                    <li>• VSync continuous scrubber interpolation with hardware refresh rate sync</li>
+                    <li>• Centered global search bar with instant autocomplete and category browsing</li>
+                    <li>• Apple HIG contrast and typography overhaul across Light and Dark themes</li>
+                    <li>• Metadata editing modals for songs, albums, and artists with real-time sync</li>
+                    <li>• Embedded and external LRC lyrics synchronization and Fullscreen Player</li>
                   </ul>
                 </div>
               </div>

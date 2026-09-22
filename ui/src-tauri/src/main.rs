@@ -150,6 +150,8 @@ struct AppState {
     config: SyncMutex<Config>,
     artwork_cache: SyncMutex<ArtworkCache>,
     server_process: SyncMutex<Option<std::process::Child>>,
+    server_shutdown_tx: SyncMutex<Option<tokio::sync::watch::Sender<bool>>>,
+    server_abort_handle: SyncMutex<Option<tokio::task::AbortHandle>>,
     discord_handle: wavery_server::discord::DiscordHandle,
 }
 
@@ -848,12 +850,23 @@ fn find_server_executable() -> Option<PathBuf> {
 fn open_browser_url(url: &str) -> Result<(), std::io::Error> {
     #[cfg(target_os = "windows")]
     {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
-        let mut cmd = std::process::Command::new("cmd");
-        cmd.args(["/c", "start", "", url]);
-        cmd.creation_flags(CREATE_NO_WINDOW);
-        let _ = cmd.spawn();
+        let mut spawned = std::process::Command::new("rundll32")
+            .args(["url.dll,FileProtocolHandler", url])
+            .spawn()
+            .is_ok();
+
+        if !spawned {
+            spawned = std::process::Command::new("explorer")
+                .arg(url)
+                .spawn()
+                .is_ok();
+        }
+
+        if !spawned {
+            let _ = std::process::Command::new("cmd")
+                .args(["/c", "start", "", url])
+                .spawn();
+        }
     }
     #[cfg(target_os = "macos")]
     {
@@ -1012,6 +1025,102 @@ async fn notify_server_close_web_async(host: &str, port: u16) {
     }
 }
 
+fn resolve_static_dir(root: &std::path::Path) -> Option<PathBuf> {
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()));
+    [
+        Some(root.join("ui/dist")),
+        Some(root.join("dist")),
+        exe_dir.as_ref().map(|d| d.join("dist")),
+        exe_dir.as_ref().map(|d| d.join("../dist")),
+        Some(PathBuf::from("ui/dist")),
+        Some(PathBuf::from("dist")),
+    ]
+    .into_iter()
+    .flatten()
+    .find(|p| p.exists())
+}
+
+fn start_in_process_server(state: &Arc<AppState>) {
+    let Some(shared_lib) = state.library.clone() else {
+        return;
+    };
+
+    // Check if in-process server is already running
+    if state.server_shutdown_tx.lock().is_some() {
+        return;
+    }
+
+    let (server_host, server_port) = {
+        let cfg = state.config.lock();
+        (cfg.server.host.clone(), cfg.server.port)
+    };
+    let addr = format!("{}:{}", server_host, server_port);
+
+    // If port is already open (e.g. standalone wavery-server is running), skip binding
+    if std::net::TcpStream::connect(&addr).is_ok() {
+        return;
+    }
+
+    let root = find_project_root();
+    let static_dir = resolve_static_dir(&root);
+    let config = state.config.lock().clone();
+    let cfg_path = wavery_config::default_config_path().unwrap_or_else(|_| PathBuf::from("config.toml"));
+
+    let server_app_state = Arc::new(wavery_server::AppState::with_config(
+        shared_lib,
+        wavery_library::LoftyMetadataReader::new(),
+        static_dir,
+        config,
+        cfg_path,
+    ));
+
+    let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+    *state.server_shutdown_tx.lock() = Some(shutdown_tx);
+
+    let handle = tokio::spawn(async move {
+        if let Err(e) = wavery_server::start_server_with_shutdown(server_app_state, &addr, shutdown_rx).await {
+            eprintln!("[Wavery] In-process web server terminated on {}: {}", addr, e);
+        }
+    });
+
+    *state.server_abort_handle.lock() = Some(handle.abort_handle());
+}
+
+async fn ensure_server_running(state: &Arc<AppState>) {
+    let (server_host, server_port) = {
+        let cfg = state.config.lock();
+        (cfg.server.host.clone(), cfg.server.port)
+    };
+    let addr = format!("{}:{}", server_host, server_port);
+
+    // 1. Fast check if server is already reachable
+    if std::net::TcpStream::connect(&addr).is_ok() {
+        return;
+    }
+
+    // 2. Start in-process server
+    start_in_process_server(state);
+
+    // 3. Wait briefly for in-process server to bind
+    for _ in 0..20 {
+        if std::net::TcpStream::connect(&addr).is_ok() {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+
+    // 4. Fallback: try external process if in-process didn't bind
+    let _ = spawn_detached_server_process(state);
+    for _ in 0..20 {
+        if std::net::TcpStream::connect(&addr).is_ok() {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+}
+
 fn spawn_detached_server_process(state: &AppState) -> Result<(), std::io::Error> {
     let root = find_project_root();
     let mut cmd = if let Some(exe) = find_server_executable() {
@@ -1053,14 +1162,22 @@ fn spawn_detached_server_process(state: &AppState) -> Result<(), std::io::Error>
 
 /// Forcefully terminates all spawned background child processes and subprocess trees.
 fn kill_all_subprocesses(state: &AppState) {
-    // 0. Gracefully notify wavery-server to exit
+    // 0. Gracefully stop in-process web server
+    if let Some(tx) = state.server_shutdown_tx.lock().take() {
+        let _ = tx.send(true);
+    }
+    if let Some(handle) = state.server_abort_handle.lock().take() {
+        handle.abort();
+    }
+
+    // 1. Gracefully notify wavery-server to exit
     let (server_host, server_port) = {
         let config = state.config.lock();
         (config.server.host.clone(), config.server.port)
     };
     notify_server_quit_sync(&server_host, server_port);
 
-    // 1. Terminate tracked server child process and its child tree
+    // 2. Terminate tracked server child process and its child tree
     let mut proc_guard = state.server_process.lock();
     if let Some(mut child) = proc_guard.take() {
         let pid = child.id();
@@ -1088,7 +1205,7 @@ fn kill_all_subprocesses(state: &AppState) {
         }
     }
 
-    // 2. Clean up any remaining background server processes
+    // 3. Clean up any remaining background server processes
     terminate_server_instances();
 }
 
@@ -1157,22 +1274,13 @@ async fn switch_to_web(
 
     let target_url = format!("http://{}:{}", server_host, server_port);
 
-    // 4. Launch wavery-server detached in the background
-    let _ = spawn_detached_server_process(&state);
+    // 4. Ensure web server is active and reachable
+    ensure_server_running(state.inner()).await;
 
-    // 5. Wait briefly for server to bind port
-    let addr = format!("{}:{}", server_host, server_port);
-    for _ in 0..20 {
-        if std::net::TcpStream::connect(&addr).is_ok() {
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-    }
-
-    // 6. Launch browser to target url
+    // 5. Launch browser to target url
     let _ = open_browser_url(&target_url);
 
-    // 7. Hide the window (music already stopped) — Tauri stays alive in the tray.
+    // 6. Hide the window (music already stopped) — Tauri stays alive in the tray.
     if let Some(window) = app_handle.get_webview_window("main") {
         let _ = window.hide();
     }
@@ -1385,6 +1493,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         config: SyncMutex::new(config.clone()),
         artwork_cache: SyncMutex::new(ArtworkCache::new(MAX_ARTWORK_CACHE_ENTRIES)),
         server_process: SyncMutex::new(None),
+        server_shutdown_tx: SyncMutex::new(None),
+        server_abort_handle: SyncMutex::new(None),
         discord_handle: wavery_server::discord::new_discord_handle(None),
     });
 
@@ -1481,14 +1591,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         (cfg.server.host.clone(), cfg.server.port)
                                     };
                                     let url = format!("http://{}:{}", server_host, server_port);
-                                    let _ = spawn_detached_server_process(&state_clone);
-                                    let addr = format!("{}:{}", server_host, server_port);
-                                    for _ in 0..20 {
-                                        if std::net::TcpStream::connect(&addr).is_ok() {
-                                            break;
-                                        }
-                                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                                    }
+                                    ensure_server_running(&state_clone).await;
                                     let _ = open_browser_url(&url);
                                     if let Some(window) = app_clone.get_webview_window("main") {
                                         let _ = window.hide();
@@ -1558,11 +1661,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         }
                                     }
 
-                                    // 1. Send signal to desktop webview window
+                                    // 1. Send signal to desktop webview window and destroy it
                                     let _ = app_clone.emit("close-web-page", ());
                                     if let Some(window) = app_clone.get_webview_window("main") {
                                         let _ = window.emit("close-web-page", ());
-                                        let _ = window.close();
+                                        let _ = window.destroy();
                                     }
 
                                     // 2. Send signal to browser web page via wavery-server
@@ -1572,8 +1675,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     };
                                     notify_server_close_web_async(&server_host, server_port).await;
 
-                                    // 3. Grace period for active web clients to process signal and close
-                                    tokio::time::sleep(tokio::time::Duration::from_millis(600)).await;
+                                    // 3. Grace period for active web clients to process signal
+                                    tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
 
                                     kill_all_subprocesses(&state_clone);
                                     terminate_server_instances();
@@ -1621,6 +1724,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 eprintln!("[Wavery] System tray initialization warning: {e}");
             }
 
+            // Start background web server if enabled in configuration
+            if config.server.enable_browser_client {
+                start_in_process_server(&state);
+            }
+
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -1637,6 +1745,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 } else {
                     kill_all_subprocesses(&state_handle);
                     terminate_server_instances();
+                    app.exit(0);
                 }
             }
         })
@@ -1691,11 +1800,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     app.run(|app_handle, event| match event {
         tauri::RunEvent::ExitRequested { api, code, .. } => {
-            // Only allow the process to exit when code is Some (explicit exit call, e.g. from
-            // the "Quit Wavery" tray action which uses app_handle.exit(0)).
-            // When code is None it means all windows were closed/hidden — keep alive in tray.
+            // Only allow the process to stay alive when code is None (system window closure)
+            // AND minimize_to_tray is enabled. If minimize_to_tray is disabled, allow process exit.
             if code.is_none() {
-                api.prevent_exit();
+                let minimize_to_tray = app_handle
+                    .try_state::<Arc<AppState>>()
+                    .map(|s| s.config.lock().general.minimize_to_tray)
+                    .unwrap_or(false);
+                if minimize_to_tray {
+                    api.prevent_exit();
+                }
             }
         }
         tauri::RunEvent::Exit => {
@@ -2157,6 +2271,8 @@ mod tests {
             config: SyncMutex::new(cfg),
             artwork_cache: SyncMutex::new(ArtworkCache::new(MAX_ARTWORK_CACHE_ENTRIES)),
             server_process: SyncMutex::new(None),
+            server_shutdown_tx: SyncMutex::new(None),
+            server_abort_handle: SyncMutex::new(None),
             discord_handle: wavery_server::discord::new_discord_handle(None),
         };
 

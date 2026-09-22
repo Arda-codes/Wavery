@@ -465,8 +465,12 @@ pub fn build_router(state: Arc<AppState>) -> Router {
     api_router
 }
 
-/// Binds and starts the HTTP streaming and web server on the given address.
-pub async fn start_server(state: Arc<AppState>, addr: &str) -> Result<(), std::io::Error> {
+/// Binds and starts the HTTP streaming and web server on the given address with graceful shutdown support.
+pub async fn start_server_with_shutdown(
+    state: Arc<AppState>,
+    addr: &str,
+    mut shutdown_rx: tokio::sync::watch::Receiver<bool>,
+) -> Result<(), std::io::Error> {
     let router = build_router(state);
     let mut listener = None;
     for attempt in 1..=20 {
@@ -487,8 +491,18 @@ pub async fn start_server(state: Arc<AppState>, addr: &str) -> Result<(), std::i
     let listener = listener.ok_or_else(|| {
         std::io::Error::new(std::io::ErrorKind::AddrInUse, "Port in use")
     })?;
-    let _ = axum::serve(listener, router).await;
+    let _ = axum::serve(listener, router)
+        .with_graceful_shutdown(async move {
+            let _ = shutdown_rx.changed().await;
+        })
+        .await;
     Ok(())
+}
+
+/// Binds and starts the HTTP streaming and web server on the given address.
+pub async fn start_server(state: Arc<AppState>, addr: &str) -> Result<(), std::io::Error> {
+    let (_tx, rx) = tokio::sync::watch::channel(false);
+    start_server_with_shutdown(state, addr, rx).await
 }
 
 async fn health_handler() -> impl IntoResponse {
@@ -1161,12 +1175,23 @@ pub fn find_native_desktop_executable() -> Option<PathBuf> {
 pub fn open_browser_url(url: &str) -> Result<(), std::io::Error> {
     #[cfg(target_os = "windows")]
     {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
-        let mut cmd = std::process::Command::new("cmd");
-        cmd.args(["/c", "start", "", url]);
-        cmd.creation_flags(CREATE_NO_WINDOW);
-        let _ = cmd.spawn();
+        let mut spawned = std::process::Command::new("rundll32")
+            .args(["url.dll,FileProtocolHandler", url])
+            .spawn()
+            .is_ok();
+
+        if !spawned {
+            spawned = std::process::Command::new("explorer")
+                .arg(url)
+                .spawn()
+                .is_ok();
+        }
+
+        if !spawned {
+            let _ = std::process::Command::new("cmd")
+                .args(["/c", "start", "", url])
+                .spawn();
+        }
     }
     #[cfg(target_os = "macos")]
     {
@@ -1260,9 +1285,7 @@ pub fn spawn_native_process() -> Result<(), std::io::Error> {
 
     #[cfg(target_os = "windows")]
     {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
-        cmd.creation_flags(CREATE_NO_WINDOW);
+        // Note: Do NOT set CREATE_NO_WINDOW when launching wavery-tauri GUI desktop app!
     }
 
     #[cfg(target_os = "linux")]

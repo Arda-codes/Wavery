@@ -286,13 +286,13 @@ const SidebarInner: React.FC<SidebarProps> = ({
             onClick={() => onNavigate("home")}
             className={`w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all group ${
               isHomeActive
-                ? "bg-white/[0.10] text-white border border-white/[0.08] shadow-sm"
-                : "text-[#A1A1AA] hover:text-white hover:bg-white/[0.04]"
+                ? "bg-surfaceActive text-textPrimary border border-border shadow-sm"
+                : "text-textSecondary hover:text-textPrimary hover:bg-surfaceHover"
             }`}
           >
             <Home
               className={`w-4 h-4 transition-colors ${
-                isHomeActive ? "text-[#FA586A]" : "text-[#71717A] group-hover:text-white"
+                isHomeActive ? "text-accent" : "text-textMuted group-hover:text-textPrimary"
               }`}
             />
             <span className="truncate">Home</span>
@@ -303,13 +303,13 @@ const SidebarInner: React.FC<SidebarProps> = ({
             onClick={() => onNavigate("search")}
             className={`w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all group ${
               isSearchActive
-                ? "bg-white/[0.10] text-white border border-white/[0.08] shadow-sm"
-                : "text-[#A1A1AA] hover:text-white hover:bg-white/[0.04]"
+                ? "bg-surfaceActive text-textPrimary border border-border shadow-sm"
+                : "text-textSecondary hover:text-textPrimary hover:bg-surfaceHover"
             }`}
           >
             <Search
               className={`w-4 h-4 transition-colors ${
-                isSearchActive ? "text-[#FA586A]" : "text-[#71717A] group-hover:text-white"
+                isSearchActive ? "text-accent" : "text-textMuted group-hover:text-textPrimary"
               }`}
             />
             <span className="truncate">Search</span>
@@ -318,7 +318,7 @@ const SidebarInner: React.FC<SidebarProps> = ({
 
         {/* Library Section */}
         <div>
-          <p className="text-[11px] font-bold text-[#71717A] tracking-wider uppercase mb-2 px-3">
+          <p className="text-[11px] font-bold text-textMuted tracking-wider uppercase mb-2 px-3">
             Library
           </p>
           <nav className="space-y-1">
@@ -327,26 +327,26 @@ const SidebarInner: React.FC<SidebarProps> = ({
               onClick={() => onNavigate("tracks")}
               className={`w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all group ${
                 isTracksActive
-                  ? "bg-white/[0.10] text-white border border-white/[0.08] shadow-sm"
-                  : "text-[#A1A1AA] hover:text-white hover:bg-white/[0.04]"
+                  ? "bg-surfaceActive text-textPrimary border border-border shadow-sm"
+                  : "text-textSecondary hover:text-textPrimary hover:bg-surfaceHover"
               }`}
             >
               <Library
                 className={`w-4 h-4 transition-colors ${
-                  isTracksActive ? "text-[#FA586A]" : "text-[#71717A] group-hover:text-white"
+                  isTracksActive ? "text-accent" : "text-textMuted group-hover:text-textPrimary"
                 }`}
               />
               <span className="truncate">All Tracks</span>
               {isTracksPlaying && (
                 <span className="inline-flex items-center ml-1" title="Currently Playing from All Tracks">
-                  <EqualizerWave isPlaying={isPlaying} size="xs" color="bg-[#FA586A]" />
+                  <EqualizerWave isPlaying={isPlaying} size="xs" color="bg-accent" />
                 </span>
               )}
               <span
                 className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-mono transition-colors ${
                   isTracksActive
-                    ? "bg-[#FA586A] text-white font-bold shadow-sm shadow-[#FA586A]/30"
-                    : "bg-white/[0.06] text-[#71717A] group-hover:text-[#A1A1AA]"
+                    ? "bg-accent text-white font-bold shadow-sm shadow-accent/30"
+                    : "bg-surfaceHover text-textMuted group-hover:text-textSecondary border border-border/40"
                 }`}
               >
                 {trackCount}
@@ -358,8 +358,8 @@ const SidebarInner: React.FC<SidebarProps> = ({
               onClick={() => onNavigate("liked")}
               className={`w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all group ${
                 isLikedActive
-                  ? "bg-white/[0.10] text-white border border-white/[0.08] shadow-sm"
-                  : "text-[#A1A1AA] hover:text-white hover:bg-white/[0.04]"
+                  ? "bg-surfaceActive text-textPrimary border border-border shadow-sm"
+                  : "text-textSecondary hover:text-textPrimary hover:bg-surfaceHover"
               }`}
             >
               <Heart
@@ -379,7 +379,7 @@ const SidebarInner: React.FC<SidebarProps> = ({
                 className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-mono transition-colors ${
                   isLikedActive
                     ? "bg-accent text-white font-bold shadow-sm"
-                    : "bg-white/[0.06] text-[#71717A] group-hover:text-[#A1A1AA]"
+                    : "bg-surfaceHover text-textMuted group-hover:text-textSecondary border border-border/40"
                 }`}
               >
                 {likedCount}
@@ -391,27 +391,27 @@ const SidebarInner: React.FC<SidebarProps> = ({
               onClick={() => onNavigate("history")}
               className={`w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all group ${
                 isHistoryActive
-                  ? "bg-white/[0.10] text-white border border-white/[0.08] shadow-sm"
-                  : "text-[#A1A1AA] hover:text-white hover:bg-white/[0.04]"
+                  ? "bg-surfaceActive text-textPrimary border border-border shadow-sm"
+                  : "text-textSecondary hover:text-textPrimary hover:bg-surfaceHover"
               }`}
             >
               <History
                 className={`w-4 h-4 transition-colors ${
-                  isHistoryActive ? "text-[#FA586A]" : "text-[#71717A] group-hover:text-white"
+                  isHistoryActive ? "text-accent" : "text-textMuted group-hover:text-textPrimary"
                 }`}
               />
               <span className="truncate">History</span>
               {isHistoryPlaying && (
                 <span className="inline-flex items-center ml-1" title="Currently Playing from History">
-                  <EqualizerWave isPlaying={isPlaying} size="xs" color="bg-[#FA586A]" />
+                  <EqualizerWave isPlaying={isPlaying} size="xs" color="bg-accent" />
                 </span>
               )}
               {playHistory.length > 0 && (
                 <span
                   className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-mono transition-colors ${
                     isHistoryActive
-                      ? "bg-[#FA586A] text-white font-bold shadow-sm shadow-[#FA586A]/30"
-                      : "bg-white/[0.06] text-[#71717A] group-hover:text-[#A1A1AA]"
+                      ? "bg-accent text-white font-bold shadow-sm shadow-accent/30"
+                      : "bg-surfaceHover text-textMuted group-hover:text-textSecondary border border-border/40"
                   }`}
                 >
                   {playHistory.length}
@@ -424,21 +424,21 @@ const SidebarInner: React.FC<SidebarProps> = ({
               onClick={() => onNavigate("artists")}
               className={`w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all group ${
                 isArtistsActive
-                  ? "bg-white/[0.10] text-white border border-white/[0.08] shadow-sm"
-                  : "text-[#A1A1AA] hover:text-white hover:bg-white/[0.04]"
+                  ? "bg-surfaceActive text-textPrimary border border-border shadow-sm"
+                  : "text-textSecondary hover:text-textPrimary hover:bg-surfaceHover"
               }`}
             >
               <Users
                 className={`w-4 h-4 transition-colors ${
-                  isArtistsActive ? "text-[#FA586A]" : "text-[#71717A] group-hover:text-white"
+                  isArtistsActive ? "text-accent" : "text-textMuted group-hover:text-textPrimary"
                 }`}
               />
               <span>Artists</span>
               <span
                 className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-mono transition-colors ${
                   isArtistsActive
-                    ? "bg-[#FA586A] text-white font-bold shadow-sm shadow-[#FA586A]/30"
-                    : "bg-white/[0.06] text-[#71717A] group-hover:text-[#A1A1AA]"
+                    ? "bg-accent text-white font-bold shadow-sm shadow-accent/30"
+                    : "bg-surfaceHover text-textMuted group-hover:text-textSecondary border border-border/40"
                 }`}
               >
                 {artistCount}
@@ -450,21 +450,21 @@ const SidebarInner: React.FC<SidebarProps> = ({
               onClick={() => onNavigate("albums")}
               className={`w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all group ${
                 isAlbumsActive
-                  ? "bg-white/[0.10] text-white border border-white/[0.08] shadow-sm"
-                  : "text-[#A1A1AA] hover:text-white hover:bg-white/[0.04]"
+                  ? "bg-surfaceActive text-textPrimary border border-border shadow-sm"
+                  : "text-textSecondary hover:text-textPrimary hover:bg-surfaceHover"
               }`}
             >
               <Disc
                 className={`w-4 h-4 transition-colors ${
-                  isAlbumsActive ? "text-[#FA586A]" : "text-[#71717A] group-hover:text-white"
+                  isAlbumsActive ? "text-accent" : "text-textMuted group-hover:text-textPrimary"
                 }`}
               />
               <span>Albums</span>
               <span
                 className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-mono transition-colors ${
                   isAlbumsActive
-                    ? "bg-[#FA586A] text-white font-bold shadow-sm shadow-[#FA586A]/30"
-                    : "bg-white/[0.06] text-[#71717A] group-hover:text-[#A1A1AA]"
+                    ? "bg-accent text-white font-bold shadow-sm shadow-accent/30"
+                    : "bg-surfaceHover text-textMuted group-hover:text-textSecondary border border-border/40"
                 }`}
               >
                 {albumCount}
@@ -479,7 +479,7 @@ const SidebarInner: React.FC<SidebarProps> = ({
             <button
               onClick={() => onNavigate("playlists")}
               className={`text-[11px] font-bold transition-colors tracking-wider uppercase ${
-                isPlaylistsActive ? "text-[#FA586A]" : "text-[#71717A] hover:text-white"
+                isPlaylistsActive ? "text-accent" : "text-textMuted hover:text-textPrimary"
               }`}
             >
               Playlists
@@ -487,7 +487,7 @@ const SidebarInner: React.FC<SidebarProps> = ({
             {onCreatePlaylist && (
               <button
                 onClick={onCreatePlaylist}
-                className="w-5 h-5 rounded-md hover:bg-white/[0.08] text-[#71717A] hover:text-white flex items-center justify-center transition"
+                className="w-5 h-5 rounded-md hover:bg-surfaceHover text-textMuted hover:text-textPrimary flex items-center justify-center transition"
                 title="Create New Playlist"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -497,7 +497,7 @@ const SidebarInner: React.FC<SidebarProps> = ({
 
           <nav className="space-y-0.5 max-h-48 overflow-y-auto pr-1">
             {playlists.length === 0 ? (
-              <p className="text-[11px] text-[#71717A] px-3 py-1.5 italic">
+              <p className="text-[11px] text-textMuted px-3 py-1.5 italic">
                 No playlists yet
               </p>
             ) : (
@@ -519,23 +519,23 @@ const SidebarInner: React.FC<SidebarProps> = ({
                       onClick={() => onSelectPlaylist && onSelectPlaylist(pl.id)}
                       className={`w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all text-left truncate ${
                         isSelected
-                          ? "bg-white/[0.10] text-white font-semibold border border-white/[0.08]"
+                          ? "bg-surfaceActive text-textPrimary font-semibold border border-border"
                           : isThisPlaylistPlaying
-                          ? "text-[#FA586A] bg-[#FA586A]/10 font-semibold"
-                          : "text-[#A1A1AA] hover:text-white hover:bg-white/[0.04]"
+                          ? "text-accent bg-accent/10 font-semibold"
+                          : "text-textSecondary hover:text-textPrimary hover:bg-surfaceHover"
                       }`}
                     >
                       {isThisPlaylistPlaying ? (
-                        <EqualizerWave isPlaying={isPlaying} size="xs" color="bg-[#FA586A]" />
+                        <EqualizerWave isPlaying={isPlaying} size="xs" color="bg-accent" />
                       ) : (
                         <ListMusic
                           className={`w-3.5 h-3.5 flex-shrink-0 ${
-                            isSelected ? "text-[#FA586A]" : "text-[#71717A]"
+                            isSelected ? "text-accent" : "text-textMuted"
                           }`}
                         />
                       )}
                       <span className="truncate flex-1">{pl.name}</span>
-                      <span className="text-[10px] text-[#71717A] font-mono pr-4">
+                      <span className="text-[10px] text-textMuted font-mono pr-4">
                         {pl.track_ids.length}
                       </span>
                     </button>
@@ -548,7 +548,7 @@ const SidebarInner: React.FC<SidebarProps> = ({
                             onDeletePlaylist(pl.id);
                           }
                         }}
-                        className="absolute right-1.5 p-1 rounded hover:bg-red-500/20 text-[#71717A] hover:text-red-400 transition"
+                        className="absolute right-1.5 p-1 rounded hover:bg-red-500/20 text-textMuted hover:text-red-400 transition"
                         title="Delete Playlist"
                       >
                         <Trash2 className="w-3 h-3" />
@@ -563,7 +563,7 @@ const SidebarInner: React.FC<SidebarProps> = ({
 
         {/* Manage & Settings Section */}
         <div>
-          <p className="text-[11px] font-bold text-[#71717A] tracking-wider uppercase mb-2 px-3">
+          <p className="text-[11px] font-bold text-textMuted tracking-wider uppercase mb-2 px-3">
             Manage
           </p>
           <nav className="space-y-1.5">
@@ -571,7 +571,7 @@ const SidebarInner: React.FC<SidebarProps> = ({
             {onOpenImport && (
               <button
                 onClick={onOpenImport}
-                className="w-full flex items-center justify-center space-x-2 px-3 py-2 bg-[#FA586A] hover:bg-[#E04859] active:scale-[0.98] text-white rounded-xl text-xs font-bold shadow-md shadow-[#FA586A]/20 transition-all mb-2"
+                className="w-full flex items-center justify-center space-x-2 px-3 py-2 bg-accent hover:bg-accentHover active:scale-[0.98] text-white rounded-xl text-xs font-bold shadow-md shadow-accent/20 transition-all mb-2"
               >
                 <Plus className="w-4 h-4" />
                 <span>Import Music</span>
@@ -583,13 +583,13 @@ const SidebarInner: React.FC<SidebarProps> = ({
               onClick={() => onNavigate("settings")}
               className={`w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all group ${
                 isSettingsActive
-                  ? "bg-white/[0.10] text-white border border-white/[0.08] shadow-sm"
-                  : "text-[#A1A1AA] hover:text-white hover:bg-white/[0.04]"
+                  ? "bg-surfaceActive text-textPrimary border border-border shadow-sm"
+                  : "text-textSecondary hover:text-textPrimary hover:bg-surfaceHover"
               }`}
             >
               <Settings
                 className={`w-4 h-4 transition-colors ${
-                  isSettingsActive ? "text-[#FA586A]" : "text-[#71717A] group-hover:text-white"
+                  isSettingsActive ? "text-accent" : "text-textMuted group-hover:text-textPrimary"
                 }`}
               />
               <span>Settings</span>
@@ -604,14 +604,14 @@ const SidebarInner: React.FC<SidebarProps> = ({
       {/* Desktop Persistent Sidebar (>= 1024px / lg) */}
       <aside
         onContextMenu={handleSidebarNavContextMenu}
-        className="hidden lg:flex w-60 bg-[#0F0F13]/95 border-r border-white/[0.07] p-3 flex-col justify-between select-none flex-shrink-0 z-20 overflow-y-auto"
+        className="hidden lg:flex w-60 bg-sidebar border-r border-border p-3 flex-col justify-between select-none flex-shrink-0 z-20 overflow-y-auto"
       >
         {renderNavContent()}
       </aside>
 
-      {/* Mobile & Tablet Slide-Over Off-Canvas Drawer (< 1024px / lg) */}
+      {/* Mobile & Tablet Slide-Up Bottom Sheet Drawer (< 1024px / lg) */}
       {isMobileSidebarOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden flex">
+        <div className="fixed inset-0 z-50 lg:hidden flex flex-col justify-end">
           {/* Subtle Frosted Backdrop Overlay */}
           <div
             className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity animate-fade-in"
@@ -619,20 +619,27 @@ const SidebarInner: React.FC<SidebarProps> = ({
             aria-hidden="true"
           />
 
-          {/* Slide-out Drawer Pane */}
+          {/* Slide-Up Bottom Sheet Pane */}
           <aside
             onContextMenu={handleSidebarNavContextMenu}
-            className="relative w-72 max-w-[85vw] bg-[#0F0F13]/98 border-r border-white/[0.10] p-4 flex flex-col justify-between select-none shadow-2xl overflow-y-auto z-50 animate-drawer-in-left"
+            className="relative w-full max-h-[85vh] sm:max-h-[80vh] md:max-w-lg md:mx-auto bg-surface backdrop-blur-2xl border-t border-border rounded-t-[28px] p-5 pb-8 flex flex-col justify-between select-none shadow-[0_-16px_48px_rgba(0,0,0,0.6)] overflow-y-auto z-50 animate-drawer-in-up"
           >
+            {/* Grab Handle Pill for bottom sheet */}
+            <div
+              onClick={() => setMobileSidebarOpen(false)}
+              className="w-12 h-1.5 rounded-full bg-textMuted/30 hover:bg-textMuted/50 transition-colors mx-auto mb-3 flex-shrink-0 cursor-pointer"
+            />
+
             {/* Mobile Header with Brand & Close Button */}
-            <div className="flex items-center justify-between pb-3 border-b border-white/[0.06] mb-3 flex-shrink-0">
-              <div className="flex items-center">
-                <span className="font-bold text-sm text-white tracking-tight">Wavery</span>
+            <div className="flex items-center justify-between pb-3 border-b border-border/40 mb-3 flex-shrink-0">
+              <div className="flex items-center space-x-2">
+                <span className="font-bold text-sm text-textPrimary tracking-tight">Wavery</span>
+                <span className="text-[10px] text-textMuted font-medium uppercase tracking-wider px-2 py-0.5 rounded-full bg-surfaceHover border border-border">Menu</span>
               </div>
               <button
                 type="button"
                 onClick={() => setMobileSidebarOpen(false)}
-                className="w-8 h-8 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] active:scale-95 text-[#A1A1AA] hover:text-white flex items-center justify-center transition focus:outline-none"
+                className="w-8 h-8 rounded-full bg-surfaceHover hover:bg-surfaceActive active:scale-95 text-textSecondary hover:text-textPrimary flex items-center justify-center transition focus:outline-none"
                 title="Close Navigation"
               >
                 <X className="w-4 h-4" />

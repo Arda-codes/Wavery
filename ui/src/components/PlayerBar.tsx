@@ -33,6 +33,7 @@ import { getFullTrackArtistString } from "../utils/library";
 import { ArtistLinks } from "./ArtistLinks";
 import { EqualizerWave } from "./EqualizerWave";
 import { useVsyncScrubber, formatTime, formatRemainingTime } from "../hooks/useVsyncScrubber";
+import { VolumeSlider } from "./VolumeSlider";
 
 /**
  * 1. TrackInfo Subcomponent
@@ -596,6 +597,7 @@ const ScrubberInner: React.FC = () => {
     handlePointerDown,
     handleChange,
     handlePointerUp,
+    handleContainerPointerDown,
     displayPos,
   } = useVsyncScrubber({
     positionSecs,
@@ -646,9 +648,10 @@ const ScrubberInner: React.FC = () => {
       {/* Scrubber Range Bar with Hover Preview Tooltip */}
       <div
         ref={scrubberContainerRef}
+        onPointerDown={handleContainerPointerDown}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
-        className="relative w-full flex items-center min-w-[60px] py-1.5"
+        className="relative w-full flex items-center min-w-[60px] py-1.5 cursor-pointer"
       >
         {/* Floating Timestamp Tooltip on Hover */}
         {hoverTime !== null && hasTrack && (
@@ -672,6 +675,7 @@ const ScrubberInner: React.FC = () => {
           onPointerDown={handlePointerDown}
           onChange={handleChange}
           onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
           className="w-full wavery-slider disabled:opacity-30 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-accent focus:outline-none"
           style={
             {
@@ -821,21 +825,9 @@ const VolumeControlInner: React.FC = () => {
 
       {/* Volume Slider */}
       <div className="flex items-center min-w-[56px] max-w-[96px] w-16 sm:w-20 md:w-24">
-        <input
-          type="range"
-          aria-label="Volume Slider"
-          min={0}
-          max={1}
-          step={0.01}
-          value={volume}
-          onChange={(e) => setVolume(parseFloat(e.target.value))}
-          className="w-full wavery-slider flex-shrink focus-visible:ring-2 focus-visible:ring-accent focus:outline-none"
-          title={`Volume: ${Math.round(volume * 100)}%`}
-          style={
-            {
-              "--slider-progress": `${volume * 100}%`,
-            } as React.CSSProperties
-          }
+        <VolumeSlider
+          className="w-full flex-shrink focus-visible:ring-2 focus-visible:ring-accent focus:outline-none"
+          ariaLabel="Volume Slider"
         />
       </div>
     </div>

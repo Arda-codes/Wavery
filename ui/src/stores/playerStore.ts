@@ -220,7 +220,7 @@ interface PlayerStoreState {
   /** Skip to previous track in queue or restart current track if >3s. */
   playPrevious: () => Promise<void>;
   /** Resume playback. */
-  resume: () => void;
+  resume: () => Promise<void>;
   /** Pause playback. */
   pause: () => void;
   /** Stop playback. */
@@ -246,6 +246,37 @@ const DEFAULT_STATUS: PlayerStatus = {
   position_secs: 0,
   loop_mode: "Off",
 };
+
+// Hardware-accelerated, coalesced volume dispatch mechanism
+let volumeRafId: number | null = null;
+let pendingVolume: number | null = null;
+let lastDispatchedVolume: number | null = null;
+let lastUserVolumeChangeTime = 0;
+
+function flushVolumeDispatcher() {
+  volumeRafId = null;
+  if (pendingVolume !== null && pendingVolume !== lastDispatchedVolume) {
+    const vol = pendingVolume;
+    lastDispatchedVolume = vol;
+    playerAdapter.setVolume(vol).catch((err) => {
+      console.warn("Adapter setVolume error:", err);
+    });
+  }
+  if (pendingVolume !== null && pendingVolume !== lastDispatchedVolume) {
+    volumeRafId = typeof requestAnimationFrame !== "undefined"
+      ? requestAnimationFrame(flushVolumeDispatcher)
+      : null;
+  }
+}
+
+function dispatchThrottledVolume(volume: number) {
+  pendingVolume = volume;
+  if (volumeRafId === null) {
+    volumeRafId = typeof requestAnimationFrame !== "undefined"
+      ? requestAnimationFrame(flushVolumeDispatcher)
+      : (flushVolumeDispatcher(), null);
+  }
+}
 
 export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
   status: DEFAULT_STATUS,
@@ -367,7 +398,8 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
         // Check if any status field changed (preserving client-side loop_mode)
         const stateChanged = prev.status.state !== s.state;
         const posChanged = prev.status.position_secs !== s.position_secs;
-        const volChanged = prev.status.volume !== s.volume;
+        const isRecentUserVolume = Date.now() - lastUserVolumeChangeTime < 1500;
+        const volChanged = !isRecentUserVolume && Math.abs(prev.status.volume - s.volume) > 0.001;
         const durChanged = prev.status.duration_secs !== s.duration_secs;
         const statusChanged = stateChanged || posChanged || volChanged || durChanged;
 
@@ -375,6 +407,7 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
           set({
             status: {
               ...s,
+              volume: isRecentUserVolume ? prev.status.volume : s.volume,
               loop_mode: prev.status.loop_mode,
             },
             ...(trackChanged
@@ -960,9 +993,25 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
   },
 
 
-  resume: () => {
+  resume: async () => {
+    const { currentTrack, status } = get();
     set({ isManualStop: false });
-    playerAdapter.resume();
+
+    try {
+      await playerAdapter.resume();
+      set((s) => ({ status: { ...s.status, state: "Playing" } }));
+    } catch {
+      if (currentTrack) {
+        try {
+          await playerAdapter.playTrack(currentTrack);
+          if (status.position_secs > 0) {
+            await playerAdapter.seek(status.position_secs);
+          }
+        } catch (err) {
+          console.error("Failed to load and play track on resume:", err);
+        }
+      }
+    }
   },
 
   pause: () => {
@@ -982,11 +1031,21 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
   },
 
   seek: (seconds: number) => {
-    playerAdapter.seek(seconds);
+    set((s) => ({
+      status: { ...s.status, position_secs: seconds },
+    }));
+    playerAdapter.seek(seconds).catch((err) => {
+      console.warn("Seek error in player adapter:", err);
+    });
   },
 
   setVolume: (volume: number) => {
-    playerAdapter.setVolume(volume);
+    const clamped = Math.max(0, Math.min(1, volume));
+    lastUserVolumeChangeTime = Date.now();
+    set((state) => ({
+      status: { ...state.status, volume: clamped },
+    }));
+    dispatchThrottledVolume(clamped);
   },
 
   switchToWeb: async () => {
@@ -1065,7 +1124,9 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
     const restoredTrack = session.queue[trackIndex];
     if (!restoredTrack) return;
 
-    // Re-hydrate the store with saved state (paused, not manual-stopped)
+    const { autoResumePlayback } = useSettingsStore.getState();
+
+    // Re-hydrate the store with saved state (paused by default, not playing)
     set({
       queue: session.queue,
       queueIndex: trackIndex,
@@ -1074,30 +1135,28 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
       playbackContext: session.playbackContext,
       isShuffle: session.isShuffle,
       isAutoplay: session.isAutoplay ?? true,
-      isManualStop: false,
+      isManualStop: !autoResumePlayback,
       status: {
         ...DEFAULT_STATUS,
+        state: autoResumePlayback ? "Playing" : "Paused",
+        position_secs: session.positionSecs ?? 0,
+        duration_secs: restoredTrack.metadata.duration?.secs ?? 0,
+        current_track: restoredTrack,
         loop_mode: (session.loopMode as "Off" | "Queue" | "Track") ?? "Off",
       },
     });
 
-    const { autoResumePlayback } = useSettingsStore.getState();
-
-    try {
-      // Load the track into the backend (starts playing)
-      await playerAdapter.playTrack(restoredTrack);
-
-      // Seek to the saved position
-      if (session.positionSecs > 0) {
-        await playerAdapter.seek(session.positionSecs);
+    // Only start playback automatically if the user explicitly enabled autoResumePlayback in Settings.
+    // By default, the session is restored in a Paused state with zero audio playback.
+    if (autoResumePlayback) {
+      try {
+        await playerAdapter.playTrack(restoredTrack);
+        if (session.positionSecs > 0) {
+          await playerAdapter.seek(session.positionSecs);
+        }
+      } catch (e) {
+        console.error("Failed to auto-resume player session:", e);
       }
-
-      // If the user hasn't opted into auto-resume, pause immediately after seek
-      if (!autoResumePlayback) {
-        await playerAdapter.pause();
-      }
-    } catch (e) {
-      console.error("Failed to restore player session:", e);
     }
   },
 }));

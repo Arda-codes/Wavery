@@ -8,6 +8,7 @@ import {
   matchesKeyCombo,
   isEditableTarget,
   normalizeKey,
+  formatKeyCombo,
 } from "../src/utils/keybindings";
 
 export function runKeybindingsTests(): void {
@@ -116,6 +117,14 @@ export function runKeybindingsTests(): void {
   assert(!isEditableTarget(new MockElement("DIV", false) as any), "Regular DIV is not editable target");
   assert(!isEditableTarget(new MockElement("BUTTON") as any), "BUTTON is not editable target");
   assert(!isEditableTarget(null), "null target is not editable target");
+
+  // 5. formatKeyCombo tests
+  assert(formatKeyCombo("Ctrl+Right", false) === "Ctrl+Right", "Windows/Linux Ctrl+Right formatting");
+  assert(formatKeyCombo("Ctrl+Right", true) === "⌘→", "macOS Ctrl+Right formats to ⌘→");
+  assert(formatKeyCombo("Ctrl+K", true) === "⌘K", "macOS Ctrl+K formats to ⌘K");
+  assert(formatKeyCombo("Space", true) === "Space", "Space key formats as Space");
+  assert(formatKeyCombo("Shift+Left", true) === "⇧←", "macOS Shift+Left formats to ⇧←");
+  assert(formatKeyCombo("Alt+L", true) === "⌥L", "macOS Alt+L formats to ⌥L");
 
   console.log("  ✅ All Keybindings unit & boundary tests passed successfully.");
 }

@@ -618,6 +618,15 @@ class BrowserAudioPlayer implements AudioPlayerAdapter {
 }
 
 
+let tauriInvokeFn: (<T = unknown>(cmd: string, args?: Record<string, unknown>) => Promise<T>) | null = null;
+async function getTauriInvoke(): Promise<<T = unknown>(cmd: string, args?: Record<string, unknown>) => Promise<T>> {
+  if (!tauriInvokeFn) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    tauriInvokeFn = invoke;
+  }
+  return tauriInvokeFn;
+}
+
 class TauriAudioPlayer implements AudioPlayerAdapter {
   isTauri(): boolean {
     return (
@@ -675,7 +684,7 @@ class TauriAudioPlayer implements AudioPlayerAdapter {
     }
     const fetchPromise = (async () => {
       try {
-        const { invoke } = await import("@tauri-apps/api/core");
+        const invoke = await getTauriInvoke();
         const base64Url = await invoke<string | null>("get_artwork", { trackId });
         this.artworkCache.set(trackId, base64Url ?? null);
         return base64Url ?? null;
@@ -701,104 +710,104 @@ class TauriAudioPlayer implements AudioPlayerAdapter {
   }
 
   async getTracks(): Promise<Track[]> {
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke<Track[]>("get_tracks");
   }
 
   async pickFile(): Promise<string | null> {
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke<string | null>("pick_file");
   }
 
   async pickFolder(): Promise<string | null> {
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke<string | null>("pick_folder");
   }
 
   async importFile(sourcePath: string, strategy: ImportStrategy): Promise<Track> {
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke<Track>("import_file", { sourcePath, strategy });
   }
 
   async importFolder(dirPath: string, strategy: ImportStrategy): Promise<Track[]> {
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke<Track[]>("import_folder", { dirPath, strategy });
   }
 
   async playTrack(track: Track): Promise<void> {
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke("play_track", { trackId: track.id });
   }
 
   async pause(): Promise<void> {
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke("pause_playback");
   }
 
   async resume(): Promise<void> {
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke("resume_playback");
   }
 
   async stop(): Promise<void> {
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke("stop_playback");
   }
 
   async seek(seconds: number): Promise<void> {
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke("seek_playback", { positionSecs: seconds });
   }
 
   async setVolume(volume: number): Promise<void> {
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke("set_volume", { volume });
   }
 
   async getStatus(): Promise<PlayerStatus> {
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke<PlayerStatus>("get_status");
   }
 
   async search(query: string): Promise<Track[]> {
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke<Track[]>("search_tracks", { query });
   }
 
   async updateTrackMetadata(payload: UpdateTrackMetadataPayload): Promise<Track> {
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke<Track>("update_track_metadata", { req: payload });
   }
 
   async updateArtistMetadata(payload: UpdateArtistMetadataPayload): Promise<Track[]> {
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke<Track[]>("update_artist_metadata", { req: payload });
   }
 
   async updateAlbumMetadata(payload: UpdateAlbumMetadataPayload): Promise<Track[]> {
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke<Track[]>("update_album_metadata", { req: payload });
   }
 
   async rebuildLibrary(): Promise<Track[]> {
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke<Track[]>("rebuild_library");
   }
 
   async vacuumDatabase(): Promise<void> {
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke("vacuum_library");
   }
 
   async clearArtworkCache(): Promise<void> {
     this.artworkCache.clear();
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke("clear_artwork_cache");
   }
 
   async switchToWeb(): Promise<void> {
     this.pause();
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke("switch_to_web");
   }
 
@@ -807,97 +816,97 @@ class TauriAudioPlayer implements AudioPlayerAdapter {
   }
 
   async getLikedTracks(): Promise<Track[]> {
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke<Track[]>("get_liked_tracks");
   }
 
   async getLikedTrackIds(): Promise<string[]> {
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke<string[]>("get_liked_track_ids");
   }
 
   async toggleLike(trackId: string): Promise<boolean> {
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke<boolean>("toggle_like", { trackId });
   }
 
   async likeTrack(trackId: string): Promise<void> {
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke("like_track", { trackId });
   }
 
   async unlikeTrack(trackId: string): Promise<void> {
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke("unlike_track", { trackId });
   }
 
   async listPlaylists(): Promise<Playlist[]> {
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke<Playlist[]>("list_playlists");
   }
 
   async createPlaylist(name: string): Promise<Playlist> {
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke<Playlist>("create_playlist", { name });
   }
 
   async getPlaylist(id: string): Promise<Playlist | null> {
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke<Playlist | null>("get_playlist", { id });
   }
 
   async getPlaylistTracks(id: string): Promise<Track[]> {
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke<Track[]>("get_playlist_tracks", { id });
   }
 
   async renamePlaylist(id: string, name: string): Promise<void> {
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke("rename_playlist", { id, name });
   }
 
   async deletePlaylist(id: string): Promise<void> {
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke("delete_playlist", { id });
   }
 
   async deleteTrack(id: string, removeFile = false): Promise<void> {
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke("delete_track", { trackId: id, removeFile: Boolean(removeFile) });
   }
 
   async addTracksToPlaylist(playlistId: string, trackIds: string[]): Promise<void> {
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke("add_tracks_to_playlist", { playlistId, trackIds });
   }
 
   async removeTrackFromPlaylist(playlistId: string, trackId: string): Promise<void> {
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke("remove_track_from_playlist", { playlistId, trackId });
   }
 
   async savePlaylist(playlist: Playlist): Promise<void> {
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke("save_playlist", { playlist });
   }
 
   async saveConfig(config: unknown): Promise<void> {
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke("save_config", { config });
   }
 
   async getConfig(): Promise<unknown> {
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke("get_config");
   }
 
   async exportConfigJson(): Promise<string> {
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke<string>("export_config_json");
   }
 
   async importConfigJson(jsonStr: string): Promise<unknown> {
-    const { invoke } = await import("@tauri-apps/api/core");
+    const invoke = await getTauriInvoke();
     return invoke("import_config_json", { jsonStr });
   }
 }

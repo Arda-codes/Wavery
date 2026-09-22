@@ -284,6 +284,7 @@ input[type="range"].wavery-slider {
   transform: translateZ(0);
   will-change: background;
   transition: height 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  touch-action: none;
 }
 
 .group\/scrubber:hover input[type="range"].wavery-slider,

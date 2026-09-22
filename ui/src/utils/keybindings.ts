@@ -92,6 +92,66 @@ export function parseKeyCombo(combo: string): ParsedKeyCombo {
 }
 
 /**
+ * Detects if current platform is macOS / iOS.
+ */
+export function isMacPlatform(): boolean {
+  return (
+    typeof navigator !== "undefined" &&
+    /(Mac|iPhone|iPod|iPad)/i.test(navigator.platform || navigator.userAgent)
+  );
+}
+
+/**
+ * Formats a key combo string for display with platform-native symbols.
+ */
+export function formatKeyCombo(combo: string, isMac: boolean = isMacPlatform()): string {
+  if (!combo) return "";
+  const parsed = parseKeyCombo(combo);
+  if (!parsed.key) return combo;
+
+  if (isMac) {
+    let s = "";
+    if (parsed.ctrl && parsed.meta) {
+      s += "⌃";
+    }
+    if (parsed.alt) s += "⌥";
+    if (parsed.shift) s += "⇧";
+    if (parsed.meta || parsed.ctrl) {
+      s += "⌘";
+    }
+    const keyDisplay =
+      parsed.key === "ArrowRight"
+        ? "→"
+        : parsed.key === "ArrowLeft"
+        ? "←"
+        : parsed.key === "ArrowUp"
+        ? "↑"
+        : parsed.key === "ArrowDown"
+        ? "↓"
+        : parsed.key;
+    return `${s}${keyDisplay}`;
+  } else {
+    const parts: string[] = [];
+    if (parsed.ctrl) parts.push("Ctrl");
+    if (parsed.alt) parts.push("Alt");
+    if (parsed.shift) parts.push("Shift");
+    if (parsed.meta) parts.push("Win");
+    const keyDisplay =
+      parsed.key === "ArrowRight"
+        ? "Right"
+        : parsed.key === "ArrowLeft"
+        ? "Left"
+        : parsed.key === "ArrowUp"
+        ? "Up"
+        : parsed.key === "ArrowDown"
+        ? "Down"
+        : parsed.key;
+    parts.push(keyDisplay);
+    return parts.join("+");
+  }
+}
+
+/**
  * Determines whether a KeyboardEvent matches a configured key combination string.
  */
 export function matchesKeyCombo(

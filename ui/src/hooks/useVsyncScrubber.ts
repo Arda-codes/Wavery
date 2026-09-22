@@ -28,9 +28,10 @@ export interface UseVsyncScrubberResult {
   remainingTimeRef: React.RefObject<HTMLSpanElement>;
   isDragging: boolean;
   dragPos: number;
-  handlePointerDown: () => void;
+  handlePointerDown: (e: React.PointerEvent<HTMLInputElement>) => void;
   handleChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  handlePointerUp: () => void;
+  handlePointerUp: (e?: React.PointerEvent<HTMLInputElement>) => void;
+  handleContainerPointerDown: (e: React.PointerEvent<HTMLDivElement>) => void;
   displayPos: number;
 }
 
@@ -159,31 +160,102 @@ export function useVsyncScrubber({
   }, [isPlaying, hasTrack, getInterpolatedPos, updateDOM]);
 
   // Pointer drag interactions
-  const handlePointerDown = useCallback(() => {
+  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLInputElement>) => {
     if (!hasTrackRef.current) return;
-    const current = getInterpolatedPos();
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // Ignore if setPointerCapture is unsupported
+    }
+
+    const dur = durationRef.current;
+    let targetPos: number;
+    const rect = e.currentTarget.getBoundingClientRect();
+    if (rect.width > 0 && dur > 0) {
+      const pct = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1));
+      targetPos = pct * dur;
+    } else {
+      const val = parseFloat(e.currentTarget.value);
+      targetPos = !isNaN(val) ? val : getInterpolatedPos();
+    }
+
     isDraggingRef.current = true;
-    dragPosRef.current = current;
+    dragPosRef.current = targetPos;
     setIsDragging(true);
-    setDragPos(current);
-  }, [getInterpolatedPos]);
+    setDragPos(targetPos);
+    updateDOM(targetPos);
+  }, [getInterpolatedPos, updateDOM]);
 
   const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (!hasTrackRef.current) return;
     const val = parseFloat(e.target.value);
-    dragPosRef.current = val;
-    setDragPos(val);
-    updateDOM(val);
+    if (!isNaN(val)) {
+      dragPosRef.current = val;
+      setDragPos(val);
+      updateDOM(val);
+    }
   }, [updateDOM]);
 
-  const handlePointerUp = useCallback(() => {
+  const handlePointerUp = useCallback((e?: React.PointerEvent<HTMLInputElement>) => {
+    if (e) {
+      try {
+        if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+          e.currentTarget.releasePointerCapture(e.pointerId);
+        }
+      } catch {
+        // Ignore pointer release errors
+      }
+    }
+
     if (isDraggingRef.current && hasTrackRef.current) {
-      const targetPos = dragPosRef.current;
+      const sliderVal = sliderRef.current ? parseFloat(sliderRef.current.value) : NaN;
+      const targetPos = !isNaN(sliderVal) ? sliderVal : dragPosRef.current;
       onSeek(targetPos);
       basePosRef.current = targetPos;
       baseTimeRef.current = performance.now();
       isDraggingRef.current = false;
       setIsDragging(false);
+      updateDOM(targetPos);
+    }
+  }, [onSeek, updateDOM]);
+
+  // Window-level safety listener to ensure dragging state is never orphaned
+  useEffect(() => {
+    const handleGlobalPointerUp = () => {
+      if (isDraggingRef.current && hasTrackRef.current) {
+        const sliderVal = sliderRef.current ? parseFloat(sliderRef.current.value) : NaN;
+        const targetPos = !isNaN(sliderVal) ? sliderVal : dragPosRef.current;
+        onSeek(targetPos);
+        basePosRef.current = targetPos;
+        baseTimeRef.current = performance.now();
+        isDraggingRef.current = false;
+        setIsDragging(false);
+        updateDOM(targetPos);
+      }
+    };
+
+    window.addEventListener("pointerup", handleGlobalPointerUp);
+    window.addEventListener("pointercancel", handleGlobalPointerUp);
+    return () => {
+      window.removeEventListener("pointerup", handleGlobalPointerUp);
+      window.removeEventListener("pointercancel", handleGlobalPointerUp);
+    };
+  }, [onSeek, updateDOM]);
+
+  // Container pointer down to allow clicking anywhere on the scrubber bar to seek
+  const handleContainerPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!hasTrackRef.current) return;
+    if (e.target === sliderRef.current) return; // Handled by input's handlePointerDown
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const dur = durationRef.current;
+    if (rect.width > 0 && dur > 0) {
+      const pct = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1));
+      const targetPos = pct * dur;
+      onSeek(targetPos);
+      basePosRef.current = targetPos;
+      baseTimeRef.current = performance.now();
+      dragPosRef.current = targetPos;
       updateDOM(targetPos);
     }
   }, [onSeek, updateDOM]);
@@ -197,6 +269,7 @@ export function useVsyncScrubber({
     handlePointerDown,
     handleChange,
     handlePointerUp,
+    handleContainerPointerDown,
     displayPos: isDragging ? dragPos : positionSecs,
   };
 }

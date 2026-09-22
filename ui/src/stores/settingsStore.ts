@@ -299,6 +299,8 @@ interface SettingsData {
 
   // Library & Metadata
   protectedArtists: string[];
+  managedDirectory: string;
+  databasePath: string;
 
   // Integrations
   enableMediaSession: boolean;
@@ -373,6 +375,8 @@ export const DEFAULT_SETTINGS: SettingsData = {
   enableGradients: true,
 
   protectedArtists: [...DEFAULT_PROTECTED_ARTISTS],
+  managedDirectory: "",
+  databasePath: "",
 
   enableMediaSession: true,
   enableDiscordRpc: false,
@@ -515,6 +519,15 @@ function mapBackendConfigToSettings(backendCfg: any): Partial<SettingsData> {
     }
     if (typeof backendCfg.integrations.discord_app_id === "string") {
       s.discordAppId = backendCfg.integrations.discord_app_id;
+    }
+  }
+
+  if (backendCfg.library) {
+    if (typeof backendCfg.library.managed_directory === "string") {
+      s.managedDirectory = backendCfg.library.managed_directory;
+    }
+    if (typeof backendCfg.library.database_path === "string") {
+      s.databasePath = backendCfg.library.database_path;
     }
   }
 
@@ -1068,6 +1081,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
         isLinuxBannerDismissed: state.isLinuxBannerDismissed,
         enableGradients: state.enableGradients,
         protectedArtists: state.protectedArtists,
+        managedDirectory: state.managedDirectory || "",
+        databasePath: state.databasePath || "",
         enableMediaSession: state.enableMediaSession,
         enableDiscordRpc: state.enableDiscordRpc,
         discordAppId: state.discordAppId,

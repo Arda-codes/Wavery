@@ -11,6 +11,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem};
+#[cfg(target_os = "macos")]
+use tauri::menu::Menu;
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Emitter, Manager};
 use tokio::sync::Mutex as AsyncMutex;
@@ -1508,6 +1510,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }))
         .manage(state.clone())
         .setup(move |app| {
+            #[cfg(target_os = "macos")]
+            {
+                if let Ok(default_menu) = Menu::default(app) {
+                    let _ = app.set_menu(default_menu);
+                }
+            }
+
             let tray_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> Result<(), Box<dyn std::error::Error>> {
                 let open_desktop_item = MenuItemBuilder::with_id("open_desktop", "Open Desktop App").build(app)?;
                 let web_label = format!("Open Web Client (http://{}:{})", config.server.host, config.server.port);
@@ -1536,9 +1545,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     ])
                     .build()?;
 
+                #[cfg(target_os = "macos")]
+                let show_menu_on_left = true;
+                #[cfg(not(target_os = "macos"))]
+                let show_menu_on_left = false;
+
                 let mut tray_builder = TrayIconBuilder::new()
                     .menu(&tray_menu)
-                    .show_menu_on_left_click(false)
+                    .show_menu_on_left_click(show_menu_on_left)
                     .on_menu_event(move |app_handle, event| {
                         match event.id.as_ref() {
                             "open_desktop" | "toggle" => {
@@ -1687,6 +1701,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     })
                     .on_tray_icon_event(|tray, event| {
+                        #[cfg(not(target_os = "macos"))]
                         if let TrayIconEvent::Click {
                             button: MouseButton::Left,
                             button_state: MouseButtonState::Up,
@@ -1815,6 +1830,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         tauri::RunEvent::Exit => {
             if let Some(state) = app_handle.try_state::<Arc<AppState>>() {
                 kill_all_subprocesses(&state);
+            }
+        }
+        #[cfg(target_os = "macos")]
+        tauri::RunEvent::Reopen { has_visible_windows, .. } => {
+            if !has_visible_windows {
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.unminimize();
+                    let _ = window.set_focus();
+                }
             }
         }
         _ => {}

@@ -488,6 +488,33 @@ export async function runStoresAndUtilsTests(jiti: any) {
   }
 
   // =========================================================================
+  // SECTION 3c: High-FPS Optimistic Volume Control Tests
+  // =========================================================================
+  console.log("\n--- 3c. Testing High-FPS Optimistic Volume Slider Invariants ---");
+  const playerStore = usePlayerStore.getState();
+
+  // Test immediate optimistic state update
+  playerStore.setVolume(0.65);
+  assert(usePlayerStore.getState().status.volume === 0.65, "setVolume synchronously and optimistically updates status.volume to 0.65");
+
+  // Test clamping bounds
+  playerStore.setVolume(-0.2);
+  assert(usePlayerStore.getState().status.volume === 0, "setVolume clamps negative values to 0");
+
+  playerStore.setVolume(1.8);
+  assert(usePlayerStore.getState().status.volume === 1, "setVolume clamps overflow values to 1");
+
+  // Test rapid 120fps/144fps drag simulation (1,000 continuous slider drag events)
+  const startTime = Date.now();
+  for (let i = 0; i <= 1000; i++) {
+    const vol = (i % 200) / 200;
+    usePlayerStore.getState().setVolume(vol);
+  }
+  const elapsed = Date.now() - startTime;
+  assert(usePlayerStore.getState().status.volume === (1000 % 200) / 200, "Rapid 1000x drag finishes with correct final volume");
+  assert(elapsed < 200, `Rapid 1000x volume adjustments completed in ${elapsed}ms (<200ms) with zero jank`);
+
+  // =========================================================================
   // SECTION 4: utils/library.ts String Tokenizers, Formatter & Helpers
   // =========================================================================
   console.log("\n--- 4. Testing utils/library.ts Tokenizers, Formatters & Helpers ---");

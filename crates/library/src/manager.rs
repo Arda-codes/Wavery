@@ -373,7 +373,8 @@ fn generate_managed_destination(
 
 fn compute_track_id(rel_path: &Path) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(rel_path.to_string_lossy().as_bytes());
+    let normalized = rel_path.to_string_lossy().replace('\\', "/");
+    hasher.update(normalized.as_bytes());
     format!("{:x}", hasher.finalize())[..16].to_string()
 }
 

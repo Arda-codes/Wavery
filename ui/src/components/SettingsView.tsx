@@ -17,6 +17,7 @@ import {
 } from "../utils/notifications";
 import { isMediaSessionSupported } from "../utils/mediaSession";
 import { getDiscordStatus, DiscordStatusResponse } from "../utils/discordRpc";
+import { formatKeyCombo } from "../utils/keybindings";
 import { ModeSwitcher } from "./ModeSwitcher";
 import {
   Settings,
@@ -1315,7 +1316,7 @@ export const SettingsView: React.FC = () => {
                       <p className="text-[11px] text-[#71717A]">{item.desc}</p>
                     </div>
                     <kbd className="px-2.5 py-1 bg-white/[0.08] border border-white/[0.12] rounded-lg font-mono text-xs text-white font-semibold shadow-inner">
-                      {item.key}
+                      {formatKeyCombo(item.key)}
                     </kbd>
                   </div>
                 ))}
@@ -1351,8 +1352,8 @@ export const SettingsView: React.FC = () => {
                   <p className="text-[10px] font-bold text-[#71717A] uppercase tracking-wider">
                     Music Folder
                   </p>
-                  <p className="font-mono text-white text-xs select-all truncate">
-                    ~/.local/share/wavery/library
+                  <p className="font-mono text-white text-xs select-all truncate" title={settings.managedDirectory || undefined}>
+                    {settings.managedDirectory || "~/.local/share/wavery/library"}
                   </p>
                   <p className="text-[11px] text-[#71717A] pt-1">
                     {tracks.length} songs in {albums.length} albums, {artists.length} artists.
@@ -1363,8 +1364,8 @@ export const SettingsView: React.FC = () => {
                   <p className="text-[10px] font-bold text-[#71717A] uppercase tracking-wider">
                     Database File
                   </p>
-                  <p className="font-mono text-white text-xs select-all truncate">
-                    ~/.local/share/wavery/library.db
+                  <p className="font-mono text-white text-xs select-all truncate" title={settings.databasePath || undefined}>
+                    {settings.databasePath || "~/.local/share/wavery/library.db"}
                   </p>
                   <p className="text-[11px] text-[#71717A] pt-1">
                     SQLite WAL mode with FTS5 search index.

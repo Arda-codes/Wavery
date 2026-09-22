@@ -211,7 +211,7 @@ impl LibraryDatabase {
                     .strip_prefix(managed_root)
                     .unwrap_or(full_path)
                     .to_string_lossy()
-                    .to_string();
+                    .replace('\\', "/");
 
                 stmt.execute(params![
                     track.id,

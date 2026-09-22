@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useMemo } from "react";
+import React, { useEffect, useRef, useMemo, useState, useCallback } from "react";
 import {
   Play,
   Pause,
@@ -25,6 +25,47 @@ import { getFullTrackArtistString } from "../utils/library";
 import { parseLrc, getActiveLyricIndex } from "../utils/lyrics";
 import { ArtistLinks } from "./ArtistLinks";
 import { useVsyncScrubber, formatTime, formatRemainingTime } from "../hooks/useVsyncScrubber";
+import { VolumeSlider } from "./VolumeSlider";
+
+/**
+ * Isolated volume control subcomponent for FullscreenPlayer.
+ * Prevents re-rendering the heavy lyrics canvas and cover art during 60fps/120fps volume drags.
+ */
+const FullscreenVolumeControl: React.FC = React.memo(() => {
+  const volume = usePlayerStore((s) => s.status.volume);
+  const setVolume = usePlayerStore((s) => s.setVolume);
+  const [prevVolume, setPrevVolume] = useState<number>(0.8);
+
+  const handleToggleMute = useCallback(() => {
+    if (volume > 0) {
+      setPrevVolume(volume);
+      setVolume(0);
+    } else {
+      setVolume(prevVolume || 0.8);
+    }
+  }, [volume, prevVolume, setVolume]);
+
+  const VolumeIcon = useMemo(() => {
+    if (volume === 0) return VolumeX;
+    if (volume < 0.5) return Volume1;
+    return Volume2;
+  }, [volume]);
+
+  return (
+    <div className="hidden sm:flex items-center space-x-2 w-1/4">
+      <button
+        type="button"
+        onClick={handleToggleMute}
+        className="text-textMuted hover:text-textPrimary hover:bg-surfaceHover transition p-1.5 focus:outline-none rounded-lg"
+        title={volume === 0 ? "Unmute" : `Mute (${Math.round(volume * 100)}%)`}
+      >
+        <VolumeIcon className="w-4 h-4" />
+      </button>
+      <VolumeSlider className="w-20 sm:w-24" ariaLabel="Fullscreen Volume Slider" />
+    </div>
+  );
+});
+FullscreenVolumeControl.displayName = "FullscreenVolumeControl";
 
 export const FullscreenPlayer: React.FC = () => {
   const isOpen = useNavigationStore((s) => s.isFullscreenNowPlayingOpen);
@@ -43,7 +84,6 @@ export const FullscreenPlayer: React.FC = () => {
     (s) =>
       s.status.duration_secs || s.currentTrack?.metadata.duration?.secs || 0
   );
-  const volume = usePlayerStore((s) => s.status.volume);
   const isShuffle = usePlayerStore((s) => s.isShuffle);
   const isAutoplay = usePlayerStore((s) => s.isAutoplay);
   const loopMode = usePlayerStore((s) => s.status.loop_mode);
@@ -57,7 +97,6 @@ export const FullscreenPlayer: React.FC = () => {
   const playNext = usePlayerStore((s) => s.playNext);
   const playPrevious = usePlayerStore((s) => s.playPrevious);
   const seek = usePlayerStore((s) => s.seek);
-  const setVolume = usePlayerStore((s) => s.setVolume);
   const toggleShuffle = usePlayerStore((s) => s.toggleShuffle);
   const toggleAutoplay = usePlayerStore((s) => s.toggleAutoplay);
   const cycleLoopMode = usePlayerStore((s) => s.cycleLoopMode);
@@ -73,6 +112,7 @@ export const FullscreenPlayer: React.FC = () => {
     handlePointerDown,
     handleChange,
     handlePointerUp,
+    handleContainerPointerDown,
     displayPos,
   } = useVsyncScrubber({
     positionSecs,
@@ -144,11 +184,6 @@ export const FullscreenPlayer: React.FC = () => {
     }
   }, [activeLyricIndex, isOpen, showLyricsSmoothScroll]);
 
-  const VolumeIcon = useMemo(() => {
-    if (volume === 0) return VolumeX;
-    if (volume < 0.5) return Volume1;
-    return Volume2;
-  }, [volume]);
 
 
   const handleContextClick = () => {
@@ -363,20 +398,26 @@ export const FullscreenPlayer: React.FC = () => {
           >
             {formatTime(displayPos)}
           </span>
-          <input
-            ref={sliderRef}
-            type="range"
-            aria-label="Seek Position"
-            min={0}
-            max={maxDuration}
-            step={0.05}
-            defaultValue={displayPos}
-            onPointerDown={handlePointerDown}
-            onChange={handleChange}
-            onPointerUp={handlePointerUp}
-            className="w-full wavery-slider focus-visible:ring-2 focus-visible:ring-accent focus:outline-none"
-            style={{ "--slider-progress": `${maxDuration > 0 ? (displayPos / maxDuration) * 100 : 0}%` } as React.CSSProperties}
-          />
+          <div
+            onPointerDown={handleContainerPointerDown}
+            className="relative w-full flex items-center py-1.5 cursor-pointer"
+          >
+            <input
+              ref={sliderRef}
+              type="range"
+              aria-label="Seek Position"
+              min={0}
+              max={maxDuration}
+              step={0.05}
+              defaultValue={displayPos}
+              onPointerDown={handlePointerDown}
+              onChange={handleChange}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerUp}
+              className="w-full wavery-slider focus-visible:ring-2 focus-visible:ring-accent focus:outline-none"
+              style={{ "--slider-progress": `${maxDuration > 0 ? (displayPos / maxDuration) * 100 : 0}%` } as React.CSSProperties}
+            />
+          </div>
           <span
             ref={remainingTimeRef}
             className="w-10 sm:w-12 text-left font-mono text-xs sm:text-sm text-textMuted tabular-nums"
@@ -388,25 +429,7 @@ export const FullscreenPlayer: React.FC = () => {
         {/* Transport Controls & Volume */}
         <div className="flex items-center justify-between w-full pt-1">
           {/* Left Volume */}
-          <div className="hidden sm:flex items-center space-x-2 w-1/4">
-            <button
-              onClick={() => setVolume(volume > 0 ? 0 : 0.8)}
-              className="text-textMuted hover:text-textPrimary hover:bg-surfaceHover transition p-1.5 focus:outline-none rounded-lg"
-              title="Mute / Unmute"
-            >
-              <VolumeIcon className="w-4 h-4" />
-            </button>
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.01}
-              value={volume}
-              onChange={(e) => setVolume(parseFloat(e.target.value))}
-              className="w-20 sm:w-24 wavery-slider"
-              style={{ "--slider-progress": `${volume * 100}%` } as React.CSSProperties}
-            />
-          </div>
+          <FullscreenVolumeControl />
 
           {/* Center Main Transport */}
           <div className="flex items-center space-x-2 sm:space-x-6 justify-center flex-1">

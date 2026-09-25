@@ -9,7 +9,7 @@ use axum::{
     body::{Body, Bytes},
     extract::{Path as AxumPath, Query, State},
     http::{header, HeaderMap, StatusCode},
-    response::{IntoResponse, Response},
+    response::{Html, IntoResponse, Response},
     routing::{delete, get, post},
     Json, Router,
 };
@@ -462,7 +462,152 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         }
     }
 
-    api_router
+    api_router.fallback(fallback_web_handler)
+}
+
+/// Fallback HTTP handler when pre-built static UI assets are not located on disk.
+/// Serves a clean, responsive landing interface confirming API connectivity and controls.
+async fn fallback_web_handler() -> impl IntoResponse {
+    let html = r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wavery Web Player</title>
+  <style>
+    :root {
+      --bg: #121214;
+      --surface: #1A1A1E;
+      --surface-hover: #26262E;
+      --accent: #00D2D3;
+      --primary: #6C5CE7;
+      --text: #ECEFF4;
+      --text-muted: #8F93A0;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 32px;
+      max-width: 520px;
+      width: 100%;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.5);
+      text-align: center;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(0, 210, 211, 0.15);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 12px;
+      border-radius: 20px;
+      margin-bottom: 16px;
+    }
+    .badge-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 8px var(--accent);
+    }
+    h1 { font-size: 24px; font-weight: 700; margin-bottom: 8px; }
+    p { color: var(--text-muted); font-size: 14px; line-height: 1.5; margin-bottom: 24px; }
+    .status-panel {
+      background: rgba(0, 0, 0, 0.25);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 24px;
+      text-align: left;
+    }
+    .status-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      padding: 4px 0;
+      color: var(--text-muted);
+    }
+    .status-val { color: var(--text); font-weight: 500; }
+    .actions { display: flex; gap: 12px; justify-content: center; }
+    button {
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 10px 20px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    button:hover { opacity: 0.9; }
+    button:active { transform: scale(0.98); }
+    .btn-secondary {
+      background: var(--surface-hover);
+      color: var(--text);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="badge"><span class="badge-dot"></span>Wavery Server Online</div>
+    <h1>Wavery Web Client</h1>
+    <p>The backend streaming audio engine and REST API are fully operational on this port.</p>
+    <div class="status-panel">
+      <div class="status-row"><span>Audio Streaming:</span><span class="status-val">RFC 7233 Range Enabled</span></div>
+      <div class="status-row"><span>Status:</span><span class="status-val" id="api-status">Connecting...</span></div>
+      <div class="status-row"><span>Total Tracks:</span><span class="status-val" id="track-count">-</span></div>
+    </div>
+    <div class="actions">
+      <button class="btn-secondary" onclick="switchToNative()">Return to Desktop App</button>
+      <button onclick="location.reload()">Reload</button>
+    </div>
+  </div>
+  <script>
+    fetch('/api/health')
+      .then(r => r.json())
+      .then(d => {
+        document.getElementById('api-status').textContent = 'Healthy (v' + (d.version || '0.2.1') + ')';
+      })
+      .catch(() => {
+        document.getElementById('api-status').textContent = 'Error connecting to API';
+      });
+
+    fetch('/api/tracks')
+      .then(r => r.json())
+      .then(tracks => {
+        document.getElementById('track-count').textContent = tracks.length + ' tracks';
+      })
+      .catch(() => {
+        document.getElementById('track-count').textContent = '0';
+      });
+
+    function switchToNative() {
+      fetch('/api/app/switch-to-native', { method: 'POST' })
+        .then(() => {
+          setTimeout(() => window.close(), 500);
+        })
+        .catch(e => console.error(e));
+    }
+  </script>
+</body>
+</html>"#;
+    Html(html)
 }
 
 /// Binds and starts the HTTP streaming and web server on the given address with graceful shutdown support.
@@ -1138,6 +1283,20 @@ pub fn find_project_root() -> PathBuf {
 
 /// Locates the native Tauri desktop executable binary.
 pub fn find_native_desktop_executable() -> Option<PathBuf> {
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+            let p = PathBuf::from(local_app_data).join("Wavery").join("wavery-tauri.exe");
+            if p.is_file() {
+                return Some(p);
+            }
+        }
+        let prog_files = PathBuf::from(r"C:\Program Files\Wavery\wavery-tauri.exe");
+        if prog_files.is_file() {
+            return Some(prog_files);
+        }
+    }
+
     let root = find_project_root();
     let candidates = [
         root.join("target/debug/wavery-tauri"),
@@ -1175,22 +1334,40 @@ pub fn find_native_desktop_executable() -> Option<PathBuf> {
 pub fn open_browser_url(url: &str) -> Result<(), std::io::Error> {
     #[cfg(target_os = "windows")]
     {
-        let mut spawned = std::process::Command::new("rundll32")
-            .args(["url.dll,FileProtocolHandler", url])
-            .spawn()
-            .is_ok();
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
 
+        // 1. Try launching through default Windows Shell via cmd.exe start
+        let mut cmd = std::process::Command::new("cmd");
+        cmd.args(["/c", "start", "", url]);
+        cmd.creation_flags(CREATE_NO_WINDOW);
+        let mut spawned = cmd.spawn().is_ok();
+
+        // 2. Fallback to explorer.exe
         if !spawned {
-            spawned = std::process::Command::new("explorer")
-                .arg(url)
-                .spawn()
-                .is_ok();
+            let mut exp = std::process::Command::new("explorer");
+            exp.arg(url);
+            spawned = exp.spawn().is_ok();
+        }
+
+        // 3. Fallback to PowerShell Start-Process
+        if !spawned {
+            let mut ps = std::process::Command::new("powershell");
+            ps.args([
+                "-NoProfile",
+                "-WindowStyle",
+                "Hidden",
+                "-Command",
+                &format!("Start-Process '{}'", url),
+            ]);
+            ps.creation_flags(CREATE_NO_WINDOW);
+            spawned = ps.spawn().is_ok();
         }
 
         if !spawned {
-            let _ = std::process::Command::new("cmd")
-                .args(["/c", "start", "", url])
-                .spawn();
+            return Err(std::io::Error::other(format!(
+                "Failed to launch default web browser for '{url}'"
+            )));
         }
     }
     #[cfg(target_os = "macos")]
@@ -1274,7 +1451,11 @@ pub fn spawn_native_process() -> Result<(), std::io::Error> {
     let root = find_project_root();
     let mut cmd = if let Some(exe) = find_native_desktop_executable() {
         let mut c = std::process::Command::new(&exe);
-        c.current_dir(&root);
+        if let Some(parent) = exe.parent() {
+            c.current_dir(parent);
+        } else {
+            c.current_dir(&root);
+        }
         c
     } else {
         let mut c = std::process::Command::new("cargo");

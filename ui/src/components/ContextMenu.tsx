@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback, useLayoutEffect } from "react";
 import { useContextMenuStore, ContextMenuItem } from "../stores/contextMenuStore";
+import { windowService } from "../services/windowService";
 import { ChevronRight } from "lucide-react";
 
 interface SubmenuProps {
@@ -160,6 +161,7 @@ export const ContextMenu: React.FC = () => {
     window.addEventListener("keydown", handleKeyDown, true);
     window.addEventListener("scroll", handleScroll, true);
     window.addEventListener("resize", closeContextMenu);
+    const unsubscribeWindowState = windowService.onWindowStateChange(closeContextMenu);
 
     return () => {
       window.removeEventListener("mousedown", handlePointerDown, true);
@@ -167,6 +169,7 @@ export const ContextMenu: React.FC = () => {
       window.removeEventListener("keydown", handleKeyDown, true);
       window.removeEventListener("scroll", handleScroll, true);
       window.removeEventListener("resize", closeContextMenu);
+      unsubscribeWindowState();
     };
   }, [isOpen, closeContextMenu]);
 

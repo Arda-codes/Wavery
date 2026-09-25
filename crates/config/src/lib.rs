@@ -396,16 +396,48 @@ pub fn default_config_path() -> Result<PathBuf, ConfigError> {
 
 /// Loads configuration from the specified path or creates standard defaults.
 pub fn load_or_create(path: &Path) -> Result<Config, ConfigError> {
-    if path.exists() {
-        let contents = fs::read_to_string(path)?;
-        let mut config: Config = toml::from_str(&contents)?;
-        config.sanitize();
-        Ok(config)
-    } else {
-        let default_cfg = Config::default();
-        save(path, &default_cfg)?;
-        Ok(default_cfg)
+    let mut last_err = None;
+    for _ in 0..30 {
+        if path.exists() {
+            match fs::read_to_string(path) {
+                Ok(contents) => {
+                    let mut config: Config = toml::from_str(&contents)?;
+                    config.sanitize();
+                    return Ok(config);
+                }
+                Err(e)
+                    if e.kind() == std::io::ErrorKind::PermissionDenied
+                        || e.raw_os_error() == Some(5)
+                        || e.raw_os_error() == Some(32) =>
+                {
+                    last_err = Some(ConfigError::Io(e));
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                    continue;
+                }
+                Err(e) => return Err(ConfigError::Io(e)),
+            }
+        } else {
+            let default_cfg = Config::default();
+            match save(path, &default_cfg) {
+                Ok(()) => return Ok(default_cfg),
+                Err(ConfigError::Io(e))
+                    if e.kind() == std::io::ErrorKind::PermissionDenied
+                        || e.raw_os_error() == Some(5)
+                        || e.raw_os_error() == Some(32) =>
+                {
+                    last_err = Some(ConfigError::Io(e));
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                    continue;
+                }
+                Err(e) => return Err(e),
+            }
+        }
     }
+    if let Some(err) = last_err {
+        return Err(err);
+    }
+    let default_cfg = Config::default();
+    Ok(default_cfg)
 }
 
 static TMP_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);

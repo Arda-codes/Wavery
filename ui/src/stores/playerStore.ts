@@ -1080,6 +1080,7 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
       await playerAdapter.switchToWeb();
     } catch (err) {
       console.error("Failed to switch to web client:", err);
+      throw err;
     }
   },
 

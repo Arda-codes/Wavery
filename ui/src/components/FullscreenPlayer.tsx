@@ -26,6 +26,7 @@ import { parseLrc, getActiveLyricIndex } from "../utils/lyrics";
 import { ArtistLinks } from "./ArtistLinks";
 import { useVsyncScrubber, formatTime, formatRemainingTime } from "../hooks/useVsyncScrubber";
 import { VolumeSlider } from "./VolumeSlider";
+import { windowService } from "../services/windowService";
 
 /**
  * Isolated volume control subcomponent for FullscreenPlayer.
@@ -169,19 +170,25 @@ export const FullscreenPlayer: React.FC = () => {
     return getActiveLyricIndex(lyrics, displayPos);
   }, [lyrics, displayPos]);
 
-  // Auto-scroll lyrics container to active line
+  // Auto-scroll lyrics container to active line, re-centering immediately on window state change
   useEffect(() => {
     if (!isOpen || activeLyricIndex < 0 || !lyricsContainerRef.current) return;
-    const container = lyricsContainerRef.current;
-    const activeEl = container.children[activeLyricIndex] as HTMLElement;
-    if (activeEl) {
-      const targetScroll =
-        activeEl.offsetTop - container.clientHeight / 2 + activeEl.clientHeight / 2;
-      container.scrollTo({
-        top: Math.max(0, targetScroll),
-        behavior: showLyricsSmoothScroll ? "smooth" : "auto",
-      });
-    }
+    const scrollActiveLyric = () => {
+      const container = lyricsContainerRef.current;
+      if (!container) return;
+      const activeEl = container.children[activeLyricIndex] as HTMLElement;
+      if (activeEl) {
+        const targetScroll =
+          activeEl.offsetTop - container.clientHeight / 2 + activeEl.clientHeight / 2;
+        container.scrollTo({
+          top: Math.max(0, targetScroll),
+          behavior: showLyricsSmoothScroll ? "smooth" : "auto",
+        });
+      }
+    };
+
+    scrollActiveLyric();
+    return windowService.onWindowStateChange(scrollActiveLyric);
   }, [activeLyricIndex, isOpen, showLyricsSmoothScroll]);
 
 

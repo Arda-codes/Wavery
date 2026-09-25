@@ -153,8 +153,9 @@ struct AppState {
     artwork_cache: SyncMutex<ArtworkCache>,
     server_process: SyncMutex<Option<std::process::Child>>,
     server_shutdown_tx: SyncMutex<Option<tokio::sync::watch::Sender<bool>>>,
-    server_abort_handle: SyncMutex<Option<tokio::task::AbortHandle>>,
+    server_abort_handle: SyncMutex<Option<tauri::async_runtime::JoinHandle<()>>>,
     discord_handle: wavery_server::discord::DiscordHandle,
+    last_normal_size: SyncMutex<(u32, u32)>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -722,6 +723,46 @@ async fn export_config_json(
 }
 
 #[tauri::command]
+async fn open_external_url(url: String) -> Result<(), IpcError> {
+    if url.starts_with("http://") || url.starts_with("https://") {
+        #[cfg(target_os = "windows")]
+        {
+            let _ = std::process::Command::new("rundll32")
+                .args(["url.dll,FileProtocolHandler", &url])
+                .spawn();
+        }
+        #[cfg(target_os = "macos")]
+        {
+            let _ = std::process::Command::new("open").arg(&url).spawn();
+        }
+        #[cfg(target_os = "linux")]
+        {
+            let _ = std::process::Command::new("xdg-open").arg(&url).spawn();
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn export_config_to_file(content: String) -> Result<bool, IpcError> {
+    let file = rfd::AsyncFileDialog::new()
+        .add_filter("JSON Files", &["json"])
+        .set_file_name("wavery_config.json")
+        .set_title("Save Wavery Configuration")
+        .save_file()
+        .await;
+
+    if let Some(file) = file {
+        file.write(content.as_bytes())
+            .await
+            .map_err(|e| IpcError::Task(e.to_string()))?;
+        Ok(true)
+    } else {
+        Ok(false)
+    }
+}
+
+#[tauri::command]
 async fn update_discord_presence(
     payload: wavery_server::discord::PresencePayload,
     state: tauri::State<'_, Arc<AppState>>,
@@ -846,28 +887,60 @@ fn find_server_executable() -> Option<PathBuf> {
         }
     }
 
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+            let p = PathBuf::from(local_app_data).join("Wavery").join("wavery-server.exe");
+            if p.is_file() {
+                return Some(p);
+            }
+        }
+        let prog_files = PathBuf::from(r"C:\Program Files\Wavery\wavery-server.exe");
+        if prog_files.is_file() {
+            return Some(prog_files);
+        }
+    }
+
     None
 }
 
 fn open_browser_url(url: &str) -> Result<(), std::io::Error> {
     #[cfg(target_os = "windows")]
     {
-        let mut spawned = std::process::Command::new("rundll32")
-            .args(["url.dll,FileProtocolHandler", url])
-            .spawn()
-            .is_ok();
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
 
+        // 1. Try launching through default Windows Shell via cmd.exe start
+        let mut cmd = std::process::Command::new("cmd");
+        cmd.args(["/c", "start", "", url]);
+        cmd.creation_flags(CREATE_NO_WINDOW);
+        let mut spawned = cmd.spawn().is_ok();
+
+        // 2. Fallback to explorer.exe
         if !spawned {
-            spawned = std::process::Command::new("explorer")
-                .arg(url)
-                .spawn()
-                .is_ok();
+            let mut exp = std::process::Command::new("explorer");
+            exp.arg(url);
+            spawned = exp.spawn().is_ok();
+        }
+
+        // 3. Fallback to PowerShell Start-Process
+        if !spawned {
+            let mut ps = std::process::Command::new("powershell");
+            ps.args([
+                "-NoProfile",
+                "-WindowStyle",
+                "Hidden",
+                "-Command",
+                &format!("Start-Process '{}'", url),
+            ]);
+            ps.creation_flags(CREATE_NO_WINDOW);
+            spawned = ps.spawn().is_ok();
         }
 
         if !spawned {
-            let _ = std::process::Command::new("cmd")
-                .args(["/c", "start", "", url])
-                .spawn();
+            return Err(std::io::Error::other(format!(
+                "Failed to launch default web browser for '{url}'"
+            )));
         }
     }
     #[cfg(target_os = "macos")]
@@ -1036,6 +1109,9 @@ fn resolve_static_dir(root: &std::path::Path) -> Option<PathBuf> {
         Some(root.join("dist")),
         exe_dir.as_ref().map(|d| d.join("dist")),
         exe_dir.as_ref().map(|d| d.join("../dist")),
+        exe_dir.as_ref().map(|d| d.join("resources/dist")),
+        exe_dir.as_ref().map(|d| d.join("resources")),
+        exe_dir.as_ref().map(|d| d.join("_up_/dist")),
         Some(PathBuf::from("ui/dist")),
         Some(PathBuf::from("dist")),
     ]
@@ -1049,20 +1125,23 @@ fn start_in_process_server(state: &Arc<AppState>) {
         return;
     };
 
-    // Check if in-process server is already running
-    if state.server_shutdown_tx.lock().is_some() {
-        return;
-    }
-
     let (server_host, server_port) = {
         let cfg = state.config.lock();
         (cfg.server.host.clone(), cfg.server.port)
     };
     let addr = format!("{}:{}", server_host, server_port);
 
-    // If port is already open (e.g. standalone wavery-server is running), skip binding
+    // If port is already open (e.g. standalone wavery-server or active server is running), skip binding
     if std::net::TcpStream::connect(&addr).is_ok() {
         return;
+    }
+
+    // If port is unreachable but shutdown_tx or abort_handle are still held, reset stale state
+    if let Some(tx) = state.server_shutdown_tx.lock().take() {
+        let _ = tx.send(true);
+    }
+    if let Some(handle) = state.server_abort_handle.lock().take() {
+        handle.abort();
     }
 
     let root = find_project_root();
@@ -1081,13 +1160,18 @@ fn start_in_process_server(state: &Arc<AppState>) {
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
     *state.server_shutdown_tx.lock() = Some(shutdown_tx);
 
-    let handle = tokio::spawn(async move {
+    let state_weak = Arc::downgrade(state);
+    let handle = tauri::async_runtime::spawn(async move {
         if let Err(e) = wavery_server::start_server_with_shutdown(server_app_state, &addr, shutdown_rx).await {
             eprintln!("[Wavery] In-process web server terminated on {}: {}", addr, e);
         }
+        if let Some(state_arc) = state_weak.upgrade() {
+            *state_arc.server_shutdown_tx.lock() = None;
+            *state_arc.server_abort_handle.lock() = None;
+        }
     });
 
-    *state.server_abort_handle.lock() = Some(handle.abort_handle());
+    *state.server_abort_handle.lock() = Some(handle);
 }
 
 async fn ensure_server_running(state: &Arc<AppState>) {
@@ -1280,7 +1364,10 @@ async fn switch_to_web(
     ensure_server_running(state.inner()).await;
 
     // 5. Launch browser to target url
-    let _ = open_browser_url(&target_url);
+    if let Err(e) = open_browser_url(&target_url) {
+        eprintln!("[Wavery] Failed to open default browser to {target_url}: {e}");
+        return Err(IpcError::Task(format!("Failed to open default web browser: {e}")));
+    }
 
     // 6. Hide the window (music already stopped) — Tauri stays alive in the tray.
     if let Some(window) = app_handle.get_webview_window("main") {
@@ -1435,6 +1522,205 @@ async fn save_playlist(
     Ok(())
 }
 
+#[tauri::command]
+async fn minimize_window(window: tauri::WebviewWindow) -> Result<(), IpcError> {
+    let _ = window.emit("window-state-changed", serde_json::json!({
+        "isMaximized": false,
+        "isMinimized": true,
+        "isFullscreen": false,
+        "width": 0,
+        "height": 0
+    }));
+    window.minimize().map_err(|e| IpcError::Task(e.to_string()))?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn toggle_maximize_window(window: tauri::WebviewWindow) -> Result<bool, IpcError> {
+    let is_max = window.is_maximized().unwrap_or(false);
+    if is_max {
+        window.unmaximize().map_err(|e| IpcError::Task(e.to_string()))?;
+        let _ = window.emit("window-state-changed", serde_json::json!({
+            "isMaximized": false,
+            "isMinimized": false,
+            "isFullscreen": false
+        }));
+        Ok(false)
+    } else {
+        window.maximize().map_err(|e| IpcError::Task(e.to_string()))?;
+        let _ = window.emit("window-state-changed", serde_json::json!({
+            "isMaximized": true,
+            "isMinimized": false,
+            "isFullscreen": false
+        }));
+        Ok(true)
+    }
+}
+
+#[tauri::command]
+async fn is_window_maximized(window: tauri::WebviewWindow) -> Result<bool, IpcError> {
+    Ok(window.is_maximized().unwrap_or(false))
+}
+
+#[tauri::command]
+async fn toggle_fullscreen_window(window: tauri::WebviewWindow) -> Result<bool, IpcError> {
+    let is_fs = window.is_fullscreen().unwrap_or(false);
+    let next_fs = !is_fs;
+    window.set_fullscreen(next_fs).map_err(|e| IpcError::Task(e.to_string()))?;
+    let _ = window.emit("window-state-changed", serde_json::json!({
+        "isFullscreen": next_fs
+    }));
+    Ok(next_fs)
+}
+
+#[tauri::command]
+async fn is_window_fullscreen(window: tauri::WebviewWindow) -> Result<bool, IpcError> {
+    Ok(window.is_fullscreen().unwrap_or(false))
+}
+
+#[tauri::command]
+async fn close_app_window(
+    window: tauri::WebviewWindow,
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<(), IpcError> {
+    let minimize_to_tray = {
+        let cfg = state.config.lock();
+        cfg.general.minimize_to_tray
+    };
+    if minimize_to_tray {
+        let _ = window.hide();
+    } else {
+        kill_all_subprocesses(&state);
+        terminate_server_instances();
+        app_handle.exit(0);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn start_header_drag(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<(), IpcError> {
+    let is_max = window.is_maximized().unwrap_or(false);
+    if is_max {
+        let max_size = window
+            .outer_size()
+            .unwrap_or(tauri::PhysicalSize { width: 1920, height: 1080 });
+
+        #[cfg(target_os = "windows")]
+        let (phys_cur_x, phys_cur_y) = {
+            #[repr(C)]
+            struct Point {
+                x: i32,
+                y: i32,
+            }
+            extern "system" {
+                fn GetCursorPos(lp_point: *mut Point) -> i32;
+            }
+            let mut pt = Point { x: 0, y: 0 };
+            unsafe {
+                GetCursorPos(&mut pt);
+            }
+            (pt.x, pt.y)
+        };
+
+        #[cfg(not(target_os = "windows"))]
+        let (phys_cur_x, phys_cur_y) = (550, 25);
+
+        // Desired restored floating window dimensions (1100x720 default, clamped to safe floating bounds)
+        let saved = *state.last_normal_size.lock();
+        let target_w = if saved.0 >= 800 && saved.0 < max_size.width {
+            saved.0
+        } else {
+            1100
+        }
+        .min(max_size.width.saturating_sub(100))
+        .max(800);
+
+        let target_h = if saved.1 >= 500 && saved.1 < max_size.height {
+            saved.1
+        } else {
+            720
+        }
+        .min(max_size.height.saturating_sub(100))
+        .max(500);
+
+        let ratio = if max_size.width > 0 {
+            ((phys_cur_x as f64) / (max_size.width as f64)).clamp(0.1, 0.9)
+        } else {
+            0.5
+        };
+
+        let new_x = (phys_cur_x as f64 - (target_w as f64 * ratio)).round() as i32;
+        let new_y = (phys_cur_y - 25).max(0);
+
+        #[cfg(target_os = "windows")]
+        if let Ok(hwnd) = window.hwnd() {
+            extern "system" {
+                fn GetWindowLongPtrW(hwnd: isize, n_index: i32) -> isize;
+                fn SetWindowLongPtrW(hwnd: isize, n_index: i32, new_long: isize) -> isize;
+                fn SetWindowPos(
+                    hwnd: isize,
+                    hwnd_insert_after: isize,
+                    x: i32,
+                    y: i32,
+                    cx: i32,
+                    cy: i32,
+                    u_flags: u32,
+                ) -> i32;
+            }
+            const GWL_STYLE: i32 = -16;
+            const WS_MAXIMIZE: isize = 0x01000000;
+            const SWP_NOZORDER: u32 = 0x0004;
+            const SWP_NOACTIVATE: u32 = 0x0010;
+            const SWP_FRAMECHANGED: u32 = 0x0020;
+            const SWP_NOCOPYBITS: u32 = 0x0100;
+
+            unsafe {
+                let style = GetWindowLongPtrW(hwnd.0 as isize, GWL_STYLE);
+                if (style & WS_MAXIMIZE) != 0 {
+                    SetWindowLongPtrW(hwnd.0 as isize, GWL_STYLE, style & !WS_MAXIMIZE);
+                }
+                SetWindowPos(
+                    hwnd.0 as isize,
+                    0,
+                    new_x,
+                    new_y,
+                    target_w as i32,
+                    target_h as i32,
+                    SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_NOCOPYBITS,
+                );
+            }
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = window.unmaximize();
+            let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize {
+                width: target_w,
+                height: target_h,
+            }));
+            let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
+                x: new_x,
+                y: new_y,
+            }));
+        }
+
+        let _ = window.emit("window-state-changed", serde_json::json!({
+            "isMaximized": false,
+            "isMinimized": false,
+            "isFullscreen": false,
+            "width": target_w,
+            "height": target_h
+        }));
+    }
+
+    let _ = window.start_dragging();
+    Ok(())
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(target_os = "linux")]
     {
@@ -1498,13 +1784,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         server_shutdown_tx: SyncMutex::new(None),
         server_abort_handle: SyncMutex::new(None),
         discord_handle: wavery_server::discord::new_discord_handle(None),
+        last_normal_size: SyncMutex::new((1100, 720)),
     });
 
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.show();
-                let _ = window.unminimize();
+                if window.is_minimized().unwrap_or(false) {
+                    let _ = window.unminimize();
+                }
                 let _ = window.set_focus();
             }
         }))
@@ -1558,7 +1847,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             "open_desktop" | "toggle" => {
                                 if let Some(window) = app_handle.get_webview_window("main") {
                                     let _ = window.show();
-                                    let _ = window.unminimize();
+                                    if window.is_minimized().unwrap_or(false) {
+                                        let _ = window.unminimize();
+                                    }
                                     let _ = window.set_focus();
                                 }
                             }
@@ -1606,9 +1897,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     };
                                     let url = format!("http://{}:{}", server_host, server_port);
                                     ensure_server_running(&state_clone).await;
-                                    let _ = open_browser_url(&url);
-                                    if let Some(window) = app_clone.get_webview_window("main") {
-                                        let _ = window.hide();
+                                    if open_browser_url(&url).is_ok() {
+                                        if let Some(window) = app_clone.get_webview_window("main") {
+                                            let _ = window.hide();
+                                        }
                                     }
                                 });
                             }
@@ -1702,22 +1994,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     })
                     .on_tray_icon_event(|tray, event| {
                         #[cfg(not(target_os = "macos"))]
-                        if let TrayIconEvent::Click {
-                            button: MouseButton::Left,
-                            button_state: MouseButtonState::Up,
-                            ..
-                        } = event
-                        {
-                            let app = tray.app_handle();
-                            if let Some(window) = app.get_webview_window("main") {
-                                if window.is_visible().unwrap_or(false) {
-                                    let _ = window.hide();
-                                } else {
+                        match event {
+                            TrayIconEvent::Click {
+                                button: MouseButton::Left,
+                                button_state: MouseButtonState::Up,
+                                ..
+                            }
+                            | TrayIconEvent::DoubleClick {
+                                button: MouseButton::Left,
+                                ..
+                            } => {
+                                let app = tray.app_handle();
+                                if let Some(window) = app.get_webview_window("main") {
                                     let _ = window.show();
-                                    let _ = window.unminimize();
+                                    if window.is_minimized().unwrap_or(false) {
+                                        let _ = window.unminimize();
+                                    }
                                     let _ = window.set_focus();
                                 }
                             }
+                            _ => {}
                         }
                     });
 
@@ -1744,9 +2040,85 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 start_in_process_server(&state);
             }
 
+            // Ensure main window has proper taskbar restore style flags and is shown on startup
+            if let Some(window) = app.get_webview_window("main") {
+                #[cfg(target_os = "windows")]
+                if let Ok(hwnd) = window.hwnd() {
+                    extern "system" {
+                        fn GetWindowLongW(hwnd: isize, n_index: i32) -> i32;
+                        fn SetWindowLongW(hwnd: isize, n_index: i32, new_long: i32) -> i32;
+                    }
+                    const GWL_STYLE: i32 = -16;
+                    const WS_MINIMIZEBOX: i32 = 0x00020000;
+                    const WS_MAXIMIZEBOX: i32 = 0x00010000;
+                    const WS_SYSMENU: i32 = 0x00080000;
+
+                    unsafe {
+                        let current_style = GetWindowLongW(hwnd.0 as isize, GWL_STYLE);
+                        SetWindowLongW(
+                            hwnd.0 as isize,
+                            GWL_STYLE,
+                            current_style | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU,
+                        );
+                    }
+                }
+
+                #[cfg(target_os = "windows")]
+                let _ = window.with_webview(|webview| {
+                    unsafe {
+                        use webview2_com::Microsoft::Web::WebView2::Win32::*;
+                        use windows_core::Interface;
+                        let controller = webview.controller();
+                        if let Ok(core) = controller.CoreWebView2() {
+                            if let Ok(settings) = core.Settings() {
+                                let _ = settings.SetAreDefaultContextMenusEnabled(false);
+                                let _ = settings.SetAreDevToolsEnabled(false);
+                                let _ = settings.SetIsStatusBarEnabled(false);
+                                let _ = settings.SetIsZoomControlEnabled(false);
+                                let _ = settings.SetIsBuiltInErrorPageEnabled(false);
+                                if let Ok(settings3) = settings.cast::<ICoreWebView2Settings3>() {
+                                    let _ = settings3.SetAreBrowserAcceleratorKeysEnabled(false);
+                                }
+                            }
+                        }
+                    }
+                });
+
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+
             Ok(())
         })
         .on_window_event(|window, event| {
+            if let tauri::WindowEvent::Resized(size) = event {
+                let is_max = window.is_maximized().unwrap_or(false);
+                let is_fs = window.is_fullscreen().unwrap_or(false);
+                let _ = window.emit("window-state-changed", serde_json::json!({
+                    "isMaximized": is_max,
+                    "isMinimized": false,
+                    "isFullscreen": is_fs,
+                    "width": size.width,
+                    "height": size.height
+                }));
+
+                if !is_max {
+                    let is_monitor_size = if let Ok(Some(mon)) = window.current_monitor() {
+                        let m_size = mon.size();
+                        size.width >= m_size.width && size.height >= m_size.height
+                    } else {
+                        false
+                    };
+                    if !is_monitor_size {
+                        if let Some(state_handle) = window.app_handle().try_state::<Arc<AppState>>() {
+                            if size.width >= 800 && size.height >= 500 && size.width <= 1600 && size.height <= 1000 {
+                                *state_handle.last_normal_size.lock() = (size.width, size.height);
+                            }
+                        }
+                    }
+                }
+            }
+
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 let app = window.app_handle();
                 let state_handle = app.state::<Arc<AppState>>();
@@ -1809,7 +2181,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             save_playlist,
             update_discord_presence,
             clear_discord_presence,
-            get_discord_status
+            get_discord_status,
+            minimize_window,
+            toggle_maximize_window,
+            is_window_maximized,
+            toggle_fullscreen_window,
+            is_window_fullscreen,
+            close_app_window,
+            start_header_drag,
+            open_external_url,
+            export_config_to_file
         ])
         .build(tauri::generate_context!())?;
 
@@ -2299,6 +2680,7 @@ mod tests {
             server_shutdown_tx: SyncMutex::new(None),
             server_abort_handle: SyncMutex::new(None),
             discord_handle: wavery_server::discord::new_discord_handle(None),
+            last_normal_size: SyncMutex::new((1100, 720)),
         };
 
         let minimize = state.config.lock().general.minimize_to_tray;

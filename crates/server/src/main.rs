@@ -33,6 +33,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let static_dir = [
         exe_dir.as_ref().map(|d| d.join("dist")),
         exe_dir.as_ref().map(|d| d.join("../dist")),
+        exe_dir.as_ref().map(|d| d.join("resources/dist")),
+        exe_dir.as_ref().map(|d| d.join("resources")),
+        exe_dir.as_ref().map(|d| d.join("_up_/dist")),
         Some(PathBuf::from("ui/dist")),
         Some(PathBuf::from("dist")),
     ]

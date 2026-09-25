@@ -32,6 +32,8 @@ import { NowPlayingDrawer } from "./components/NowPlayingDrawer";
 import { FullscreenPlayer } from "./components/FullscreenPlayer";
 import { ContextMenu } from "./components/ContextMenu";
 import { matchesKeyCombo, isEditableTarget } from "./utils/keybindings";
+import { WindowControls } from "./components/WindowControls";
+import { windowService, useWindowState } from "./services/windowService";
 import { Search, X, ExternalLink, Home, Menu, Library, ListMusic } from "lucide-react";
 
 export const App: React.FC = () => {
@@ -158,6 +160,9 @@ export const App: React.FC = () => {
 
   // Search input ref & platform detection
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const { isMaximized: isWindowMaximized } = useWindowState();
+  const dragStartPosRef = useRef<{ x: number; y: number } | null>(null);
+
   const isMac = useMemo(
     () =>
       typeof navigator !== "undefined" &&
@@ -172,10 +177,10 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // 1. Search shortcut: user-configured openSearch or standard fallback Cmd+K / Ctrl+K
+      // 1. Search shortcut: user-configured openSearch, Cmd+K / Ctrl+K, or Cmd+F / Ctrl+F (prevent browser find overlay)
       if (
         matchesKeyCombo(e, keybindings?.openSearch || "Ctrl+K", isMac) ||
-        ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K"))
+        ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K" || e.key === "f" || e.key === "F"))
       ) {
         e.preventDefault();
         e.stopPropagation();
@@ -188,6 +193,34 @@ export const App: React.FC = () => {
             searchInputRef.current.select();
           }
         }, 20);
+        return;
+      }
+
+      // 1b. Intercept and block webview/browser accelerator keys (F5 reload, Ctrl+R, Ctrl+P, Ctrl+S, Ctrl+U, Ctrl+O, etc.)
+      const isCtrlOrMeta = e.ctrlKey || e.metaKey;
+      const keyLower = e.key.toLowerCase();
+      if (
+        e.key === "F5" ||
+        e.key === "F7" ||
+        (isCtrlOrMeta && (
+          keyLower === "r" ||
+          keyLower === "p" ||
+          keyLower === "s" ||
+          keyLower === "u" ||
+          keyLower === "o" ||
+          keyLower === "g" ||
+          keyLower === "j" ||
+          (!isMac && keyLower === "h") ||
+          keyLower === "n" ||
+          keyLower === "t" ||
+          keyLower === "+" ||
+          keyLower === "-" ||
+          keyLower === "=" ||
+          keyLower === "0"
+        )) ||
+        (e.altKey && (e.key === "ArrowLeft" || e.key === "ArrowRight"))
+      ) {
+        e.preventDefault();
         return;
       }
 
@@ -306,8 +339,69 @@ export const App: React.FC = () => {
       }
     };
 
+    // Global browser context menu suppression (Edge/Chrome right-click menus)
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+    };
+
+    // Auxiliary / middle-click autoscroll suppression
+    const handleAuxClick = (e: MouseEvent) => {
+      if (e.button === 1) {
+        e.preventDefault();
+      }
+    };
+
+    // Prevent Ctrl + MouseWheel / Trackpad pinch zooming
+    const handleWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+      }
+    };
+
+    // Drag-and-drop file navigation suppression (prevent browser opening or downloading dropped files)
+    const handleDragOver = (e: DragEvent) => {
+      e.preventDefault();
+    };
+    const handleDrop = (e: DragEvent) => {
+      e.preventDefault();
+    };
+
+    // Intercept external links so they open in the default browser, never inside the desktop app window
+    const handleLinkClick = (e: MouseEvent) => {
+      const anchor = (e.target as HTMLElement).closest("a");
+      if (anchor && anchor.href && (anchor.href.startsWith("http://") || anchor.href.startsWith("https://"))) {
+        e.preventDefault();
+        if (isTauri) {
+          import("@tauri-apps/api/core").then(({ invoke }) => {
+            invoke("open_external_url", { url: anchor.href }).catch(() => {
+              window.open(anchor.href, "_blank", "noopener,noreferrer");
+            });
+          }).catch(() => {
+            window.open(anchor.href, "_blank", "noopener,noreferrer");
+          });
+        } else {
+          window.open(anchor.href, "_blank", "noopener,noreferrer");
+        }
+      }
+    };
+
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("contextmenu", handleContextMenu, { capture: true });
+    window.addEventListener("auxclick", handleAuxClick, { capture: true });
+    window.addEventListener("wheel", handleWheel, { passive: false });
+    window.addEventListener("dragover", handleDragOver, false);
+    window.addEventListener("drop", handleDrop, false);
+    document.addEventListener("click", handleLinkClick, { capture: true });
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("contextmenu", handleContextMenu, { capture: true });
+      window.removeEventListener("auxclick", handleAuxClick, { capture: true });
+      window.removeEventListener("wheel", handleWheel);
+      window.removeEventListener("dragover", handleDragOver, false);
+      window.removeEventListener("drop", handleDrop, false);
+      document.removeEventListener("click", handleLinkClick, { capture: true });
+    };
   }, [keybindings, isMac, volumeStep]);
 
 
@@ -528,10 +622,53 @@ export const App: React.FC = () => {
 
   return (
     <div className="flex flex-col h-screen w-screen bg-background text-textPrimary font-sans antialiased selection:bg-accent/30 selection:text-white">
-      {/* Top Desktop Chrome / Header */}
-      <header className="relative h-14 bg-sidebar/95 backdrop-blur-xl border-b border-white/[0.06] px-3 sm:px-5 flex items-center justify-between flex-shrink-0 z-30 select-none">
-        {/* Left: Hamburger (mobile/tablet) + Brand Text */}
-        <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-shrink-0 z-20">
+      {/* Top Desktop Chrome / Merged Title Bar Header */}
+      <header
+        data-tauri-drag-region={!isWindowMaximized ? "" : undefined}
+        onPointerDown={(e) => {
+          if (
+            !isTauri ||
+            e.button !== 0 ||
+            (e.target as HTMLElement).closest("button, input, a, [role='group'], [data-tauri-drag-region='none']")
+          ) {
+            return;
+          }
+          if (isWindowMaximized) {
+            dragStartPosRef.current = { x: e.screenX, y: e.screenY };
+          }
+        }}
+        onPointerMove={(e) => {
+          if (!isTauri || !isWindowMaximized || !dragStartPosRef.current) return;
+          const dx = e.screenX - dragStartPosRef.current.x;
+          const dy = e.screenY - dragStartPosRef.current.y;
+          if (Math.hypot(dx, dy) >= 6) {
+            dragStartPosRef.current = null;
+            windowService.startHeaderDrag().catch(() => {});
+          }
+        }}
+        onPointerUp={() => {
+          dragStartPosRef.current = null;
+        }}
+        onPointerCancel={() => {
+          dragStartPosRef.current = null;
+        }}
+        onDoubleClick={(e) => {
+          if (
+            isTauri &&
+            !(e.target as HTMLElement).closest("button, input, a, [role='group'], [data-tauri-drag-region='none']")
+          ) {
+            windowService.toggleMaximize().catch(() => {});
+          }
+        }}
+        className="relative h-13 sm:h-14 bg-sidebar/95 backdrop-blur-xl border-b border-white/[0.06] px-3 sm:px-4 flex items-center justify-between flex-shrink-0 z-30 select-none cursor-default"
+      >
+        {/* Left: macOS Traffic Lights space (if on Mac) + Hamburger + Brand Text */}
+        <div
+          data-tauri-drag-region="none"
+          className={`flex items-center space-x-2 sm:space-x-3 min-w-0 flex-shrink-0 z-20 pointer-events-auto ${
+            isMac && isTauri ? "pl-16 sm:pl-18" : ""
+          }`}
+        >
           {/* Hamburger button on screens < lg */}
           <button
             type="button"
@@ -552,8 +689,17 @@ export const App: React.FC = () => {
           </button>
         </div>
 
+        {/* Drag spacer between Brand and Search */}
+        <div
+          className="flex-1 h-full min-w-4 pointer-events-none"
+          data-tauri-drag-region={!isWindowMaximized ? "" : undefined}
+        />
+
         {/* Center: Global Search Bar (Prominent Spotlight-grade Apple HIG search bar) */}
-        <div className="absolute left-1/2 -translate-x-1/2 w-[calc(100%-96px)] sm:w-[calc(100%-160px)] md:w-full md:max-w-xl lg:max-w-2xl pointer-events-auto z-20 px-2 sm:px-0">
+        <div
+          data-tauri-drag-region="none"
+          className="absolute left-1/2 -translate-x-1/2 w-[calc(100%-110px)] sm:w-[calc(100%-200px)] md:w-full md:max-w-md lg:max-w-xl xl:max-w-2xl pointer-events-auto z-20 px-2 sm:px-0"
+        >
           <div className="relative group flex items-center w-full">
             <Search
               onClick={() => {
@@ -622,6 +768,20 @@ export const App: React.FC = () => {
               )}
             </div>
           </div>
+        </div>
+
+        {/* Drag spacer between Search and Right controls */}
+        <div
+          className="flex-1 h-full min-w-4 pointer-events-none"
+          data-tauri-drag-region={!isWindowMaximized ? "" : undefined}
+        />
+
+        {/* Right: Windows/Linux Window Controls */}
+        <div
+          data-tauri-drag-region="none"
+          className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-shrink-0 z-20 pointer-events-auto"
+        >
+          {!isMac && <WindowControls variant="windows" />}
         </div>
       </header>
 

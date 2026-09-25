@@ -1,10 +1,11 @@
-import React, { useState, useMemo, useRef, useCallback, useDeferredValue } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback, useDeferredValue } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Track, TrackSortKey, SortDirection, PlaybackContext } from "../types";
 import { sortTracks } from "../utils/library";
 import { usePlayerStore } from "../stores/playerStore";
 import { useLibraryStore } from "../stores/libraryStore";
 import { useSettingsStore } from "../stores/settingsStore";
+import { windowService } from "../services/windowService";
 import { TrackRow } from "./TrackRow";
 import { AddToPlaylistModal } from "./AddToPlaylistModal";
 import { DeleteTrackModal } from "./DeleteTrackModal";
@@ -109,6 +110,13 @@ const TrackTableInner: React.FC<TrackTableProps> = ({
     estimateSize: () => rowHeight,
     overscan: 10,
   });
+
+  // Force instantaneous virtualizer measurement when sudden window maximize/unmaximize/resize occurs
+  useEffect(() => {
+    return windowService.onWindowStateChange(() => {
+      virtualizer.measure();
+    });
+  }, [virtualizer]);
 
   const handlePlayRow = useCallback(
     (track: Track, index: number) => {

@@ -10,7 +10,7 @@ import {
   CustomTheme,
 } from "../stores/settingsStore";
 import { CustomThemeModal } from "./CustomThemeModal";
-import { playerAdapter } from "../services/adapter";
+import { playerAdapter, isTauri } from "../services/adapter";
 import {
   requestNotificationPermission,
   showTrackNotification,
@@ -232,8 +232,25 @@ export const SettingsView: React.FC = () => {
     }
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
     const jsonStr = exportConfigJson();
+
+    if (isTauri) {
+      try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        const saved = await invoke<boolean>("export_config_to_file", { content: jsonStr });
+        if (saved) {
+          setFeedbackMessage({
+            type: "success",
+            text: "Configuration JSON exported successfully.",
+          });
+        }
+        return;
+      } catch (e) {
+        console.error("Native export failed, falling back to blob:", e);
+      }
+    }
+
     const blob = new Blob([jsonStr], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");

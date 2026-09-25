@@ -9,6 +9,7 @@ import { useArtwork } from "../utils/useArtwork";
 import { getFullTrackArtistString, formatDuration } from "../utils/library";
 import { parseLrc, getActiveLyricIndex } from "../utils/lyrics";
 import { ArtistLinks } from "./ArtistLinks";
+import { windowService } from "../services/windowService";
 import {
   X,
   Music,
@@ -166,19 +167,25 @@ export const NowPlayingDrawer: React.FC = () => {
     return getActiveLyricIndex(lyrics, positionSecs);
   }, [lyrics, positionSecs]);
 
-  // Auto-scroll lyrics container in drawer
+  // Auto-scroll lyrics container in drawer, re-centering on window state change
   useEffect(() => {
     if (!isDrawerOpen || activeTab !== "lyrics" || activeLyricIndex < 0 || !lyricsContainerRef.current) return;
-    const container = lyricsContainerRef.current;
-    const activeEl = container.children[activeLyricIndex] as HTMLElement;
-    if (activeEl) {
-      const targetScroll =
-        activeEl.offsetTop - container.clientHeight / 2 + activeEl.clientHeight / 2;
-      container.scrollTo({
-        top: Math.max(0, targetScroll),
-        behavior: showLyricsSmoothScroll ? "smooth" : "auto",
-      });
-    }
+    const scrollActiveLyric = () => {
+      const container = lyricsContainerRef.current;
+      if (!container) return;
+      const activeEl = container.children[activeLyricIndex] as HTMLElement;
+      if (activeEl) {
+        const targetScroll =
+          activeEl.offsetTop - container.clientHeight / 2 + activeEl.clientHeight / 2;
+        container.scrollTo({
+          top: Math.max(0, targetScroll),
+          behavior: showLyricsSmoothScroll ? "smooth" : "auto",
+        });
+      }
+    };
+
+    scrollActiveLyric();
+    return windowService.onWindowStateChange(scrollActiveLyric);
   }, [activeLyricIndex, isDrawerOpen, activeTab, showLyricsSmoothScroll]);
 
   if (!isDrawerOpen) return null;

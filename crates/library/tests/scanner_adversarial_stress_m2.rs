@@ -119,10 +119,33 @@ async fn test_hundreds_of_adversarial_corrupted_audio_files_parallel_scan_with_p
         created_audio_files += 1;
     }
 
-    // 4. 50 Adversarial filenames (Unicode, RTL, CJK, special symbols, control chars)
+    #[cfg(not(windows))]
     let adversarial_names = [
         "track_with spaces and  tabs\t_v1",
         "track_with_newline\r_cr",
+        "🔥_fire_emoji_track_🎸",
+        "千と千尋の神隠し_spirited_away",
+        "강남스타일_gangnam_kpop",
+        "حبيبي_arabic_rtl_audio",
+        "הללויה_hebrew_rtl_audio",
+        "Виктор_Цой_Группа_крови",
+        "Ζορμπάς_zorba_greek",
+        "Ágætis_byrjun_Sigur_Rós",
+        "Über_den_Wolken_Mey",
+        "Les_Étoiles_Saint_Saëns",
+        "İstanbul_da_Sonbahar_Teoman",
+        "Corazón_Espinado_Santana",
+        "track[2024](remix){192k}#42$!&+",
+        "hyphen-dash_dot.dot_under_score",
+        "ALL_CAPS_FILENAME_TRACK",
+        "__leading_and_trailing_underscores__",
+        "mix.v1.final.reallyfinal.export",
+        "a",
+    ];
+    #[cfg(windows)]
+    let adversarial_names = [
+        "track_with spaces and  tabs_v1",
+        "track_with_spaces_and_dots..v2",
         "🔥_fire_emoji_track_🎸",
         "千と千尋の神隠し_spirited_away",
         "강남스타일_gangnam_kpop",

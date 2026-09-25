@@ -102,6 +102,16 @@ export function isMacPlatform(): boolean {
 }
 
 /**
+ * Detects if current platform is Windows.
+ */
+export function isWindowsPlatform(): boolean {
+  return (
+    typeof navigator !== "undefined" &&
+    /Win/i.test(navigator.platform || navigator.userAgent)
+  );
+}
+
+/**
  * Formats a key combo string for display with platform-native symbols.
  */
 export function formatKeyCombo(combo: string, isMac: boolean = isMacPlatform()): string {

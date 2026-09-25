@@ -353,7 +353,7 @@ export async function runM4Challenger2AdversarialTests(jiti: any) {
   console.log(`  Auditing ${allRsFiles.length} Rust source files for driver leakage...`);
 
   for (const rsFile of allRsFiles) {
-    const relative = path.relative(projectRoot, rsFile);
+    const relative = path.relative(projectRoot, rsFile).replace(/\\/g, "/");
     const content = fs.readFileSync(rsFile, "utf-8");
     const lines = content.split("\n");
 
@@ -388,7 +388,7 @@ export async function runM4Challenger2AdversarialTests(jiti: any) {
 
   let prodUnwrapViolations = 0;
   for (const rsFile of allRsFiles) {
-    const relative = path.relative(projectRoot, rsFile);
+    const relative = path.relative(projectRoot, rsFile).replace(/\\/g, "/");
     if (relative.includes("/tests/") || relative.endsWith("tests.rs")) continue;
 
     const content = fs.readFileSync(rsFile, "utf-8");

@@ -380,6 +380,31 @@ impl Config {
                 "wav".into(),
             ];
         }
+
+        // Sanitize audio numerical fields
+        if self.audio.default_volume.is_nan() || self.audio.default_volume < 0.0 {
+            self.audio.default_volume = 0.0;
+        } else if self.audio.default_volume > 1.0 {
+            self.audio.default_volume = 1.0;
+        }
+
+        if self.audio.volume_step.is_nan() || self.audio.volume_step <= 0.0 || self.audio.volume_step > 1.0 {
+            self.audio.volume_step = 0.05;
+        }
+
+        if self.audio.buffer_size_frames < 256 || self.audio.buffer_size_frames > 65536 {
+            self.audio.buffer_size_frames = 2048;
+        }
+
+        // Sanitize server port
+        if self.server.port == 0 {
+            self.server.port = 4242;
+        }
+
+        // Sanitize UI scale factor
+        if self.ui.scale_factor.is_nan() || self.ui.scale_factor < 0.25 || self.ui.scale_factor > 4.0 {
+            self.ui.scale_factor = 1.0;
+        }
     }
 }
 
@@ -496,7 +521,10 @@ pub fn save(path: &Path, config: &Config) -> Result<(), ConfigError> {
     }
     #[cfg(not(target_os = "windows"))]
     {
-        fs::rename(&tmp_path, path)?;
+        if let Err(e) = fs::rename(&tmp_path, path) {
+            let _ = fs::remove_file(&tmp_path);
+            return Err(ConfigError::Io(e));
+        }
     }
     Ok(())
 }
@@ -580,7 +608,10 @@ pub fn save_session_atomic(
     }
     #[cfg(not(target_os = "windows"))]
     {
-        fs::rename(&tmp_path, path)?;
+        if let Err(e) = fs::rename(&tmp_path, path) {
+            let _ = fs::remove_file(&tmp_path);
+            return Err(ConfigError::Io(e));
+        }
     }
     Ok(())
 }

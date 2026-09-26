@@ -121,7 +121,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   },
 
   toggleLike: async (trackId: string) => {
-    const { likedTrackIds, tracks } = get();
+    const { likedTrackIds, likedTracks: prevLikedTracks, tracks } = get();
     const currentlyLiked = likedTrackIds.has(trackId);
     const nextLiked = !currentlyLiked;
 
@@ -134,7 +134,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     }
 
     const currentTrackObj = tracks.find((t) => t.id === trackId);
-    let nextLikedTracks = get().likedTracks;
+    let nextLikedTracks = prevLikedTracks;
     if (nextLiked && currentTrackObj) {
       nextLikedTracks = [currentTrackObj, ...nextLikedTracks.filter((t) => t.id !== trackId)];
     } else {
@@ -156,7 +156,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       return result;
     } catch (err) {
       // Rollback on error
-      set({ likedTrackIds, likedTracks: get().likedTracks });
+      set({ likedTrackIds, likedTracks: prevLikedTracks });
       throw err;
     }
   },

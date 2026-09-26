@@ -192,13 +192,31 @@ impl RodioPlayer {
                             let was_playing = shared_clone.lock().playback_state == PlaybackState::Playing;
 
                             if crossfade_duration > Duration::ZERO && was_playing && active_sink.is_some() {
+                                // Calculate actual volume of outgoing sink to prevent volume pop
+                                let old_initial_volume = if let Some(fade) = &fading_in {
+                                    let elapsed = fade.start_instant.elapsed();
+                                    if elapsed >= fade.duration {
+                                        current_volume
+                                    } else {
+                                        let t = (elapsed.as_secs_f32() / fade.duration.as_secs_f32()).clamp(0.0, 1.0);
+                                        let in_gain = (t * std::f32::consts::FRAC_PI_2).sin();
+                                        (fade.target_volume * in_gain).clamp(0.0, 1.0)
+                                    }
+                                } else {
+                                    current_volume
+                                };
+
                                 // --- Dual-sink Equal-Power Crossfade ---
                                 if let Some(old) = active_sink.take() {
+                                    while fading_out_sinks.len() >= 3 {
+                                        let f = fading_out_sinks.remove(0);
+                                        f.sink.stop();
+                                    }
                                     fading_out_sinks.push(FadingSink {
                                         sink: old,
                                         start_instant: Instant::now(),
                                         duration: crossfade_duration,
-                                        initial_volume: current_volume,
+                                        initial_volume: old_initial_volume,
                                     });
                                 }
                                 sink.set_volume(0.0);
@@ -290,12 +308,20 @@ impl RodioPlayer {
                             f.sink.stop();
                         }
                         fading_in = None;
+                        let target_pos = {
+                            let st = shared_clone.lock();
+                            if let Some(dur) = st.total_duration {
+                                position.min(dur)
+                            } else {
+                                position
+                            }
+                        };
                         let res = if let Some(sink) = &active_sink {
                             sink.set_volume(current_volume);
-                            match sink.try_seek(position) {
+                            match sink.try_seek(target_pos) {
                                 Ok(()) => {
                                     let mut st = shared_clone.lock();
-                                    st.accumulated_pos = position;
+                                    st.accumulated_pos = target_pos;
                                     if st.playback_state == PlaybackState::Playing {
                                         st.play_start_instant = Some(Instant::now());
                                     }
@@ -309,9 +335,9 @@ impl RodioPlayer {
                                             let reader = BufReader::with_capacity(AUDIO_BUFFER_CAPACITY, file);
                                             if let Ok(source) = Decoder::new(reader) {
                                                 if let Ok(new_sink) = Sink::try_new(&stream_handle) {
-                                                    let _ = new_sink.try_seek(position);
                                                     new_sink.set_volume(current_volume);
                                                     new_sink.append(source);
+                                                    let _ = new_sink.try_seek(target_pos);
                                                     let was_playing = shared_clone.lock().playback_state == PlaybackState::Playing;
                                                     if !was_playing {
                                                         new_sink.pause();
@@ -319,7 +345,7 @@ impl RodioPlayer {
                                                     sink.stop();
                                                     active_sink = Some(new_sink);
                                                     let mut st = shared_clone.lock();
-                                                    st.accumulated_pos = position;
+                                                    st.accumulated_pos = target_pos;
                                                     if was_playing {
                                                         st.play_start_instant = Some(Instant::now());
                                                     }
@@ -341,7 +367,7 @@ impl RodioPlayer {
                         } else {
                             let mut st = shared_clone.lock();
                             if let Some(dur) = st.total_duration {
-                                st.accumulated_pos = position.min(dur);
+                                st.accumulated_pos = target_pos.min(dur);
                             } else {
                                 st.accumulated_pos = Duration::ZERO;
                             }
@@ -350,7 +376,11 @@ impl RodioPlayer {
                         let _ = reply.send(res);
                     }
                     Ok(AudioCommand::SetVolume(vol)) => {
-                        let clamped = vol.clamp(0.0, 1.0);
+                        let clamped = if vol.is_nan() {
+                            0.0
+                        } else {
+                            vol.clamp(0.0, 1.0)
+                        };
                         current_volume = clamped;
                         if fading_in.is_none() {
                             if let Some(sink) = &active_sink {
@@ -358,6 +388,9 @@ impl RodioPlayer {
                             }
                         } else if let Some(fade) = &mut fading_in {
                             fade.target_volume = clamped;
+                        }
+                        for f in &fading_out_sinks {
+                            f.sink.set_volume(clamped);
                         }
                     }
                     Ok(AudioCommand::Shutdown) => {
@@ -369,20 +402,7 @@ impl RodioPlayer {
                         }
                         break;
                     }
-                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                        if let Some(ref sink) = active_sink {
-                            if sink.empty() && fading_out_sinks.is_empty() {
-                                let mut st = shared_clone.lock();
-                                if st.playback_state == PlaybackState::Playing {
-                                    st.playback_state = PlaybackState::Stopped;
-                                    st.play_start_instant = None;
-                                    if let Some(dur) = st.total_duration {
-                                        st.accumulated_pos = dur;
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
                     Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
                         for f in fading_out_sinks.drain(..) {
                             f.sink.stop();
@@ -391,6 +411,20 @@ impl RodioPlayer {
                             sink.stop();
                         }
                         break;
+                    }
+                }
+
+                // Check if active track has finished playing naturally (prevent starvation under rapid commands)
+                if let Some(ref sink) = active_sink {
+                    if sink.empty() && fading_out_sinks.is_empty() {
+                        let mut st = shared_clone.lock();
+                        if st.playback_state == PlaybackState::Playing {
+                            st.playback_state = PlaybackState::Stopped;
+                            st.play_start_instant = None;
+                            if let Some(dur) = st.total_duration {
+                                st.accumulated_pos = dur;
+                            }
+                        }
                     }
                 }
             }
@@ -475,7 +509,11 @@ impl PlayerEngine for RodioPlayer {
     }
 
     fn set_volume(&mut self, volume: f32) {
-        let clamped = volume.clamp(0.0, 1.0);
+        let clamped = if volume.is_nan() {
+            0.0
+        } else {
+            volume.clamp(0.0, 1.0)
+        };
         self.shared.lock().volume = clamped;
         let _ = self.tx.send(AudioCommand::SetVolume(clamped));
     }

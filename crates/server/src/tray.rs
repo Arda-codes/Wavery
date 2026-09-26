@@ -22,12 +22,27 @@ use wavery_core::traits::LibraryManager;
 pub struct WaveryServerTray {
     #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     state: Arc<AppState>,
+    #[cfg(target_os = "linux")]
+    tokio_handle: Option<tokio::runtime::Handle>,
 }
 
 impl WaveryServerTray {
     /// Creates a new `WaveryServerTray` with the shared application state.
     pub fn new(state: Arc<AppState>) -> Self {
-        Self { state }
+        Self {
+            state,
+            #[cfg(target_os = "linux")]
+            tokio_handle: tokio::runtime::Handle::try_current().ok(),
+        }
+    }
+
+    /// Creates a new `WaveryServerTray` with an explicit Tokio runtime handle.
+    pub fn with_handle(state: Arc<AppState>, tokio_handle: Option<tokio::runtime::Handle>) -> Self {
+        Self {
+            state,
+            #[cfg(target_os = "linux")]
+            tokio_handle,
+        }
     }
 
     /// System tray identifier.
@@ -93,6 +108,8 @@ impl Tray for WaveryServerTray {
         let state_rescan = self.state.clone();
         let state_rebuild = self.state.clone();
         let state_quit = self.state.clone();
+        let tokio_handle_rescan = self.tokio_handle.clone();
+        let tokio_handle_rebuild = self.tokio_handle.clone();
 
         vec![
             StandardItem {
@@ -127,7 +144,7 @@ impl Tray for WaveryServerTray {
                         let guard = state_rescan.config.try_read();
                         guard.map(|c| c.library.managed_directory.clone()).unwrap_or_default()
                     };
-                    tokio::spawn(async move {
+                    let task = async move {
                         let mut lib = lib_arc.lock().await;
                         match lib.import_directory(&managed_dir, ImportStrategy::Copy).await {
                             Ok(tracks) => {
@@ -137,7 +154,14 @@ impl Tray for WaveryServerTray {
                                 error!("Background library scan error: {e}");
                             }
                         }
-                    });
+                    };
+                    if let Some(ref handle) = tokio_handle_rescan {
+                        handle.spawn(task);
+                    } else if let Ok(handle) = tokio::runtime::Handle::try_current() {
+                        handle.spawn(task);
+                    } else {
+                        error!("Cannot rescan library from tray: no active Tokio runtime");
+                    }
                 }),
                 ..Default::default()
             }
@@ -148,7 +172,7 @@ impl Tray for WaveryServerTray {
                     info!("Tray: Rebuilding music library database...");
                     let lib_arc = state_rebuild.library.clone();
                     let art_cache = state_rebuild.artwork_cache.clone();
-                    tokio::spawn(async move {
+                    let task = async move {
                         let mut lib = lib_arc.lock().await;
                         match lib.rebuild_library().await {
                             Ok(tracks) => {
@@ -160,7 +184,14 @@ impl Tray for WaveryServerTray {
                                 error!("Library rebuild failed: {e}");
                             }
                         }
-                    });
+                    };
+                    if let Some(ref handle) = tokio_handle_rebuild {
+                        handle.spawn(task);
+                    } else if let Ok(handle) = tokio::runtime::Handle::try_current() {
+                        handle.spawn(task);
+                    } else {
+                        error!("Cannot rebuild library from tray: no active Tokio runtime");
+                    }
                 }),
                 ..Default::default()
             }

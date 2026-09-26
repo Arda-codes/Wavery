@@ -899,6 +899,17 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
       try {
         await playerAdapter.playTrack(nextTrack);
         notifyIfEnabled(nextTrack);
+        const s = get();
+        saveSession({
+          queue: s.queue,
+          queueIndex: s.queueIndex,
+          currentTrackId: s.currentTrackId,
+          playbackContext: s.playbackContext,
+          isShuffle: s.isShuffle,
+          isAutoplay: s.isAutoplay,
+          loopMode: s.status.loop_mode,
+          positionSecs: 0,
+        });
       } catch (e) {
         console.error("Failed to play shuffled next track:", e);
       }
@@ -917,6 +928,17 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
       try {
         await playerAdapter.playTrack(nextTrack);
         notifyIfEnabled(nextTrack);
+        const s = get();
+        saveSession({
+          queue: s.queue,
+          queueIndex: s.queueIndex,
+          currentTrackId: s.currentTrackId,
+          playbackContext: s.playbackContext,
+          isShuffle: s.isShuffle,
+          isAutoplay: s.isAutoplay,
+          loopMode: s.status.loop_mode,
+          positionSecs: 0,
+        });
       } catch (e) {
         console.error("Failed to play next track:", e);
       }
@@ -931,6 +953,17 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
       try {
         await playerAdapter.playTrack(nextTrack);
         notifyIfEnabled(nextTrack);
+        const s = get();
+        saveSession({
+          queue: s.queue,
+          queueIndex: s.queueIndex,
+          currentTrackId: s.currentTrackId,
+          playbackContext: s.playbackContext,
+          isShuffle: s.isShuffle,
+          isAutoplay: s.isAutoplay,
+          loopMode: s.status.loop_mode,
+          positionSecs: 0,
+        });
       } catch (e) {
         console.error("Failed to loop queue:", e);
       }
@@ -946,6 +979,17 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
       try {
         await playerAdapter.playTrack(nextTrack);
         notifyIfEnabled(nextTrack);
+        const s = get();
+        saveSession({
+          queue: s.queue,
+          queueIndex: s.queueIndex,
+          currentTrackId: s.currentTrackId,
+          playbackContext: s.playbackContext,
+          isShuffle: s.isShuffle,
+          isAutoplay: s.isAutoplay,
+          loopMode: s.status.loop_mode,
+          positionSecs: 0,
+        });
       } catch (e) {
         console.error("Failed to autoplay next track from All Songs:", e);
       }
@@ -984,6 +1028,17 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
       try {
         await playerAdapter.playTrack(prevTrack);
         notifyIfEnabled(prevTrack);
+        const s = get();
+        saveSession({
+          queue: s.queue,
+          queueIndex: s.queueIndex,
+          currentTrackId: s.currentTrackId,
+          playbackContext: s.playbackContext,
+          isShuffle: s.isShuffle,
+          isAutoplay: s.isAutoplay,
+          loopMode: s.status.loop_mode,
+          positionSecs: 0,
+        });
       } catch (e) {
         console.error("Failed to play previous track:", e);
       }

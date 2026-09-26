@@ -41,6 +41,7 @@ const Submenu: React.FC<SubmenuProps> = ({ items, parentRect, onCloseAll }) => {
     <div
       ref={submenuRef}
       role="menu"
+      data-context-submenu="true"
       style={{
         position: "fixed",
         left: `${coords.x}px`,
@@ -138,7 +139,12 @@ export const ContextMenu: React.FC = () => {
     if (!isOpen) return;
 
     const handlePointerDown = (e: MouseEvent | TouchEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+      const target = e.target as HTMLElement | null;
+      if (
+        menuRef.current &&
+        !menuRef.current.contains(target) &&
+        !target?.closest?.("[data-context-submenu]")
+      ) {
         closeContextMenu();
       }
     };
@@ -150,8 +156,13 @@ export const ContextMenu: React.FC = () => {
     };
 
     const handleScroll = (e: Event) => {
-      // If scroll target is not inside the context menu, dismiss
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+      // If scroll target is not inside the context menu or submenu, dismiss
+      const target = e.target as HTMLElement | null;
+      if (
+        menuRef.current &&
+        !menuRef.current.contains(target) &&
+        !target?.closest?.("[data-context-submenu]")
+      ) {
         closeContextMenu();
       }
     };

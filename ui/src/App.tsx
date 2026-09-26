@@ -177,6 +177,9 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore key events during IME composition
+      if (e.isComposing || e.keyCode === 229) return;
+
       // 1. Search shortcut: user-configured openSearch, Cmd+K / Ctrl+K, or Cmd+F / Ctrl+F (prevent browser find overlay)
       if (
         matchesKeyCombo(e, keybindings?.openSearch || "Ctrl+K", isMac) ||

@@ -840,10 +840,27 @@ const VolumeControl = React.memo(VolumeControlInner);
  * Provides a touch-friendly, compact miniplayer with progress hairline,
  * artwork thumbnail, stacked title/artist, and primary playback controls.
  */
+const MobileHairlineProgress: React.FC<{ durationSecs: number }> = React.memo(({ durationSecs }) => {
+  const positionSecs = usePlayerStore((s) => s.status.position_secs || 0);
+  const progress =
+    durationSecs > 0
+      ? Math.min(100, Math.max(0, (positionSecs / durationSecs) * 100))
+      : 0;
+
+  return (
+    <div className="absolute top-0 left-0 right-0 h-[2.5px] bg-white/[0.08] overflow-hidden pointer-events-none">
+      <div
+        className="h-full bg-[#FA586A] transition-all duration-300 ease-out"
+        style={{ width: `${progress}%` }}
+      />
+    </div>
+  );
+});
+MobileHairlineProgress.displayName = "MobileHairlineProgress";
+
 const MobilePlayerBarInner: React.FC = () => {
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.status.state === "Playing");
-  const positionSecs = usePlayerStore((s) => s.status.position_secs || 0);
   const durationSecs = usePlayerStore(
     (s) => s.status.duration_secs || s.currentTrack?.metadata.duration?.secs || 0
   );
@@ -857,21 +874,12 @@ const MobilePlayerBarInner: React.FC = () => {
   const toggleDrawer = useNavigationStore((s) => s.toggleNowPlayingDrawer);
   const artworkUrl = useArtwork(currentTrack?.id);
 
-  const progress =
-    durationSecs > 0
-      ? Math.min(100, Math.max(0, (positionSecs / durationSecs) * 100))
-      : 0;
   const hasTrack = !!currentTrack;
 
   return (
     <div className="relative h-14 w-full flex items-center justify-between px-3 select-none">
       {/* Hairline Progress Bar */}
-      <div className="absolute top-0 left-0 right-0 h-[2.5px] bg-white/[0.08] overflow-hidden pointer-events-none">
-        <div
-          className="h-full bg-[#FA586A] transition-all duration-300 ease-out"
-          style={{ width: `${progress}%` }}
-        />
-      </div>
+      <MobileHairlineProgress durationSecs={durationSecs} />
 
       {/* Track Info (Tappable to open Now Playing drawer) */}
       <div

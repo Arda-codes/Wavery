@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useRef } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { AlbumInfo, ArtistInfo, Playlist, Track } from "../types";
 import { useNavigationStore } from "../stores/navigationStore";
 import { usePlayerStore } from "../stores/playerStore";
@@ -478,8 +479,19 @@ export const SearchView: React.FC<SearchViewProps> = ({
     matchingArtists.length +
     matchingPlaylists.length;
 
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: activeTab === "songs" ? matchingTracks.length : 0,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: () => 56,
+    overscan: 10,
+  });
+
   return (
-    <div className="flex-1 overflow-y-auto px-4 sm:px-6 md:px-8 py-4 sm:py-6 space-y-7 select-none pb-28 sm:pb-24">
+    <div
+      ref={scrollContainerRef}
+      className="flex-1 overflow-y-auto px-4 sm:px-6 md:px-8 py-4 sm:py-6 space-y-7 select-none pb-28 sm:pb-24"
+    >
       {/* 1. Header & Active Search Filters */}
       <div className="space-y-4">
         <div className="flex items-center justify-between flex-wrap gap-3">
@@ -1048,16 +1060,32 @@ export const SearchView: React.FC<SearchViewProps> = ({
                     <span>Title</span>
                     <span>Duration</span>
                   </div>
-                  <div className="space-y-1">
-                    {matchingTracks.map((track, idx) => {
+                  <div
+                    style={{
+                      height: `${rowVirtualizer.getTotalSize()}px`,
+                      width: "100%",
+                      position: "relative",
+                    }}
+                  >
+                    {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                      const track = matchingTracks[virtualRow.index];
+                      if (!track) return null;
                       const isThisPlaying = currentTrack?.id === track.id && isPlaying;
                       const artworkUrl = getArtworkUrl(track.id);
 
                       return (
                         <div
                           key={track.id}
-                          onClick={() => handlePlayTrack(track, idx)}
+                          onClick={() => handlePlayTrack(track, virtualRow.index)}
                           onContextMenu={(e) => handleTrackContextMenu(e, track)}
+                          style={{
+                            position: "absolute",
+                            top: 0,
+                            left: 0,
+                            width: "100%",
+                            height: `${virtualRow.size}px`,
+                            transform: `translateY(${virtualRow.start}px)`,
+                          }}
                           className="group flex items-center justify-between px-3 py-2 rounded-xl hover:bg-white/[0.06] cursor-pointer transition"
                         >
                           <div className="flex items-center space-x-3 min-w-0 pr-4">

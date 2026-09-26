@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { AlbumInfo, Track } from "../types";
 import { playerAdapter } from "../services/adapter";
 import { useLibraryStore } from "../stores/libraryStore";
+import { usePlayerStore } from "../stores/playerStore";
 import { useArtwork } from "../utils/useArtwork";
 import { X, Save, Disc, Check, AlertCircle, Loader2 } from "lucide-react";
 
@@ -104,6 +105,28 @@ export const AlbumMetadataModal: React.FC<AlbumMetadataModalProps> = ({
       }
       const newAllTracks = allCurrentTracks.map((t) => updatedMap.get(t.id) || t);
       setTracks(newAllTracks);
+
+      // Synchronize with active playback queue and current track
+      const playerState = usePlayerStore.getState();
+      let playerNeedsUpdate = false;
+      let updatedCurrentTrack = playerState.currentTrack;
+      if (playerState.currentTrack && updatedMap.has(playerState.currentTrack.id)) {
+        updatedCurrentTrack = updatedMap.get(playerState.currentTrack.id) || playerState.currentTrack;
+        playerNeedsUpdate = true;
+      }
+      const updatedQueue = playerState.queue.map((t) => {
+        if (updatedMap.has(t.id)) {
+          playerNeedsUpdate = true;
+          return updatedMap.get(t.id)!;
+        }
+        return t;
+      });
+      if (playerNeedsUpdate) {
+        usePlayerStore.setState({
+          currentTrack: updatedCurrentTrack,
+          queue: updatedQueue,
+        });
+      }
 
       setSuccess(true);
       if (onSaved) {

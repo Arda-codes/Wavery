@@ -1,7 +1,7 @@
 //! Queue manager implementation handling play order, shuffling, and looping.
 
 use rand::seq::SliceRandom;
-use rand::thread_rng;
+use rand::{thread_rng, Rng};
 use std::time::Duration;
 use wavery_core::models::{LoopMode, Track};
 use wavery_core::traits::QueueManager;
@@ -42,6 +42,20 @@ impl StandardQueueManager {
                 self.shuffle_pos = 0;
             }
         }
+    }
+
+    fn rebuild_shuffle_for_loop(&mut self, prev_idx: usize) {
+        let count = self.queue.len();
+        self.shuffled_indices = (0..count).collect();
+        let mut rng = thread_rng();
+        self.shuffled_indices.shuffle(&mut rng);
+
+        if count > 1 && self.shuffled_indices.first() == Some(&prev_idx) {
+            let swap_target = rng.gen_range(1..count);
+            self.shuffled_indices.swap(0, swap_target);
+        }
+        self.shuffle_pos = 0;
+        self.current_idx = self.shuffled_indices.first().copied();
     }
 }
 
@@ -132,9 +146,8 @@ impl QueueManager for StandardQueueManager {
                 self.current_idx = Some(self.shuffled_indices[self.shuffle_pos]);
                 self.current_track()
             } else if self.loop_mode == LoopMode::Queue {
-                self.rebuild_shuffle();
-                self.shuffle_pos = 0;
-                self.current_idx = self.shuffled_indices.first().copied();
+                let prev_idx = self.current_idx.unwrap_or(0);
+                self.rebuild_shuffle_for_loop(prev_idx);
                 self.current_track()
             } else {
                 None

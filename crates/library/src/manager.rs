@@ -47,12 +47,18 @@ impl SqliteLibraryManager {
         let reader = LoftyMetadataReader::new();
         if let Ok(missing_lyrics) = db.get_tracks_missing_lyrics() {
             for (id, rel_path) in missing_lyrics {
-                let full_path = library_root.join(&rel_path);
+                let rel = Path::new(&rel_path);
+                let full_path = if rel.is_absolute() {
+                    rel.to_path_buf()
+                } else if let Ok(stripped) = rel.strip_prefix(&library_root) {
+                    library_root.join(stripped)
+                } else {
+                    library_root.join(rel)
+                };
                 if full_path.is_file() {
                     if let Ok(meta) = reader.read_metadata(&full_path) {
-                        if let Some(lyrics) = meta.lyrics {
-                            let _ = db.set_track_lyrics(&id, &lyrics);
-                        }
+                        let lyrics_val = meta.lyrics.unwrap_or_default();
+                        let _ = db.set_track_lyrics(&id, &lyrics_val);
                     }
                 }
             }
@@ -288,7 +294,39 @@ fn process_single_file(
         }
     } else {
         // 2. External file: determine target path inside managed store
-        let target_dest = generate_managed_destination(library_root, source_path, &metadata);
+        let mut target_dest = generate_managed_destination(library_root, source_path, &metadata);
+        if target_dest != source_path && target_dest.exists() {
+            let is_same_file = (|| -> Option<bool> {
+                let meta1 = fs::metadata(source_path).ok()?;
+                let meta2 = fs::metadata(&target_dest).ok()?;
+                if meta1.len() != meta2.len() {
+                    return Some(false);
+                }
+                let b1 = fs::read(source_path).ok()?;
+                let b2 = fs::read(&target_dest).ok()?;
+                Some(b1 == b2)
+            })().unwrap_or(false);
+
+            if !is_same_file {
+                let stem = target_dest.file_stem().and_then(|s| s.to_str()).unwrap_or("track").to_string();
+                let ext = target_dest.extension().and_then(|e| e.to_str()).unwrap_or("").to_string();
+                let parent = target_dest.parent().unwrap_or(library_root).to_path_buf();
+                let mut counter = 1;
+                loop {
+                    let candidate_name = if ext.is_empty() {
+                        format!("{stem} ({counter})")
+                    } else {
+                        format!("{stem} ({counter}).{ext}")
+                    };
+                    let candidate = parent.join(candidate_name);
+                    if !candidate.exists() || candidate == source_path {
+                        target_dest = candidate;
+                        break;
+                    }
+                    counter += 1;
+                }
+            }
+        }
         if let Some(parent) = target_dest.parent() {
             fs::create_dir_all(parent)?;
         }

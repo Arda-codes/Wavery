@@ -390,9 +390,78 @@ const STORAGE_KEY_SIMPLIFY = "wavery_simplify_mode";
 const STORAGE_KEY_LINUX_DISMISSED = "wavery_linux_banner_dismissed";
 const STORAGE_KEY_GRADIENTS = "wavery_enable_gradients";
 
-let cachedBackendConfig: any = null;
+export interface BackendConfig {
+  general?: {
+    language?: string;
+    check_updates?: boolean;
+    enable_mpris?: boolean;
+    minimize_to_tray?: boolean;
+    notifications_enabled?: boolean;
+    auto_resume_playback?: boolean;
+  };
+  audio?: {
+    backend?: string;
+    default_volume?: number;
+    volume_step?: number;
+    buffer_size_frames?: number;
+    crossfade_duration_ms?: number;
+    output_device?: string | null;
+    gapless_playback?: boolean;
+    replay_gain_mode?: string;
+  };
+  library?: {
+    managed_directory?: string;
+    database_path?: string;
+    cache_directory?: string;
+    supported_extensions?: string[];
+    scan_on_startup?: boolean;
+    protected_artists?: string[];
+  };
+  server?: {
+    host?: string;
+    port?: number;
+    enable_browser_client?: boolean;
+  };
+  ui?: {
+    window_width?: number;
+    window_height?: number;
+    min_width?: number;
+    min_height?: number;
+    scale_factor?: number;
+    album_art_size?: number;
+    show_wave_visualizer?: boolean;
+    album_grid_size?: string;
+    row_density?: string;
+    show_visualizer?: boolean;
+    show_lyrics_smooth_scroll?: boolean;
+    simplify_mode?: boolean;
+    is_linux_banner_dismissed?: boolean;
+    enable_gradients?: boolean;
+  };
+  theme?: {
+    mode?: string;
+    background?: string;
+    accent?: string;
+    surface?: string;
+    surface_hover?: string;
+    primary?: string;
+    text_primary?: string;
+    text_muted?: string;
+    error?: string;
+    custom_colors?: string[];
+    custom_theme_json?: string;
+  };
+  keybinds?: Record<string, string>;
+  integrations?: {
+    enable_media_session?: boolean;
+    enable_discord_rpc?: boolean;
+    discord_app_id?: string;
+  };
+}
 
-function mapBackendConfigToSettings(backendCfg: any): Partial<SettingsData> {
+let cachedBackendConfig: BackendConfig | null = null;
+
+function mapBackendConfigToSettings(backendCfg: BackendConfig | null | undefined): Partial<SettingsData> {
   if (!backendCfg || typeof backendCfg !== "object") return {};
   cachedBackendConfig = backendCfg;
   const s: Partial<SettingsData> = {};
@@ -534,7 +603,7 @@ function mapBackendConfigToSettings(backendCfg: any): Partial<SettingsData> {
   return s;
 }
 
-function mapSettingsToBackendConfig(data: SettingsData): any {
+function mapSettingsToBackendConfig(data: SettingsData): BackendConfig {
   return {
     general: {
       language: "en",

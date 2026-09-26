@@ -67,6 +67,7 @@ export function useVsyncScrubber({
   const [dragPos, setDragPos] = useState(0);
   const isDraggingRef = useRef(false);
   const dragPosRef = useRef(0);
+  const dragRafIdRef = useRef<number | null>(null);
 
   // Keep refs synchronized with props
   useEffect(() => {
@@ -191,12 +192,22 @@ export function useVsyncScrubber({
     const val = parseFloat(e.target.value);
     if (!isNaN(val)) {
       dragPosRef.current = val;
-      setDragPos(val);
       updateDOM(val);
+      if (dragRafIdRef.current === null) {
+        dragRafIdRef.current = requestAnimationFrame(() => {
+          setDragPos(dragPosRef.current);
+          dragRafIdRef.current = null;
+        });
+      }
     }
   }, [updateDOM]);
 
   const handlePointerUp = useCallback((e?: React.PointerEvent<HTMLInputElement>) => {
+    if (dragRafIdRef.current !== null) {
+      cancelAnimationFrame(dragRafIdRef.current);
+      dragRafIdRef.current = null;
+    }
+
     if (e) {
       try {
         if (e.currentTarget.hasPointerCapture(e.pointerId)) {
@@ -215,6 +226,7 @@ export function useVsyncScrubber({
       baseTimeRef.current = performance.now();
       isDraggingRef.current = false;
       setIsDragging(false);
+      setDragPos(targetPos);
       updateDOM(targetPos);
     }
   }, [onSeek, updateDOM]);

@@ -120,11 +120,22 @@ impl LibraryDatabase {
                 INSERT INTO tracks_fts(rowid, title, artist, album, album_artist, genre)
                 VALUES (new.rowid, new.title, new.artist, new.album, new.album_artist, new.genre);
             END;
-
-            INSERT INTO tracks_fts(tracks_fts) VALUES('rebuild');
             ",
         )
         .map_err(|e| LibraryError::IndexError(format!("Failed schema migration: {e}")))?;
+
+        // Rebuild FTS only if tracks table has rows but tracks_fts is unpopulated (initial migration)
+        let needs_fts_rebuild: bool = conn
+            .query_row(
+                "SELECT (SELECT COUNT(*) FROM tracks) > 0 AND (SELECT COUNT(*) FROM tracks_fts) == 0",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+
+        if needs_fts_rebuild {
+            let _ = conn.execute("INSERT INTO tracks_fts(tracks_fts) VALUES('rebuild')", []);
+        }
 
         // Ensure lyrics column exists for pre-existing databases
         let has_lyrics: bool = conn
@@ -297,6 +308,7 @@ impl LibraryDatabase {
         conn.execute_batch(
             "PRAGMA wal_checkpoint(TRUNCATE);
              VACUUM;
+             INSERT INTO tracks_fts(tracks_fts) VALUES('rebuild');
              PRAGMA optimize;",
         )
         .map_err(|e| LibraryError::IndexError(format!("Failed to vacuum DB: {e}")))?;
@@ -556,13 +568,19 @@ impl LibraryDatabase {
                 let track_count: usize = row.get(4)?;
                 let total_duration_secs: f64 = row.get(5)?;
 
+                let total_duration = if total_duration_secs.is_finite() && total_duration_secs >= 0.0 && total_duration_secs <= (u64::MAX as f64) {
+                    Duration::from_secs_f64(total_duration_secs)
+                } else {
+                    Duration::ZERO
+                };
+
                 Ok(Album {
                     title,
                     artist,
                     year,
                     artwork_track_id,
                     track_count,
-                    total_duration: Duration::from_secs_f64(total_duration_secs.max(0.0)),
+                    total_duration,
                 })
             })
             .map_err(|e| LibraryError::IndexError(e.to_string()))?;
@@ -1243,8 +1261,8 @@ fn row_to_track(row: &Row, managed_root: &Path) -> rusqlite::Result<Track> {
     let artist: Option<String> = row.get(3)?;
     let album: Option<String> = row.get(4)?;
     let album_artist: Option<String> = row.get(5)?;
-    let track_number: Option<u32> = row.get(6)?;
-    let disc_number: Option<u32> = row.get(7)?;
+    let track_number: Option<u32> = row.get::<_, Option<i64>>(6)?.and_then(|n| if n >= 0 { Some(n as u32) } else { None });
+    let disc_number: Option<u32> = row.get::<_, Option<i64>>(7)?.and_then(|n| if n >= 0 { Some(n as u32) } else { None });
     let year: Option<i32> = row.get(8)?;
     let genre: Option<String> = row.get(9)?;
     let duration_secs: f64 = row.get(10)?;
@@ -1253,9 +1271,15 @@ fn row_to_track(row: &Row, managed_root: &Path) -> rusqlite::Result<Track> {
     let channels: Option<u16> = row.get(13)?;
     let format: String = row.get(14)?;
     let date_added: i64 = row.get(15)?;
-    let lyrics: Option<String> = row.get(16)?;
+    let lyrics: Option<String> = row.get::<_, Option<String>>(16)?.filter(|l| !l.trim().is_empty());
 
     let full_path = managed_root.join(&rel_path);
+
+    let duration = if duration_secs.is_finite() && duration_secs >= 0.0 && duration_secs <= (u64::MAX as f64) {
+        Duration::from_secs_f64(duration_secs)
+    } else {
+        Duration::ZERO
+    };
 
     Ok(Track {
         id,
@@ -1269,7 +1293,7 @@ fn row_to_track(row: &Row, managed_root: &Path) -> rusqlite::Result<Track> {
             disc_number,
             year,
             genre,
-            duration: Duration::from_secs_f64(duration_secs.max(0.0)),
+            duration,
             sample_rate,
             bit_depth,
             channels,

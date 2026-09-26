@@ -118,8 +118,8 @@ export const FullscreenPlayer: React.FC = () => {
   } = useVsyncScrubber({
     positionSecs,
     durationSecs,
-    isPlaying,
-    hasTrack: !!currentTrack,
+    isPlaying: isOpen && isPlaying,
+    hasTrack: isOpen && !!currentTrack,
     showRemaining: true,
     onSeek: seek,
   });
@@ -132,16 +132,21 @@ export const FullscreenPlayer: React.FC = () => {
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
         closeFullscreen();
       } else if (e.key === " " && (e.target as HTMLElement).tagName !== "INPUT") {
         e.preventDefault();
+        e.stopPropagation();
         if (isPlaying) pause();
         else resume();
       } else if (e.key === "ArrowRight" && (e.target as HTMLElement).tagName !== "INPUT") {
         e.preventDefault();
+        e.stopPropagation();
         seek(Math.min(durationSecs, positionSecs + 5));
       } else if (e.key === "ArrowLeft" && (e.target as HTMLElement).tagName !== "INPUT") {
         e.preventDefault();
+        e.stopPropagation();
         seek(Math.max(0, positionSecs - 5));
       }
     };

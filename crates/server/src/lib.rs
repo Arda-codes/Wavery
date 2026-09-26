@@ -451,6 +451,12 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             post(discord_set_presence_handler).delete(discord_clear_presence_handler),
         )
         .route("/api/discord/status", get(discord_status_handler))
+        .route(
+            "/api/{*path}",
+            axum::routing::any(|| async {
+                (StatusCode::NOT_FOUND, "API endpoint not found")
+            }),
+        )
         .layer(CorsLayer::permissive())
         .with_state(state.clone());
 
@@ -1104,7 +1110,13 @@ async fn get_artwork_handler(
         track.source.path().clone()
     };
 
-    let artwork_opt = state.reader.read_artwork(&track_path).ok().flatten();
+    let reader = state.reader.clone();
+    let track_path_clone = track_path.clone();
+    let artwork_opt = tokio::task::spawn_blocking(move || {
+        reader.read_artwork(&track_path_clone).ok().flatten()
+    })
+    .await
+    .map_err(|e| ServerError::Internal(e.to_string()))?;
 
     let cached_art = artwork_opt.map(|art| CachedArtwork {
         data: Bytes::from(art.data),
@@ -1155,7 +1167,13 @@ async fn stream_track_handler(
     let metadata = file.metadata().await?;
     let file_size = metadata.len();
 
-    let content_type = match file_path.extension().and_then(|e| e.to_str()).unwrap_or("") {
+    let ext = file_path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|s| s.to_ascii_lowercase())
+        .unwrap_or_default();
+
+    let content_type = match ext.as_str() {
         "mp3" => "audio/mpeg",
         "flac" => "audio/flac",
         "ogg" => "audio/ogg",
@@ -1215,11 +1233,12 @@ async fn stream_track_handler(
 
 /// Parses an RFC 7233 / 9110 HTTP Range header (e.g. `bytes=0-1024`, `bytes=500-`, `bytes=-500`).
 fn parse_range_header(range_str: &str, file_size: u64) -> Option<(u64, u64)> {
-    if file_size == 0 || !range_str.starts_with("bytes=") {
+    let trimmed = range_str.trim();
+    if file_size == 0 || !trimmed.starts_with("bytes=") {
         return None;
     }
-    let range = &range_str["bytes=".len()..];
-    let parts: Vec<&str> = range.split('-').collect();
+    let range = trimmed["bytes=".len()..].trim();
+    let parts: Vec<&str> = range.split('-').map(|p| p.trim()).collect();
     if parts.len() != 2 {
         return None;
     }
@@ -1494,7 +1513,13 @@ pub fn spawn_native_process() -> Result<(), std::io::Error> {
     cmd.stdout(std::process::Stdio::inherit());
     cmd.stderr(std::process::Stdio::inherit());
 
-    cmd.spawn()?;
+    let mut child = cmd.spawn()?;
+    std::thread::Builder::new()
+        .name("wavery-native-reaper".into())
+        .spawn(move || {
+            let _ = child.wait();
+        })
+        .map_err(std::io::Error::other)?;
     Ok(())
 }
 

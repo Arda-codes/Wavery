@@ -528,7 +528,12 @@ async fn play_track(
 
     {
         let mut queue = state.queue.lock();
-        queue.set_queue(vec![track.clone()], 0);
+        if let Some(pos) = queue.queue().iter().position(|t| t.id == track_id) {
+            let tracks = queue.queue().to_vec();
+            queue.set_queue(tracks, pos);
+        } else {
+            queue.set_queue(vec![track.clone()], 0);
+        }
     }
 
     let mut player_guard = state.player.lock().await;

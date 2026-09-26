@@ -45,11 +45,11 @@ export function parseLrc(raw: string): LyricLine[] {
  */
 export function getActiveLyricIndex(lines: LyricLine[], positionSecs: number): number {
   if (lines.length === 0) return -1;
-  if (positionSecs < lines[0].time) return 0;
+  if (positionSecs < lines[0].time) return -1;
 
   let low = 0;
   let high = lines.length - 1;
-  let activeIndex = 0;
+  let activeIndex = -1;
 
   while (low <= high) {
     const mid = Math.floor((low + high) / 2);

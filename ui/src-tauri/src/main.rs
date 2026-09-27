@@ -13,7 +13,9 @@ use std::time::Duration;
 use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem};
 #[cfg(target_os = "macos")]
 use tauri::menu::Menu;
-use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::tray::TrayIconBuilder;
+#[cfg(not(target_os = "macos"))]
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent};
 use tauri::{Emitter, Manager};
 use tokio::sync::Mutex as AsyncMutex;
 use wavery_audio::{RodioPlayer, StandardQueueManager};
@@ -1806,7 +1808,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .setup(move |app| {
             #[cfg(target_os = "macos")]
             {
-                if let Ok(default_menu) = Menu::default(app) {
+                if let Ok(default_menu) = Menu::default(app.handle()) {
                     let _ = app.set_menu(default_menu);
                 }
             }
@@ -1997,9 +1999,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             _ => {}
                         }
                     })
-                    .on_tray_icon_event(|tray, event| {
+                    .on_tray_icon_event(|tray, _event| {
                         #[cfg(not(target_os = "macos"))]
-                        match event {
+                        match _event {
                             TrayIconEvent::Click {
                                 button: MouseButton::Left,
                                 button_state: MouseButtonState::Up,

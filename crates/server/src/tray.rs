@@ -37,11 +37,11 @@ impl WaveryServerTray {
     }
 
     /// Creates a new `WaveryServerTray` with an explicit Tokio runtime handle.
-    pub fn with_handle(state: Arc<AppState>, tokio_handle: Option<tokio::runtime::Handle>) -> Self {
+    pub fn with_handle(state: Arc<AppState>, _tokio_handle: Option<tokio::runtime::Handle>) -> Self {
         Self {
             state,
             #[cfg(target_os = "linux")]
-            tokio_handle,
+            tokio_handle: _tokio_handle,
         }
     }
 

@@ -33,6 +33,7 @@ import { FullscreenPlayer } from "./components/FullscreenPlayer";
 import { ContextMenu } from "./components/ContextMenu";
 import { matchesKeyCombo, isEditableTarget } from "./utils/keybindings";
 import { WindowControls } from "./components/WindowControls";
+import { WindowResizeHandles } from "./components/WindowResizeHandles";
 import { windowService, useWindowState } from "./services/windowService";
 import { Search, X, ExternalLink, Home, Menu, Library, ListMusic } from "lucide-react";
 
@@ -625,6 +626,9 @@ export const App: React.FC = () => {
 
   return (
     <div className="flex flex-col h-screen w-screen bg-background text-textPrimary font-sans antialiased selection:bg-accent/30 selection:text-white">
+      {/* Frameless Desktop Window Resize Handles */}
+      <WindowResizeHandles />
+
       {/* Top Desktop Chrome / Merged Title Bar Header */}
       <header
         data-tauri-drag-region={!isWindowMaximized ? "" : undefined}

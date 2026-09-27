@@ -18,6 +18,16 @@ export interface WindowState {
   height: number;
 }
 
+export type ResizeDirection =
+  | "East"
+  | "North"
+  | "NorthEast"
+  | "NorthWest"
+  | "South"
+  | "SouthEast"
+  | "SouthWest"
+  | "West";
+
 export interface WindowService {
   isTauri(): boolean;
   minimize(): Promise<void>;
@@ -27,6 +37,7 @@ export interface WindowService {
   isFullscreen(): Promise<boolean>;
   close(): Promise<void>;
   startHeaderDrag(screenX?: number, screenY?: number): Promise<void>;
+  startResize(direction: ResizeDirection): Promise<void>;
   getWindowState(): WindowState;
   onWindowStateChange(callback: (state: WindowState) => void): () => void;
 }
@@ -256,6 +267,16 @@ class DesktopWindowService implements WindowService {
       await invoke("start_header_drag");
     } catch (e) {
       console.error("[WindowService] startHeaderDrag failed:", e);
+    }
+  }
+
+  async startResize(direction: ResizeDirection): Promise<void> {
+    if (!isTauri || this.currentState.isMaximized || this.currentState.isFullscreen) return;
+    try {
+      const { getCurrentWindow } = await import("@tauri-apps/api/window");
+      await getCurrentWindow().startResizeDragging(direction);
+    } catch (e) {
+      console.error("[WindowService] startResize failed:", e);
     }
   }
 }

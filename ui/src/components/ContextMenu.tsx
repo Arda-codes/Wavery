@@ -48,7 +48,7 @@ const Submenu: React.FC<SubmenuProps> = ({ items, parentRect, onCloseAll }) => {
         top: `${coords.y}px`,
         zIndex: 10000,
       }}
-      className="bg-[#1C1C22]/95 backdrop-blur-2xl border border-white/[0.12] rounded-2xl p-1.5 shadow-2xl shadow-black/90 min-w-[200px] max-w-[280px] max-h-[380px] overflow-y-auto animate-menu-in select-none"
+      className="bg-surfaceHover/95 backdrop-blur-2xl border border-white/[0.12] rounded-2xl p-2 shadow-2xl shadow-black/90 min-w-[200px] max-w-[280px] max-h-[380px] overflow-y-auto animate-menu-in select-none"
     >
       {items.map((item) => {
         if (item.divider) {
@@ -68,26 +68,26 @@ const Submenu: React.FC<SubmenuProps> = ({ items, parentRect, onCloseAll }) => {
               if (item.onClick) item.onClick();
               onCloseAll();
             }}
-            className={`w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all text-left group ${
+            className={`w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-medium transition-all text-left group ${
               item.disabled
-                ? "opacity-35 cursor-not-allowed text-[#71717A]"
+                ? "opacity-35 cursor-not-allowed text-textMuted"
                 : item.danger
-                ? "text-red-400 hover:bg-red-500/20 hover:text-red-300"
-                : "text-[#E4E4E7] hover:bg-white/[0.10] hover:text-white active:scale-[0.98]"
+                ? "text-danger hover:bg-danger/20 hover:text-danger"
+                : "text-textPrimary hover:bg-white/[0.10] hover:text-white active:scale-[0.98]"
             }`}
           >
             {Icon && (
               <Icon
                 className={`w-4 h-4 flex-shrink-0 transition-colors ${
                   item.danger
-                    ? "text-red-400"
-                    : "text-[#A1A1AA] group-hover:text-white"
+                    ? "text-danger"
+                    : "text-textSecondary group-hover:text-white"
                 }`}
               />
             )}
             <span className="truncate flex-1">{item.label}</span>
             {item.shortcut && (
-              <span className="text-[10px] font-mono text-[#71717A] ml-2 group-hover:text-[#A1A1AA]">
+              <span className="text-2xs font-mono text-textMuted ml-2 group-hover:text-textSecondary">
                 {item.shortcut}
               </span>
             )}
@@ -213,7 +213,7 @@ export const ContextMenu: React.FC = () => {
           top: `${adjustedPos.y}px`,
           zIndex: 9999,
         }}
-        className="bg-[#16161C]/95 backdrop-blur-2xl border border-white/[0.12] rounded-2xl p-1.5 shadow-2xl shadow-black/90 min-w-[210px] max-w-[300px] select-none animate-menu-in text-xs"
+        className="bg-surface/95 backdrop-blur-2xl border border-white/[0.12] rounded-2xl p-2 shadow-2xl shadow-black/90 min-w-[210px] max-w-[300px] select-none animate-menu-in text-xs"
       >
         {items.map((item) => {
           if (item.divider) {
@@ -244,33 +244,33 @@ export const ContextMenu: React.FC = () => {
                 if (item.onClick) item.onClick();
                 closeContextMenu();
               }}
-              className={`w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all text-left group ${
+              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-medium transition-all text-left group ${
                 item.disabled
-                  ? "opacity-35 cursor-not-allowed text-[#71717A]"
+                  ? "opacity-35 cursor-not-allowed text-textMuted"
                   : item.danger
-                  ? "text-red-400 hover:bg-red-500/20 hover:text-red-300"
+                  ? "text-danger hover:bg-danger/20 hover:text-danger"
                   : isSubmenuOpen
                   ? "bg-white/[0.12] text-white"
-                  : "text-[#E4E4E7] hover:bg-white/[0.10] hover:text-white active:scale-[0.98]"
+                  : "text-textPrimary hover:bg-white/[0.10] hover:text-white active:scale-[0.98]"
               }`}
             >
               {Icon && (
                 <Icon
                   className={`w-4 h-4 flex-shrink-0 transition-colors ${
                     item.danger
-                      ? "text-red-400"
-                      : "text-[#A1A1AA] group-hover:text-white"
+                      ? "text-danger"
+                      : "text-textSecondary group-hover:text-white"
                   }`}
                 />
               )}
               <span className="truncate flex-1">{item.label}</span>
               {item.shortcut && (
-                <span className="text-[10px] font-mono text-[#71717A] ml-2 group-hover:text-[#A1A1AA]">
+                <span className="text-2xs font-mono text-textMuted ml-2 group-hover:text-textSecondary">
                   {item.shortcut}
                 </span>
               )}
               {hasSubmenu && (
-                <ChevronRight className="w-3.5 h-3.5 text-[#71717A] group-hover:text-white ml-1.5 flex-shrink-0" />
+                <ChevronRight className="w-3.5 h-3.5 text-textMuted group-hover:text-white ml-2 flex-shrink-0" />
               )}
             </button>
           );

@@ -31,6 +31,7 @@ export interface DiscordPresencePayload {
   duration_secs: number;
   is_playing: boolean;
   app_id?: string;
+  artwork_url?: string;
 }
 
 /** Response from `/api/discord/status` or `get_discord_status` command. */
@@ -39,10 +40,78 @@ export interface DiscordStatusResponse {
   discord_running: boolean;
 }
 
+// In-memory cache for resolved online artwork URLs (Discord requires public HTTPS URLs)
+const _artworkCache = new Map<string, string>();
+const _pendingLookups = new Map<string, Promise<string | null>>();
+
+/**
+ * Resolves a high-resolution public artwork URL for Discord RPC using Apple Music / iTunes CDN.
+ * Discord RPC requires public HTTP/HTTPS URLs (or uploaded asset keys) to render album covers.
+ */
+export async function resolveOnlineArtwork(
+  artist: string,
+  album: string,
+  title: string
+): Promise<string | null> {
+  const cleanArtist = artist.trim();
+  const cleanAlbum = album.trim();
+  const cleanTitle = title.trim();
+
+  if (!cleanArtist || cleanArtist === "Unknown Artist") {
+    return null;
+  }
+
+  const queryKey = `${cleanArtist} - ${cleanAlbum || cleanTitle}`.toLowerCase();
+  if (_artworkCache.has(queryKey)) {
+    return _artworkCache.get(queryKey) || null;
+  }
+
+  if (_pendingLookups.has(queryKey)) {
+    return _pendingLookups.get(queryKey)!;
+  }
+
+  const promise = (async () => {
+    try {
+      const searchTerm = encodeURIComponent(`${cleanArtist} ${cleanAlbum || cleanTitle}`);
+      const res = await fetch(
+        `https://itunes.apple.com/search?term=${searchTerm}&entity=song&limit=1`,
+        { signal: AbortSignal.timeout(4000) }
+      );
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (data?.results?.[0]?.artworkUrl100) {
+        // Upgrade from 100x100 to 512x512 for crisp display on Discord
+        const highResUrl = data.results[0].artworkUrl100.replace(
+          /\/100x100bb\./,
+          "/512x512bb."
+        );
+        _artworkCache.set(queryKey, highResUrl);
+        return highResUrl;
+      }
+      _artworkCache.set(queryKey, "");
+      return null;
+    } catch {
+      return null;
+    } finally {
+      _pendingLookups.delete(queryKey);
+    }
+  })();
+
+  _pendingLookups.set(queryKey, promise);
+  return promise;
+}
+
 // Debounce timer handle
 let _debounceTimer: ReturnType<typeof setTimeout> | null = null;
-// Track the last payload to avoid redundant identical dispatches
-let _lastPayloadHash = "";
+let _pendingDispatchPayload: DiscordPresencePayload | null = null;
+
+// Track last dispatched properties to avoid redundant network/IPC chatter
+let _lastSentTrackKey = "";
+let _lastSentIsPlaying = false;
+let _lastSentPosition = -1;
+let _lastSentTime = 0;
+let _lastSentArtwork = "";
+let _lastSentAppId: string | undefined = undefined;
 
 /** Detects if the frontend is running inside the Tauri native desktop shell. */
 function isTauri(): boolean {
@@ -65,47 +134,118 @@ function getApiBase(): string {
 }
 
 /**
+ * Dispatches the enriched payload to Discord via native Tauri IPC or local server REST bridge.
+ */
+function executeDispatch(payload: DiscordPresencePayload): void {
+  const cleanTitle = payload.title?.trim() || "";
+  const cleanArtist = payload.artist?.trim() || "";
+  const cleanAlbum = payload.album?.trim() || "";
+
+  _lastSentTrackKey = `${cleanTitle}::${cleanArtist}::${cleanAlbum}`;
+  _lastSentIsPlaying = payload.is_playing;
+  _lastSentPosition = payload.position_secs;
+  _lastSentTime = Date.now();
+  _lastSentArtwork = payload.artwork_url || "";
+  _lastSentAppId = payload.app_id;
+
+  if (isTauri()) {
+    import("@tauri-apps/api/core")
+      .then(({ invoke }) => {
+        invoke("update_discord_presence", { payload }).catch(() => {
+          // Discord not running — ignore silently
+        });
+      })
+      .catch(() => {});
+  } else {
+    const apiBase = getApiBase();
+    fetch(`${apiBase}/api/discord/presence`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }).catch(() => {
+      // Discord not running or server not reachable — ignore silently
+    });
+  }
+}
+
+/**
  * Posts a presence update to Discord via Tauri IPC or local server bridge.
- * Debounced at 500 ms; identical consecutive payloads are suppressed.
+ * Dispatches immediately on track or play-state changes. Debounces bursts (such as scrubbing).
  *
  * @param payload The presence data to send.
  */
 export function updateDiscordPresence(payload: DiscordPresencePayload): void {
   const customAppId = useSettingsStore.getState().discordAppId;
+  const cleanArtist = payload.artist?.trim() || "";
+  const cleanAlbum = payload.album?.trim() || "";
+  const cleanTitle = payload.title?.trim() || "";
+  const queryKey = `${cleanArtist} - ${cleanAlbum || cleanTitle}`.toLowerCase();
+
+  let artworkUrl = payload.artwork_url;
+  if (!artworkUrl && _artworkCache.has(queryKey)) {
+    artworkUrl = _artworkCache.get(queryKey) || undefined;
+  }
+
   const enrichedPayload: DiscordPresencePayload = {
     ...payload,
+    artwork_url: artworkUrl,
     app_id: customAppId ? customAppId.trim() : undefined,
   };
 
-  const hash = JSON.stringify(enrichedPayload);
-  if (hash === _lastPayloadHash) return;
-
-  if (_debounceTimer !== null) {
-    clearTimeout(_debounceTimer);
+  // If artwork is not cached yet, proactively resolve it and re-dispatch when ready
+  if (!artworkUrl && cleanArtist && cleanArtist !== "Unknown Artist") {
+    resolveOnlineArtwork(cleanArtist, cleanAlbum, cleanTitle).then((resolvedUrl) => {
+      if (resolvedUrl) {
+        updateDiscordPresence({
+          ...payload,
+          artwork_url: resolvedUrl,
+        });
+      }
+    }).catch(() => {});
   }
 
-  _debounceTimer = setTimeout(() => {
-    _lastPayloadHash = hash;
-    _debounceTimer = null;
+  const trackKey = `${cleanTitle}::${cleanArtist}::${cleanAlbum}`;
+  const isSameTrack = trackKey === _lastSentTrackKey;
+  const isSamePlayState = payload.is_playing === _lastSentIsPlaying;
+  const isSameArtwork = (artworkUrl || "") === (_lastSentArtwork || "");
+  const isSameAppId = enrichedPayload.app_id === _lastSentAppId;
 
-    if (isTauri()) {
-      import("@tauri-apps/api/core")
-        .then(({ invoke }) => {
-          invoke("update_discord_presence", { payload: enrichedPayload }).catch(() => {
-            // Discord not running — ignore silently
-          });
-        })
-        .catch(() => {});
-    } else {
-      fetch(`${getApiBase()}/api/discord/presence`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: hash,
-      }).catch(() => {
-        // Discord not running or server not reachable — ignore silently
-      });
+  // If playback is advancing normally, Discord's desktop client natively updates the progress bar
+  // using timestamps.start and timestamps.end. Resending on linear 500ms intervals causes rate-limiting
+  // or restarts the progress bar.
+  if (isSameTrack && isSamePlayState && isSameArtwork && isSameAppId && _lastSentTime > 0) {
+    const elapsedSecs = (Date.now() - _lastSentTime) / 1000;
+    const expectedPos = _lastSentPosition + elapsedSecs;
+    const positionDelta = Math.abs(payload.position_secs - expectedPos);
+    if (positionDelta < 2.5) {
+      // Normal linear time advancement — no RPC update needed
+      return;
     }
-  }, 500);
+  }
+
+  const isTrackOrStateChange = !isSameTrack || !isSamePlayState || !isSameArtwork || !isSameAppId;
+  const timeSinceLastDispatch = Date.now() - _lastSentTime;
+
+  // Immediate dispatch for track changes or play/pause; debounce rapid seek bursts
+  if (isTrackOrStateChange || timeSinceLastDispatch > 500) {
+    if (_debounceTimer !== null) {
+      clearTimeout(_debounceTimer);
+      _debounceTimer = null;
+    }
+    _pendingDispatchPayload = null;
+    executeDispatch(enrichedPayload);
+  } else {
+    _pendingDispatchPayload = enrichedPayload;
+    if (_debounceTimer === null) {
+      _debounceTimer = setTimeout(() => {
+        _debounceTimer = null;
+        if (_pendingDispatchPayload) {
+          executeDispatch(_pendingDispatchPayload);
+          _pendingDispatchPayload = null;
+        }
+      }, 250);
+    }
+  }
 }
 
 /**
@@ -117,7 +257,13 @@ export function clearDiscordPresence(): void {
     clearTimeout(_debounceTimer);
     _debounceTimer = null;
   }
-  _lastPayloadHash = "";
+  _pendingDispatchPayload = null;
+  _lastSentTrackKey = "";
+  _lastSentIsPlaying = false;
+  _lastSentPosition = -1;
+  _lastSentTime = 0;
+  _lastSentArtwork = "";
+  _lastSentAppId = undefined;
 
   if (isTauri()) {
     import("@tauri-apps/api/core")
@@ -126,7 +272,8 @@ export function clearDiscordPresence(): void {
       })
       .catch(() => {});
   } else {
-    fetch(`${getApiBase()}/api/discord/presence`, {
+    const apiBase = getApiBase();
+    fetch(`${apiBase}/api/discord/presence`, {
       method: "DELETE",
     }).catch(() => {});
   }

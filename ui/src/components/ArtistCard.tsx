@@ -118,10 +118,10 @@ const ArtistCardInner: React.FC<ArtistCardProps> = ({
       onClick={() => onSelectArtist(artist.name)}
       onContextMenu={handleContextMenu}
       style={{ contain: "content" }}
-      className="group cursor-pointer bg-[#16161A] hover:bg-[#202026] border border-white/[0.06] hover:border-white/[0.12] rounded-2xl p-4 flex flex-col items-center text-center transition-[background-color,border-color,box-shadow,transform] duration-250 ease-[cubic-bezier(0.16,1,0.3,1)] shadow-sm hover:shadow-xl hover:-translate-y-0.5 select-none"
+      className="group cursor-pointer bg-surface hover:bg-surfaceHover border border-white/[0.06] hover:border-white/[0.12] rounded-2xl p-4 flex flex-col items-center text-center transition-[background-color,border-color,box-shadow,transform] duration-250 ease-[cubic-bezier(0.16,1,0.3,1)] shadow-sm hover:shadow-xl hover:-translate-y-0.5 select-none"
     >
       {/* Artist Avatar Circle */}
-      <div className="w-28 h-28 rounded-full bg-[#1C1C22] overflow-hidden flex items-center justify-center mb-3.5 relative border border-white/[0.08] shadow-lg group-hover:scale-105 transition-transform duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform">
+      <div className="w-28 h-28 rounded-full bg-surfaceHover overflow-hidden flex items-center justify-center mb-4 relative border border-white/[0.08] shadow-lg group-hover:scale-105 transition-transform duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform">
         {artworkUrl && !imgError ? (
           <img
             src={artworkUrl}
@@ -132,21 +132,21 @@ const ArtistCardInner: React.FC<ArtistCardProps> = ({
             onError={() => setImgError(true)}
           />
         ) : (
-          <Users className="w-10 h-10 text-[#71717A]" />
+          <Users className="w-10 h-10 text-textMuted" />
         )}
       </div>
 
       {/* Artist Name & Stats */}
-      <h4 className="font-bold text-xs text-white truncate w-full group-hover:text-[#FA586A] transition-colors mb-1">
+      <h4 className="font-bold text-xs text-white truncate w-full group-hover:text-accent transition-colors mb-1">
         {artist.name}
       </h4>
-      <div className="flex items-center space-x-2 text-[10.5px] text-[#71717A] font-medium">
+      <div className="flex items-center space-x-2 text-2xs text-textMuted font-medium">
         <span className="flex items-center gap-1">
-          <Disc className="w-3 h-3 text-[#FA586A]" /> {artist.albumCount}
+          <Disc className="w-3 h-3 text-accent" /> {artist.albumCount}
         </span>
         <span>•</span>
         <span className="flex items-center gap-1">
-          <Music className="w-3 h-3 text-[#71717A]" /> {artist.trackCount}
+          <Music className="w-3 h-3 text-textMuted" /> {artist.trackCount}
         </span>
       </div>
     </div>

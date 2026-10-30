@@ -13,8 +13,8 @@ const ArtistLinksInner: React.FC<ArtistLinksProps> = ({
   artistName = "Unknown Artist",
   onSelectArtist,
   className = "truncate",
-  linkClassName = "hover:text-[#FA586A] hover:underline cursor-pointer transition-colors",
-  delimiterClassName = "text-[#71717A]",
+  linkClassName = "hover:text-accent hover:underline cursor-pointer transition-colors",
+  delimiterClassName = "text-textMuted",
 }) => {
   const tokens = parseArtistTokens(artistName);
 

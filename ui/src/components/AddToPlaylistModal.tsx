@@ -59,20 +59,20 @@ export const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
       <div className="bg-surface border border-white/[0.12] rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-scaleUp">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.08]">
-          <div className="flex items-center space-x-2.5 min-w-0">
+          <div className="flex items-center space-x-3 min-w-0">
             <div className="w-8 h-8 rounded-xl bg-accent flex items-center justify-center text-white shadow-sm flex-shrink-0">
               <ListMusic className="w-4 h-4" />
             </div>
             <div className="min-w-0">
               <h2 className="text-sm font-bold text-white truncate">Add to Playlist</h2>
-              <p className="text-[11px] text-[#71717A] truncate font-medium">
+              <p className="text-2xs text-textMuted truncate font-medium">
                 {track.metadata.title || "Untitled Track"}
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-[#71717A] hover:text-white p-1 rounded-lg hover:bg-white/[0.06] transition"
+            className="text-textMuted hover:text-white p-1 rounded-lg hover:bg-white/[0.06] transition"
           >
             <X className="w-4 h-4" />
           </button>
@@ -81,7 +81,7 @@ export const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
         {/* Existing Playlists List */}
         <div className="p-4 max-h-60 overflow-y-auto space-y-1">
           {playlists.length === 0 ? (
-            <p className="text-xs text-[#71717A] text-center py-4">
+            <p className="text-xs text-textMuted text-center py-4">
               No playlists found. Create one below to add this track.
             </p>
           ) : (
@@ -94,21 +94,21 @@ export const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
                   key={pl.id}
                   onClick={() => handleAdd(pl.id)}
                   disabled={alreadyContains || justAdded}
-                  className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium hover:bg-white/[0.06] disabled:opacity-50 transition text-left group"
+                  className="w-full flex items-center justify-between px-4 py-3 rounded-xl text-xs font-medium hover:bg-white/[0.06] disabled:opacity-50 transition text-left group"
                 >
                   <div className="flex items-center space-x-3 min-w-0">
-                    <ListMusic className="w-4 h-4 text-[#71717A] group-hover:text-[#FA586A] transition-colors" />
+                    <ListMusic className="w-4 h-4 text-textMuted group-hover:text-accent transition-colors" />
                     <span className="text-white font-semibold truncate">{pl.name}</span>
                   </div>
 
                   {justAdded ? (
-                    <span className="text-[11px] text-green-400 font-bold flex items-center gap-1">
+                    <span className="text-2xs text-success font-bold flex items-center gap-1">
                       <Check className="w-3.5 h-3.5" /> Added
                     </span>
                   ) : alreadyContains ? (
-                    <span className="text-[11px] text-[#71717A]">Already in playlist</span>
+                    <span className="text-2xs text-textMuted">Already in playlist</span>
                   ) : (
-                    <span className="text-[11px] text-[#71717A] font-mono">
+                    <span className="text-2xs text-textMuted font-mono">
                       {pl.track_ids.length} tracks
                     </span>
                   )}
@@ -126,12 +126,12 @@ export const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
               value={newPlaylistName}
               onChange={(e) => setNewPlaylistName(e.target.value)}
               placeholder="New playlist name..."
-              className="flex-1 bg-[#202028] border border-white/[0.10] focus:border-[#FA586A] rounded-xl px-3 py-2 text-xs text-white placeholder-[#71717A] focus:outline-none focus:ring-1 focus:ring-[#FA586A]/30 transition"
+              className="flex-1 bg-surfaceHover border border-white/[0.10] focus:border-accent rounded-xl px-3 py-2 text-xs text-white placeholder-textMuted focus:outline-none focus:ring-1 focus:ring-accent/30 transition"
             />
             <button
               type="submit"
               disabled={!newPlaylistName.trim() || isCreating}
-              className="flex items-center space-x-1 px-3.5 py-2 bg-[#FA586A] hover:bg-[#E04859] disabled:opacity-40 text-white rounded-xl text-xs font-bold shadow-md shadow-[#FA586A]/20 transition flex-shrink-0"
+              className="flex items-center space-x-1 px-4 py-2 bg-accent-fill hover:bg-accentHover disabled:opacity-40 text-white rounded-xl text-xs font-bold shadow-md shadow-accent/20 transition flex-shrink-0"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Create & Add</span>

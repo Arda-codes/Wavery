@@ -46,6 +46,7 @@ export async function runScrubberAndQueueTests(playerStoreModule: any) {
     currentTrackId: tracks[0].id,
     queue: tracks.slice(0, 5),
     queueIndex: 0,
+    isAutoplay: false,
   });
 
   console.log("--- 1. Testing Scrubber Drag Behavior & Invariant Protection ---");
@@ -165,7 +166,7 @@ export async function runScrubberAndQueueTests(playerStoreModule: any) {
   }
 
   // Next at end with loop_mode = Off
-  store.setState({ status: { ...state.status, loop_mode: "Off" } });
+  store.setState({ status: { ...state.status, loop_mode: "Off" }, isAutoplay: false });
   await store.getState().playNext();
   state = store.getState();
   if (state.queueIndex !== 7) {
@@ -274,7 +275,7 @@ export async function runScrubberAndQueueTests(playerStoreModule: any) {
   }
   console.log("  ✓ toggleAutoplay and setAutoplay state transitions verified");
 
-  // B. Autoplay enabled when playing from All Songs context
+  // B. Autoplay enabled when playing from All Songs context (synthetic queue loop test)
   await store.getState().setQueue(tracks.slice(0, 3), 2, { type: "tracks", name: "All Tracks" });
   store.setState({ status: { ...store.getState().status, loop_mode: "Off" }, isAutoplay: true });
   await store.getState().playNext();
@@ -291,12 +292,198 @@ export async function runScrubberAndQueueTests(playerStoreModule: any) {
   if (state.status.state !== "Stopped" || !state.isManualStop) {
     throw new Error(`Playback did not stop at end of queue when autoplay is disabled: state=${state.status.state}`);
   }
-  console.log("  ✓ Playback stopped at end of queue when Autoplay was disabled for All Songs\n");
+  console.log("  ✓ Playback stopped at end of queue when Autoplay was disabled for All Songs");
+
+  // D. Autoplay enabled across Album context with Library recommendations
+  const { registerLibraryTracksGetter } = playerStoreModule;
+  const libraryPool = tracks.slice(0, 10);
+  registerLibraryTracksGetter(() => libraryPool);
+
+  // Queue an album with 2 tracks
+  const albumTracks = tracks.slice(0, 2);
+  await store.getState().setQueue(albumTracks, 1, { type: "album", name: "Test Album", artist: "Test Artist" });
+  store.setState({ status: { ...store.getState().status, loop_mode: "Off" }, isAutoplay: true });
+  await store.getState().playNext();
+  state = store.getState();
+  // Expect Autoplay to append a new track from the library pool (queue length increases from 2 to 3)
+  if (state.queue.length !== 3 || state.queueIndex !== 2) {
+    throw new Error(`Autoplay failed to append continuous recommendation track from library: queue length ${state.queue.length}, index ${state.queueIndex}`);
+  }
+  if (!state.currentTrackId || state.status.state === "Stopped" || state.isManualStop) {
+    throw new Error("Autoplay must continue playback without stopping at end of album");
+  }
+  console.log("  ✓ Autoplay seamlessly recommended and appended new track when Album finished");
+
+  // E. Autoplay disabled in Album context stops at end of album
+  store.setState({ queue: albumTracks, isAutoplay: false, queueIndex: 1, currentTrack: albumTracks[1], currentTrackId: albumTracks[1].id });
+  await store.getState().playNext();
+  state = store.getState();
+  if (state.status.state !== "Stopped" || !state.isManualStop) {
+    throw new Error(`Playback did not stop at end of album when autoplay was disabled: state=${state.status.state}`);
+  }
+  console.log("  ✓ Playback stopped at end of album when Autoplay was disabled");
+
+  // Reset library getter for clean test isolation
+  registerLibraryTracksGetter(() => []);
+
+  console.log("--- 5. Testing Morphing Waveform Generator Invariants ---");
+  const { generateWaveformBarHeights, FLAT_BAR_HEIGHT, MIN_WAVEFORM_HEIGHT, MAX_WAVEFORM_HEIGHT } = await import("../src/utils/waveform");
+
+  // 1. Idle state (no track) returns all flat bars
+  const idleBars = generateWaveformBarHeights(null);
+  if (idleBars.length !== 72 || !idleBars.every((h: number) => h === FLAT_BAR_HEIGHT)) {
+    throw new Error(`Idle waveform must return flat ${FLAT_BAR_HEIGHT}px bars`);
+  }
+  console.log("  ✓ Idle state generates uniform flat line");
+
+  // 2. Active track morphs into dynamic heights
+  const track1Bars = generateWaveformBarHeights(tracks[0]);
+  if (track1Bars.length !== 72) {
+    throw new Error(`Waveform must generate 72 bars, got ${track1Bars.length}`);
+  }
+  const hasPeaks = track1Bars.some((h: number) => h > FLAT_BAR_HEIGHT);
+  const allInRange = track1Bars.every((h: number) => h >= MIN_WAVEFORM_HEIGHT && h <= MAX_WAVEFORM_HEIGHT);
+  if (!hasPeaks || !allInRange) {
+    throw new Error(`Track waveform bars must be within [${MIN_WAVEFORM_HEIGHT}, ${MAX_WAVEFORM_HEIGHT}]`);
+  }
+  console.log("  ✓ Active track morphs into dynamic waveform peaks");
+
+  // 3. Determinism: identical tracks yield identical waveforms
+  const track1BarsRepeat = generateWaveformBarHeights(tracks[0]);
+  const isIdentical = track1Bars.every((h: number, idx: number) => h === track1BarsRepeat[idx]);
+  if (!isIdentical) {
+    throw new Error("Waveform generation must be completely deterministic for identical tracks");
+  }
+  console.log("  ✓ Deterministic consistency verified across repeated calls");
+
+  // 4. Distinct tracks produce distinct waveforms
+  const track2Bars = generateWaveformBarHeights(tracks[1]);
+  const isDistinct = track1Bars.some((h: number, idx: number) => h !== track2Bars[idx]);
+  if (!isDistinct) {
+    throw new Error("Distinct tracks must yield distinct waveform silhouettes");
+  }
+  console.log("  ✓ Different tracks produce unique audio silhouettes");
+
+  // 5. Degraded / minimal track metadata resilience
+  const degradedBars = generateWaveformBarHeights({ id: "unknown" });
+  if (degradedBars.some((h: number) => isNaN(h) || h < MIN_WAVEFORM_HEIGHT || h > MAX_WAVEFORM_HEIGHT)) {
+    throw new Error("Degraded metadata must not produce NaN or out-of-range heights");
+  }
+  console.log("  ✓ Degraded metadata handled with zero NaN or errors\n");
+
+  console.log("--- 6. Testing Two-Tier Dedicated Queue & Play Next Invariants ---");
+  // A. Initialize context queue
+  const cTracks = tracks.slice(0, 4); // C0, C1, C2, C3
+  await store.getState().setQueue(cTracks, 0, { type: "album", name: "Abbey Road", artist: "The Beatles" });
+  let qState = store.getState();
+  if (qState.contextQueue.length !== 4 || qState.userQueue.length !== 0 || qState.contextIndex !== 0) {
+    throw new Error(`Context queue initialization failed: contextLength=${qState.contextQueue.length}, userLength=${qState.userQueue.length}`);
+  }
+  console.log("  ✓ Two-tier context initialized with 4 tracks, userQueue clean");
+
+  // B. Single and Batch Play Next (Top insertion with batch preservation)
+  const u1 = tracks[4];
+  const u2 = tracks[5];
+  const u3 = tracks[6];
+  store.getState().playNextInUserQueue(u1);
+  if (store.getState().userQueue.length !== 1 || store.getState().userQueue[0].id !== u1.id) {
+    throw new Error("playNextInUserQueue failed for single track insertion");
+  }
+
+  // Batch insert [u2, u3] at top
+  store.getState().playNextInUserQueue([u2, u3]);
+  const userQ = store.getState().userQueue;
+  if (userQ.length !== 3 || userQ[0].id !== u2.id || userQ[1].id !== u3.id || userQ[2].id !== u1.id) {
+    throw new Error(`playNextInUserQueue failed to preserve batch ordering: [${userQ.map(t => t.id).join(", ")}]`);
+  }
+  console.log("  ✓ playNextInUserQueue inserts at top while preserving batch sequence: [U2, U3, U1]");
+
+  // C. Add to user queue (append to end of priority queue)
+  const u4 = tracks[7];
+  store.getState().addToUserQueue(u4);
+  if (store.getState().userQueue.length !== 4 || store.getState().userQueue[3].id !== u4.id) {
+    throw new Error("addToUserQueue failed to append to end of user queue");
+  }
+  console.log("  ✓ addToUserQueue appended U4 to end of user queue: [U2, U3, U1, U4]");
+
+  // D. Reorder user queue
+  store.getState().reorderUserQueue(3, 0); // Move U4 to index 0
+  if (store.getState().userQueue[0].id !== u4.id || store.getState().userQueue[1].id !== u2.id) {
+    throw new Error("reorderUserQueue failed to move item from index 3 to 0");
+  }
+  console.log("  ✓ reorderUserQueue moved U4 from index 3 to 0: [U4, U2, U3, U1]");
+
+  // E. Remove from user queue
+  store.getState().removeFromUserQueue(1); // Remove U2
+  if (store.getState().userQueue.length !== 3 || store.getState().userQueue.some(t => t.id === u2.id)) {
+    throw new Error("removeFromUserQueue failed to remove item at index 1");
+  }
+  console.log("  ✓ removeFromUserQueue removed U2: [U4, U3, U1]");
+
+  // F. Sequential Playback Drains User Queue First, Then Continues Context
+  // Active track is C0. Next must be U4, then U3, then U1, then C1, then C2.
+  await store.getState().playNext();
+  if (store.getState().currentTrackId !== u4.id) {
+    throw new Error(`Expected U4 to play next, got ${store.getState().currentTrackId}`);
+  }
+
+  await store.getState().playNext();
+  if (store.getState().currentTrackId !== u3.id) {
+    throw new Error(`Expected U3 to play next, got ${store.getState().currentTrackId}`);
+  }
+
+  await store.getState().playNext();
+  if (store.getState().currentTrackId !== u1.id) {
+    throw new Error(`Expected U1 to play next, got ${store.getState().currentTrackId}`);
+  }
+  if (store.getState().userQueue.length !== 0) {
+    throw new Error(`User queue should be empty after playing U1, but has length ${store.getState().userQueue.length}`);
+  }
+
+  // Next should cleanly fall back into context at C1
+  await store.getState().playNext();
+  if (store.getState().currentTrackId !== cTracks[1].id) {
+    throw new Error(`Expected context track C1 (${cTracks[1].id}) to resume, got ${store.getState().currentTrackId}`);
+  }
+  console.log("  ✓ Playback priority drained userQueue [U4 -> U3 -> U1] and seamlessly resumed context [C1]");
+
+  // G. Direct Jump into Context Track
+  await store.getState().jumpToContextTrack(3); // C3
+  if (store.getState().currentTrackId !== cTracks[3].id || store.getState().contextIndex !== 3) {
+    throw new Error(`jumpToContextTrack failed: expected ${cTracks[3].id}, got ${store.getState().currentTrackId}`);
+  }
+  console.log("  ✓ jumpToContextTrack(3) jumped directly to C3");
+
+  // H. Direct Jump into User Queue Item
+  const u5 = tracks[8];
+  store.getState().playNextInUserQueue(u5);
+  await store.getState().jumpToUserQueueItem(0);
+  if (store.getState().currentTrackId !== u5.id || store.getState().userQueue.length !== 0) {
+    throw new Error(`jumpToUserQueueItem failed: current=${store.getState().currentTrackId}, userQueueLength=${store.getState().userQueue.length}`);
+  }
+  console.log("  ✓ jumpToUserQueueItem played U5 and drained it from userQueue");
+
+  // I. Clear User Queue
+  store.getState().playNextInUserQueue([tracks[0], tracks[1]]);
+  store.getState().clearUserQueue();
+  if (store.getState().userQueue.length !== 0) {
+    throw new Error("clearUserQueue failed to empty user queue");
+  }
+  console.log("  ✓ clearUserQueue cleanly wiped user queue while preserving playback state");
+
+  // J. Session History Recording
+  const hist = store.getState().sessionHistory;
+  if (!hist || hist.length === 0) {
+    throw new Error("sessionHistory must record played tracks");
+  }
+  console.log(`  ✓ sessionHistory correctly recorded ${hist.length} recent playback entries\n`);
 
   return {
     scrubberDragVerified: true,
     queueActionsVerified: true,
     autoAdvanceVerified: true,
     autoplayVerified: true,
+    waveformVerified: true,
+    twoTierQueueVerified: true,
   };
 }

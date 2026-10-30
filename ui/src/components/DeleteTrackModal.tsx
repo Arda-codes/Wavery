@@ -84,18 +84,18 @@ export const DeleteTrackModal: React.FC<DeleteTrackModalProps> = ({
         }
       }}
     >
-      <div className="bg-[#16161A] border border-white/[0.12] rounded-2xl w-full max-w-md overflow-hidden shadow-2xl shadow-black/80 animate-scaleUp">
+      <div className="bg-surface border border-white/[0.12] rounded-2xl w-full max-w-md overflow-hidden shadow-2xl shadow-black/80 animate-scaleUp">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.08]">
           <div className="flex items-center space-x-3">
-            <div className="w-9 h-9 rounded-xl bg-red-500/15 border border-red-500/30 flex items-center justify-center text-red-400 shadow-md shadow-red-500/10">
+            <div className="w-9 h-9 rounded-xl bg-danger/15 border border-danger/30 flex items-center justify-center text-danger shadow-md shadow-danger/10">
               <Trash2 className="w-4 h-4" />
             </div>
             <div>
               <h2 id="delete-track-title" className="text-sm font-bold text-white">
                 Delete Song
               </h2>
-              <p className="text-[11px] text-[#71717A]">
+              <p className="text-2xs text-textMuted">
                 Remove from library or delete permanently
               </p>
             </div>
@@ -105,7 +105,7 @@ export const DeleteTrackModal: React.FC<DeleteTrackModalProps> = ({
             onClick={onClose}
             disabled={isDeleting}
             aria-label="Close dialog"
-            className="text-[#71717A] hover:text-white p-1 rounded-lg hover:bg-white/[0.06] transition disabled:opacity-40"
+            className="text-textMuted hover:text-white p-1 rounded-lg hover:bg-white/[0.06] transition disabled:opacity-40"
           >
             <X className="w-4 h-4" />
           </button>
@@ -114,44 +114,44 @@ export const DeleteTrackModal: React.FC<DeleteTrackModalProps> = ({
         {/* Body */}
         <div className="p-5 space-y-4">
           {/* Track Details Card */}
-          <div className="bg-[#202028] border border-white/[0.08] rounded-xl p-3 flex items-center space-x-3.5">
-            <div className="w-11 h-11 rounded-lg bg-white/[0.06] border border-white/[0.08] flex items-center justify-center flex-shrink-0 text-[#A1A1AA]">
+          <div className="bg-surfaceHover border border-white/[0.08] rounded-xl p-3 flex items-center space-x-4">
+            <div className="w-11 h-11 rounded-lg bg-white/[0.06] border border-white/[0.08] flex items-center justify-center flex-shrink-0 text-textSecondary">
               <Music className="w-5 h-5" />
             </div>
             <div className="min-w-0 flex-1">
               <h3 className="text-xs font-bold text-white truncate">{title}</h3>
-              <p className="text-[11px] text-[#A1A1AA] truncate">{artist}</p>
-              <div className="flex items-center space-x-2 mt-0.5 text-[10px] text-[#71717A]">
+              <p className="text-2xs text-textSecondary truncate">{artist}</p>
+              <div className="flex items-center space-x-2 mt-1 text-2xs text-textMuted">
                 <span className="truncate">{album}</span>
                 <span>•</span>
                 <span className="font-mono">{durationFormatted}</span>
                 <span>•</span>
-                <span className="px-1.5 py-0.5 bg-white/[0.06] rounded text-[9px] font-semibold text-[#A1A1AA]">
+                <span className="px-2 py-1 bg-white/[0.06] rounded text-2xs font-semibold text-textSecondary">
                   {audioFormat}
                 </span>
               </div>
             </div>
           </div>
 
-          <p className="text-xs text-[#A1A1AA] leading-relaxed">
+          <p className="text-xs text-textSecondary leading-relaxed">
             Are you sure you want to delete <strong className="text-white font-semibold">"{title}"</strong> from your library?
           </p>
 
           {/* Delete File from Disk Option */}
-          <div className="bg-white/[0.03] border border-white/[0.07] rounded-xl p-3.5 space-y-3">
+          <div className="bg-white/[0.03] border border-white/[0.07] rounded-xl p-4 space-y-3">
             <label className="flex items-start space-x-3 cursor-pointer select-none">
               <input
                 type="checkbox"
                 checked={deleteFromDisk}
                 onChange={(e) => setDeleteFromDisk(e.target.checked)}
                 disabled={isDeleting}
-                className="mt-0.5 rounded bg-[#202028] border-white/[0.2] text-red-500 focus:ring-red-500/40 focus:ring-offset-0 transition cursor-pointer"
+                className="mt-1 rounded bg-surfaceHover border-white/[0.2] text-danger focus:ring-danger/40 focus:ring-offset-0 transition cursor-pointer"
               />
               <div className="flex-1 text-xs">
                 <span className="font-semibold text-white block">
                   Also delete audio file from computer
                 </span>
-                <span className="text-[11px] text-[#71717A] block mt-0.5">
+                <span className="text-2xs text-textMuted block mt-1">
                   Permanently deletes the file from your local storage drive.
                 </span>
               </div>
@@ -159,8 +159,8 @@ export const DeleteTrackModal: React.FC<DeleteTrackModalProps> = ({
 
             {/* Warning Banner when Delete From Disk is active */}
             {deleteFromDisk && (
-              <div className="bg-red-500/10 border border-red-500/25 rounded-lg p-2.5 flex items-start space-x-2 text-red-300 text-[11px] animate-fadeIn">
-                <AlertTriangle className="w-4 h-4 flex-shrink-0 text-red-400 mt-0.5" />
+              <div className="bg-danger/10 border border-danger/25 rounded-lg p-3 flex items-start space-x-2 text-danger text-2xs animate-fadeIn">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0 text-danger mt-1" />
                 <span className="leading-snug">
                   <strong>Warning:</strong> This cannot be undone. The audio file will be permanently removed from disk.
                 </span>
@@ -170,20 +170,20 @@ export const DeleteTrackModal: React.FC<DeleteTrackModalProps> = ({
 
           {/* Error Message */}
           {errorMessage && (
-            <div className="bg-red-500/15 border border-red-500/30 rounded-xl p-3 text-red-300 text-xs flex items-center space-x-2 animate-shake">
+            <div className="bg-danger/15 border border-danger/30 rounded-xl p-3 text-danger text-xs flex items-center space-x-2 animate-shake">
               <AlertTriangle className="w-4 h-4 flex-shrink-0" />
               <span>{errorMessage}</span>
             </div>
           )}
 
           {/* Action Buttons */}
-          <div className="flex items-center justify-end space-x-2.5 pt-2">
+          <div className="flex items-center justify-end space-x-3 pt-2">
             <button
               ref={cancelButtonRef}
               type="button"
               onClick={onClose}
               disabled={isDeleting}
-              className="px-4 py-2 bg-white/[0.06] hover:bg-white/[0.10] active:scale-[0.98] text-[#A1A1AA] hover:text-white rounded-xl text-xs font-semibold transition disabled:opacity-40"
+              className="px-4 py-2 bg-white/[0.06] hover:bg-white/[0.10] active:scale-[0.98] text-textSecondary hover:text-white rounded-xl text-xs font-semibold transition disabled:opacity-40"
             >
               Cancel
             </button>
@@ -191,7 +191,7 @@ export const DeleteTrackModal: React.FC<DeleteTrackModalProps> = ({
               type="button"
               onClick={handleConfirm}
               disabled={isDeleting}
-              className="flex items-center space-x-1.5 px-4 py-2 bg-red-500 hover:bg-red-600 active:scale-[0.98] disabled:opacity-40 text-white rounded-xl text-xs font-bold shadow-md shadow-red-500/25 transition"
+              className="flex items-center space-x-2 px-4 py-2 bg-danger hover:bg-danger active:scale-[0.98] disabled:opacity-40 text-white rounded-xl text-xs font-bold shadow-md shadow-danger/25 transition"
             >
               {isDeleting ? (
                 <span>Deleting...</span>

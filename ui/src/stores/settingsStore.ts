@@ -268,6 +268,55 @@ export interface Keybindings {
   toggleLyrics: string;
 }
 
+export interface GradientAccentPreset {
+  name: string;
+  gradient: string;
+  primary: string;
+}
+
+export const GRADIENT_ACCENT_PRESETS: GradientAccentPreset[] = [
+  {
+    name: "Sunset Coral",
+    gradient: "linear-gradient(135deg, #FA586A 0%, #FF7E40 100%)",
+    primary: "#FA586A",
+  },
+  {
+    name: "Neon Violet",
+    gradient: "linear-gradient(135deg, #8A2387 0%, #E94057 50%, #F27121 100%)",
+    primary: "#E94057",
+  },
+  {
+    name: "Cyber Cyan",
+    gradient: "linear-gradient(135deg, #00D2D3 0%, #0A84FF 100%)",
+    primary: "#00D2D3",
+  },
+  {
+    name: "Aurora Emerald",
+    gradient: "linear-gradient(135deg, #10B981 0%, #06B6D4 100%)",
+    primary: "#10B981",
+  },
+  {
+    name: "Royal Indigo",
+    gradient: "linear-gradient(135deg, #6366F1 0%, #A855F7 100%)",
+    primary: "#6366F1",
+  },
+  {
+    name: "Golden Sun",
+    gradient: "linear-gradient(135deg, #F59E0B 0%, #EF4444 100%)",
+    primary: "#F59E0B",
+  },
+  {
+    name: "Electric Fuchsia",
+    gradient: "linear-gradient(135deg, #EC4899 0%, #8B5CF6 100%)",
+    primary: "#EC4899",
+  },
+  {
+    name: "Deep Cosmic",
+    gradient: "linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%)",
+    primary: "#3B82F6",
+  },
+];
+
 interface SettingsData {
   // General
   autoScanOnStartup: boolean;
@@ -286,6 +335,7 @@ interface SettingsData {
   // Appearance & Theme
   themeMode: ThemeMode;
   accentColor: string;
+  accentGradient?: string;
   customColors: string[];
   customTheme: CustomTheme | null;
   savedCustomThemes: CustomTheme[];
@@ -790,7 +840,8 @@ function applyDomClasses(
   theme: ThemeMode,
   accent: string,
   customTheme?: CustomTheme | null,
-  enableGradients: boolean = true
+  enableGradients: boolean = true,
+  accentGradient?: string
 ) {
   if (typeof document === "undefined" || !document.documentElement) return;
 
@@ -832,10 +883,23 @@ function applyDomClasses(
 
   const style = document.documentElement.style;
   if (style && typeof style.setProperty === "function") {
-    style.setProperty("--accent-color", accent);
-    style.setProperty("--color-accent", accent);
-    style.setProperty("--color-primary", accent);
-    style.setProperty("--color-accent-hover", `color-mix(in srgb, ${accent} 85%, black)`);
+    let baseColor = accent;
+    if (baseColor && baseColor.includes("gradient")) {
+      const hexMatch = baseColor.match(/#(?:[0-9a-fA-F]{3,8})/);
+      baseColor = hexMatch ? hexMatch[0] : "#FA586A";
+    }
+
+    style.setProperty("--accent-color", baseColor);
+    style.setProperty("--color-accent", baseColor);
+    style.setProperty("--color-primary", baseColor);
+    style.setProperty("--color-accent-hover", `color-mix(in srgb, ${baseColor} 85%, black)`);
+
+    const grad = accentGradient || (accent && accent.includes("gradient") ? accent : "");
+    if (grad && enableGradients) {
+      style.setProperty("--accent-gradient", grad);
+    } else {
+      style.removeProperty("--accent-gradient");
+    }
 
     if (theme === "custom" && customTheme) {
       style.setProperty("--color-bg", customTheme.bg);
@@ -878,7 +942,7 @@ function applyDomClasses(
 
 export const useSettingsStore = create<SettingsState>((set, get) => {
   const initial = loadPersistedSettings();
-  applyDomClasses(initial.simplifyMode, initial.themeMode, initial.accentColor, initial.customTheme, initial.enableGradients);
+  applyDomClasses(initial.simplifyMode, initial.themeMode, initial.accentColor, initial.customTheme, initial.enableGradients, initial.accentGradient);
 
   return {
     ...initial,
@@ -929,6 +993,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
         key === "simplifyMode" ||
         key === "themeMode" ||
         key === "accentColor" ||
+        key === "accentGradient" ||
         key === "customTheme" ||
         key === "enableGradients"
       ) {
@@ -937,7 +1002,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
           updated.themeMode,
           updated.accentColor,
           updated.customTheme,
-          updated.enableGradients
+          updated.enableGradients,
+          updated.accentGradient
         );
       }
 
@@ -952,6 +1018,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
           ...current,
           themeMode: preset.id,
           accentColor: preset.accentColor,
+          accentGradient: "",
         };
         persistSettings(updated);
         applyDomClasses(
@@ -959,7 +1026,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
           updated.themeMode,
           updated.accentColor,
           updated.customTheme,
-          updated.enableGradients
+          updated.enableGradients,
+          updated.accentGradient
         );
         set({
           themeMode: preset.id,

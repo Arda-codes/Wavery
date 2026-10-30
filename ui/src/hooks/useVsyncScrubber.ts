@@ -19,6 +19,7 @@ interface UseVsyncScrubberOptions {
   isPlaying: boolean;
   hasTrack: boolean;
   showRemaining?: boolean;
+  containerRef?: React.RefObject<HTMLElement | null>;
   onSeek: (positionSecs: number) => void;
 }
 
@@ -50,6 +51,7 @@ export function useVsyncScrubber({
   isPlaying,
   hasTrack,
   showRemaining = true,
+  containerRef,
   onSeek,
 }: UseVsyncScrubberOptions): UseVsyncScrubberResult {
   const sliderRef = useRef<HTMLInputElement>(null);
@@ -101,6 +103,9 @@ export function useVsyncScrubber({
         sliderRef.current.value = String(clampedPos);
       }
     }
+    if (containerRef?.current) {
+      containerRef.current.style.setProperty("--slider-progress", `${progressPct}%`);
+    }
     if (currentTimeRef.current) {
       currentTimeRef.current.textContent = formatTime(clampedPos);
     }
@@ -109,7 +114,7 @@ export function useVsyncScrubber({
         ? formatRemainingTime(clampedPos, dur)
         : formatTime(dur);
     }
-  }, []);
+  }, [containerRef]);
 
   // Sync when status arrives from backend
   useEffect(() => {

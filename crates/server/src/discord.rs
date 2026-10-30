@@ -19,11 +19,10 @@ use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
 
-/// Default Discord application ID for Music Presence.
-/// Uses the registered Discord "Music" application ID ("1205619376275980288")
-/// which displays as "Listening to Music" / "Playing Music".
+/// Default Discord application ID for Wavery Rich Presence.
+/// Uses the registered Discord "Wavery" application ID ("1565571268797931641").
 /// Users can override this in Settings with their own Discord Developer Application ID.
-pub const DEFAULT_APP_ID: &str = "1205619376275980288";
+pub const DEFAULT_APP_ID: &str = "1565571268797931641";
 
 /// The "now playing" snapshot forwarded from the frontend.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -36,6 +35,8 @@ pub struct PresencePayload {
     pub is_playing: bool,
     #[serde(default)]
     pub app_id: Option<String>,
+    #[serde(default)]
+    pub artwork_url: Option<String>,
 }
 
 /// Tracks whether the Discord IPC client is connected and operational.
@@ -148,12 +149,20 @@ impl DiscordRpcState {
         };
 
         // Build human-readable strings
-        let details = truncate(&payload.title, 128);
-        let state = if payload.album.is_empty() {
-            truncate(&payload.artist, 128)
+        let title_clean = if payload.title.trim().is_empty() {
+            "Unknown Title"
         } else {
-            truncate(&format!("{} — {}", payload.artist, payload.album), 128)
+            payload.title.as_str()
         };
+        let details = truncate(title_clean, 128);
+
+        // Bottom line strictly displays artist name
+        let artist_clean = if payload.artist.trim().is_empty() {
+            "Unknown Artist"
+        } else {
+            payload.artist.as_str()
+        };
+        let state = truncate(artist_clean, 128);
 
         // Discord expects timestamps in Unix epoch milliseconds
         let now_millis = SystemTime::now()
@@ -174,10 +183,21 @@ impl DiscordRpcState {
             activity::Timestamps::new()
         };
 
-        let act = activity::Activity::new()
+        let mut act = activity::Activity::new()
+            .activity_type(activity::ActivityType::Listening)
             .details(details.as_str())
             .state(state.as_str())
             .timestamps(timestamps);
+
+        // Display album cover instead of default app icon when artwork URL is provided
+        // Do not set large_text so Discord does not render an extra 3rd line beneath artist
+        if let Some(ref art_url) = payload.artwork_url {
+            let art = art_url.trim();
+            if !art.is_empty() {
+                let assets = activity::Assets::new().large_image(art);
+                act = act.assets(assets);
+            }
+        }
 
         match client.set_activity(act) {
             Ok(()) => {

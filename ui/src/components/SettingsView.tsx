@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { usePlayerStore } from "../stores/playerStore";
 import { useLibraryStore } from "../stores/libraryStore";
 import {
@@ -8,6 +8,7 @@ import {
   RowDensity,
   THEME_PRESETS,
   CustomTheme,
+  GRADIENT_ACCENT_PRESETS,
 } from "../stores/settingsStore";
 import { CustomThemeModal } from "./CustomThemeModal";
 import { playerAdapter, isTauri } from "../services/adapter";
@@ -16,7 +17,7 @@ import {
   showTrackNotification,
 } from "../utils/notifications";
 import { isMediaSessionSupported } from "../utils/mediaSession";
-import { getDiscordStatus, DiscordStatusResponse } from "../utils/discordRpc";
+import { getDiscordStatus, updateDiscordPresence, clearDiscordPresence, DiscordStatusResponse } from "../utils/discordRpc";
 import { formatKeyCombo } from "../utils/keybindings";
 import { ModeSwitcher } from "./ModeSwitcher";
 import {
@@ -44,19 +45,17 @@ import {
   Music,
   Activity,
   Bell,
-  Cpu,
   Tv,
   Monitor,
   Plus,
   X,
   Link2,
-  Wifi,
-  WifiOff,
   MonitorSpeaker,
   MessageSquare,
   Search,
   Sparkles,
 } from "lucide-react";
+import { useEnrichmentStore } from "../stores/enrichmentStore";
 
 type SettingsTab =
   | "general"
@@ -90,6 +89,14 @@ export const SettingsView: React.FC = () => {
   const artists = useLibraryStore((s) => s.artists);
   const rebuildDatabase = useLibraryStore((s) => s.rebuildDatabase);
   const vacuumDatabase = useLibraryStore((s) => s.vacuumDatabase);
+
+  const missingLyricsCount = useMemo(() => {
+    return tracks.filter((t) => !t.metadata.lyrics || !t.metadata.lyrics.trim()).length;
+  }, [tracks]);
+
+  const missingYearCount = useMemo(() => {
+    return tracks.filter((t) => !t.metadata.year).length;
+  }, [tracks]);
 
   // Settings Store
   const settings = useSettingsStore();
@@ -292,44 +299,41 @@ export const SettingsView: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-[#0D0D10] animate-fade-in min-h-0 w-full h-full">
+    <div className="flex-1 flex flex-col overflow-hidden bg-background animate-fade-in min-h-0 w-full h-full">
       {/* Top Header */}
-      <div className="px-8 pt-7 pb-5 border-b border-white/[0.06] flex items-center justify-between flex-shrink-0">
-        <div className="flex items-center space-x-3.5">
-          <div className="w-11 h-11 rounded-2xl bg-[#FA586A]/15 border border-[#FA586A]/30 flex items-center justify-center text-[#FA586A] shadow-lg shadow-[#FA586A]/15">
-            <Settings className="w-5 h-5" />
+      <div className="px-8 pt-8 pb-5 border-b border-white/[0.06] flex items-center justify-between flex-shrink-0">
+        <div className="flex items-center space-x-4">
+          <div className="w-10 h-10 rounded-xl bg-white/[0.06] border border-white/[0.08] flex items-center justify-center text-white/90">
+            <Settings className="w-5 h-5 text-white/80" />
           </div>
           <div>
             <h1 className="text-xl font-extrabold text-white tracking-tight">
-              Settings & Preferences
+              Settings
             </h1>
-            <p className="text-xs text-[#71717A] mt-0.5">
-              Customize playback, audio pipeline, appearance themes, keybindings, and database maintenance.
-            </p>
           </div>
         </div>
 
         {/* Global Action Buttons */}
-        <div className="flex items-center space-x-2.5">
+        <div className="flex items-center space-x-3">
           <button
             onClick={handleExport}
-            className="px-3 py-1.5 bg-white/[0.06] hover:bg-white/[0.12] text-white rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition border border-white/[0.08]"
+            className="px-3 py-2 bg-white/[0.06] hover:bg-white/[0.12] text-white rounded-xl text-xs font-semibold flex items-center space-x-2 transition border border-white/[0.08]"
             title="Export settings to JSON file"
           >
-            <Download className="w-3.5 h-3.5 text-[#A1A1AA]" />
+            <Download className="w-3.5 h-3.5 text-textSecondary" />
             <span>Export</span>
           </button>
           <button
             onClick={() => setShowImportModal(true)}
-            className="px-3 py-1.5 bg-white/[0.06] hover:bg-white/[0.12] text-white rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition border border-white/[0.08]"
+            className="px-3 py-2 bg-white/[0.06] hover:bg-white/[0.12] text-white rounded-xl text-xs font-semibold flex items-center space-x-2 transition border border-white/[0.08]"
             title="Import settings from JSON"
           >
-            <Upload className="w-3.5 h-3.5 text-[#A1A1AA]" />
+            <Upload className="w-3.5 h-3.5 text-textSecondary" />
             <span>Import</span>
           </button>
           <button
             onClick={() => setShowResetModal(true)}
-            className="px-3 py-1.5 bg-white/[0.06] hover:bg-red-500/20 text-[#A1A1AA] hover:text-red-300 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition border border-white/[0.08]"
+            className="px-3 py-2 bg-white/[0.06] hover:bg-danger/20 text-textSecondary hover:text-danger rounded-xl text-xs font-semibold flex items-center space-x-2 transition border border-white/[0.08]"
             title="Reset all settings to factory defaults"
           >
             <RotateCcw className="w-3.5 h-3.5" />
@@ -341,16 +345,16 @@ export const SettingsView: React.FC = () => {
       {/* Global Feedback Banner */}
       {feedbackMessage && (
         <div
-          className={`mx-8 mt-4 flex items-center space-x-3 p-3.5 rounded-xl border text-xs font-semibold flex-shrink-0 animate-fade-in ${
+          className={`mx-8 mt-4 flex items-center space-x-3 p-4 rounded-xl border text-xs font-semibold flex-shrink-0 animate-fade-in ${
             feedbackMessage.type === "success"
-              ? "bg-green-500/10 border-green-500/30 text-green-300"
-              : "bg-red-500/10 border-red-500/30 text-red-400"
+              ? "bg-success/10 border-success/30 text-success"
+              : "bg-danger/10 border-danger/30 text-danger"
           }`}
         >
           {feedbackMessage.type === "success" ? (
-            <CheckCircle2 className="w-4 h-4 flex-shrink-0 text-green-400" />
+            <CheckCircle2 className="w-4 h-4 flex-shrink-0 text-success" />
           ) : (
-            <AlertCircle className="w-4 h-4 flex-shrink-0 text-red-400" />
+            <AlertCircle className="w-4 h-4 flex-shrink-0 text-danger" />
           )}
           <span className="flex-1">{feedbackMessage.text}</span>
           <button
@@ -365,7 +369,7 @@ export const SettingsView: React.FC = () => {
       {/* Main Settings Navigation & Content Layout */}
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0">
         {/* Left Settings Tabs Navigation (Horizontal on mobile, vertical on md+) */}
-        <aside className="w-full md:w-56 border-b md:border-b-0 md:border-r border-white/[0.06] p-2 sm:p-3 md:p-4 flex flex-row md:flex-col overflow-x-auto md:overflow-y-auto space-x-1 md:space-x-0 md:space-y-1 flex-shrink-0 select-none bg-[#0F0F13]/60 min-h-0">
+        <aside className="w-full md:w-56 border-b md:border-b-0 md:border-r border-white/[0.06] p-2 sm:p-3 md:p-4 flex flex-row md:flex-col overflow-x-auto md:overflow-y-auto space-x-1 md:space-x-0 md:space-y-1 flex-shrink-0 select-none bg-sidebar/60 min-h-0">
           {[
             { id: "general" as const, label: "General", icon: Settings, desc: "App & startup behavior" },
             { id: "audio" as const, label: "Audio & Playback", icon: Volume2, desc: "Volume, crossfade & gain" },
@@ -382,13 +386,13 @@ export const SettingsView: React.FC = () => {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`whitespace-nowrap md:w-full text-left px-3 py-2 md:px-3.5 md:py-2.5 rounded-xl text-xs font-semibold flex items-center space-x-2 md:space-x-3 transition-all flex-shrink-0 ${
+                className={`whitespace-nowrap md:w-full text-left px-3 py-2 md:px-4 md:py-3 rounded-xl text-xs font-semibold flex items-center space-x-2 md:space-x-3 transition-all flex-shrink-0 ${
                   isActive
-                    ? "bg-[#FA586A] text-white shadow-md shadow-[#FA586A]/20"
-                    : "text-[#A1A1AA] hover:text-white hover:bg-white/[0.06]"
+                    ? "bg-accent-fill text-white shadow-md shadow-accent/20"
+                    : "text-textSecondary hover:text-white hover:bg-white/[0.06]"
                 }`}
               >
-                <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? "text-white" : "text-[#71717A]"}`} />
+                <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? "text-white" : "text-textMuted"}`} />
                 <div className="truncate">
                   <div className="leading-tight">{tab.label}</div>
                 </div>
@@ -404,20 +408,20 @@ export const SettingsView: React.FC = () => {
             <div className="space-y-6 animate-fade-in max-w-3xl">
               <div>
                 <h2 className="text-base font-bold text-white">General Preferences</h2>
-                <p className="text-xs text-[#71717A] mt-0.5">
+                <p className="text-xs text-textMuted mt-1">
                   Startup behavior, notifications, and desktop integration.
                 </p>
               </div>
 
-              <div className="bg-[#16161A]/80 border border-white/[0.06] rounded-2xl divide-y divide-white/[0.06] shadow-xl overflow-hidden">
+              <div className="bg-surface/80 border border-white/[0.06] rounded-2xl divide-y divide-white/[0.06] shadow-xl overflow-hidden">
                 {/* Setting: Application Runtime Mode */}
                 <div className="p-5 flex items-center justify-between">
-                  <div className="space-y-0.5 pr-4">
+                  <div className="space-y-1 pr-4">
                     <div className="text-xs font-bold text-white flex items-center space-x-2">
-                      <Monitor className="w-3.5 h-3.5 text-[#FA586A]" />
+                      <Monitor className="w-3.5 h-3.5 text-accent" />
                       <span>Application Mode</span>
                     </div>
-                    <p className="text-[11px] text-[#71717A] leading-relaxed">
+                    <p className="text-2xs text-textMuted leading-relaxed">
                       Switch between the native desktop window and a web browser session.
                     </p>
                   </div>
@@ -426,12 +430,12 @@ export const SettingsView: React.FC = () => {
 
                 {/* Setting: Simplify / Low-Resource (Fast) Mode */}
                 <div className="p-5 flex items-center justify-between">
-                  <div className="space-y-0.5 pr-4">
+                  <div className="space-y-1 pr-4">
                     <div className="text-xs font-bold text-white flex items-center space-x-2">
-                      <Zap className="w-3.5 h-3.5 text-[#00D2D3]" />
+                      <Zap className="w-3.5 h-3.5 text-warning" />
                       <span>Low-Resource Mode</span>
                     </div>
-                    <p className="text-[11px] text-[#71717A] leading-relaxed">
+                    <p className="text-2xs text-textMuted leading-relaxed">
                       Turns off blur effects and heavy animations to save CPU and GPU power.
                     </p>
                   </div>
@@ -443,12 +447,12 @@ export const SettingsView: React.FC = () => {
 
                 {/* Setting: Auto-scan on startup */}
                 <div className="p-5 flex items-center justify-between">
-                  <div className="space-y-0.5 pr-4">
+                  <div className="space-y-1 pr-4">
                     <div className="text-xs font-bold text-white flex items-center space-x-2">
-                      <RefreshCw className="w-3.5 h-3.5 text-[#FA586A]" />
+                      <RefreshCw className="w-3.5 h-3.5 text-accent" />
                       <span>Scan Library on Startup</span>
                     </div>
-                    <p className="text-[11px] text-[#71717A] leading-relaxed">
+                    <p className="text-2xs text-textMuted leading-relaxed">
                       Check your music folder for new files and tag changes on launch.
                     </p>
                   </div>
@@ -460,16 +464,16 @@ export const SettingsView: React.FC = () => {
 
                 {/* Setting: Track change notifications */}
                 <div className="p-5 flex items-center justify-between">
-                  <div className="space-y-0.5 pr-4">
+                  <div className="space-y-1 pr-4">
                     <div className="text-xs font-bold text-white flex items-center space-x-2">
-                      <Bell className="w-3.5 h-3.5 text-[#FA586A]" />
+                      <Bell className="w-3.5 h-3.5 text-accent" />
                       <span>Track Change Notifications</span>
                     </div>
-                    <p className="text-[11px] text-[#71717A] leading-relaxed">
+                    <p className="text-2xs text-textMuted leading-relaxed">
                       Show a desktop alert with track title and artwork when songs change.
                     </p>
                     {settings.notificationsEnabled && (
-                      <div className="pt-1.5">
+                      <div className="pt-2">
                         <button
                           type="button"
                           onClick={async () => {
@@ -498,7 +502,7 @@ export const SettingsView: React.FC = () => {
                               });
                             }
                           }}
-                          className="px-2.5 py-1 bg-accent/10 hover:bg-accent/20 active:scale-95 text-xs text-accent rounded-lg border border-accent/20 font-semibold transition"
+                          className="px-3 py-1 bg-accent/10 hover:bg-accent/20 active:scale-95 text-xs text-accent rounded-lg border border-accent/20 font-semibold transition"
                         >
                           Send Test Notification
                         </button>
@@ -518,12 +522,12 @@ export const SettingsView: React.FC = () => {
 
                 {/* Setting: MPRIS D-Bus Linux Integration */}
                 <div className="p-5 flex items-center justify-between">
-                  <div className="space-y-0.5 pr-4">
+                  <div className="space-y-1 pr-4">
                     <div className="text-xs font-bold text-white flex items-center space-x-2">
-                      <Tv className="w-3.5 h-3.5 text-[#FA586A]" />
+                      <Tv className="w-3.5 h-3.5 text-accent" />
                       <span>Linux MPRIS Integration</span>
                     </div>
-                    <p className="text-[11px] text-[#71717A] leading-relaxed">
+                    <p className="text-2xs text-textMuted leading-relaxed">
                       Control playback through keyboard media keys, lock screen widgets, and desktop sound applets.
                     </p>
                   </div>
@@ -535,12 +539,12 @@ export const SettingsView: React.FC = () => {
 
                 {/* Setting: Auto-Resume Playback */}
                 <div className="p-5 flex items-center justify-between">
-                  <div className="space-y-0.5 pr-4">
+                  <div className="space-y-1 pr-4">
                     <div className="text-xs font-bold text-white flex items-center space-x-2">
-                      <Activity className="w-3.5 h-3.5 text-[#FA586A]" />
+                      <Activity className="w-3.5 h-3.5 text-accent" />
                       <span>Resume Playback on Launch</span>
                     </div>
-                    <p className="text-[11px] text-[#71717A] leading-relaxed">
+                    <p className="text-2xs text-textMuted leading-relaxed">
                       Restore your last played song and position when opening the app.
                     </p>
                   </div>
@@ -552,12 +556,12 @@ export const SettingsView: React.FC = () => {
 
                 {/* Setting: Minimize to tray */}
                 <div className="p-5 flex items-center justify-between">
-                  <div className="space-y-0.5 pr-4">
+                  <div className="space-y-1 pr-4">
                     <div className="text-xs font-bold text-white flex items-center space-x-2">
-                      <Shield className="w-3.5 h-3.5 text-[#FA586A]" />
+                      <Shield className="w-3.5 h-3.5 text-accent" />
                       <span>Minimize to System Tray</span>
                     </div>
-                    <p className="text-[11px] text-[#71717A] leading-relaxed">
+                    <p className="text-2xs text-textMuted leading-relaxed">
                       Keep audio playing in the background when closing the main window.
                     </p>
                   </div>
@@ -575,22 +579,22 @@ export const SettingsView: React.FC = () => {
             <div className="space-y-6 animate-fade-in max-w-3xl">
               <div>
                 <h2 className="text-base font-bold text-white">Audio & Playback</h2>
-                <p className="text-xs text-[#71717A] mt-0.5">
+                <p className="text-xs text-textMuted mt-1">
                   Volume settings, crossfade transitions, and loudness normalization.
                 </p>
               </div>
 
-              <div className="bg-[#16161A]/80 border border-white/[0.06] rounded-2xl divide-y divide-white/[0.06] shadow-xl overflow-hidden">
+              <div className="bg-surface/80 border border-white/[0.06] rounded-2xl divide-y divide-white/[0.06] shadow-xl overflow-hidden">
                 {/* Setting: Default Volume */}
                 <div className="p-5 space-y-3">
                   <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
+                    <div className="space-y-1">
                       <div className="text-xs font-bold text-white">Default Volume</div>
-                      <p className="text-[11px] text-[#71717A]">
+                      <p className="text-2xs text-textMuted">
                         Starting volume level when the app opens.
                       </p>
                     </div>
-                    <span className="font-mono text-xs text-white font-bold bg-white/[0.06] px-2.5 py-1 rounded-lg border border-white/[0.08]">
+                    <span className="font-mono text-xs text-white font-bold bg-white/[0.06] px-3 py-1 rounded-lg border border-white/[0.08]">
                       {Math.round(settings.defaultVolume * 100)}%
                     </span>
                   </div>
@@ -609,13 +613,13 @@ export const SettingsView: React.FC = () => {
                 {/* Setting: Volume Step Increment */}
                 <div className="p-5 space-y-3">
                   <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
+                    <div className="space-y-1">
                       <div className="text-xs font-bold text-white">Volume Step</div>
-                      <p className="text-[11px] text-[#71717A]">
+                      <p className="text-2xs text-textMuted">
                         Volume adjustment per scroll wheel step or arrow key press.
                       </p>
                     </div>
-                    <span className="font-mono text-xs text-white font-bold bg-white/[0.06] px-2.5 py-1 rounded-lg border border-white/[0.08]">
+                    <span className="font-mono text-xs text-white font-bold bg-white/[0.06] px-3 py-1 rounded-lg border border-white/[0.08]">
                       {Math.round(settings.volumeStep * 100)}%
                     </span>
                   </div>
@@ -634,13 +638,13 @@ export const SettingsView: React.FC = () => {
                 {/* Setting: Crossfade Duration */}
                 <div className="p-5 space-y-3">
                   <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
+                    <div className="space-y-1">
                       <div className="text-xs font-bold text-white">Crossfade</div>
-                      <p className="text-[11px] text-[#71717A]">
+                      <p className="text-2xs text-textMuted">
                         Fade time between consecutive songs. Set to 0s to cut directly.
                       </p>
                     </div>
-                    <span className="font-mono text-xs text-white font-bold bg-white/[0.06] px-2.5 py-1 rounded-lg border border-white/[0.08]">
+                    <span className="font-mono text-xs text-white font-bold bg-white/[0.06] px-3 py-1 rounded-lg border border-white/[0.08]">
                       {settings.crossfadeDurationMs === 0
                         ? "Off (0s)"
                         : `${(settings.crossfadeDurationMs / 1000).toFixed(1)}s`}
@@ -660,12 +664,12 @@ export const SettingsView: React.FC = () => {
 
                 {/* Setting: Gapless Playback */}
                 <div className="p-5 flex items-center justify-between">
-                  <div className="space-y-0.5 pr-4">
+                  <div className="space-y-1 pr-4">
                     <div className="text-xs font-bold text-white flex items-center space-x-2">
-                      <Music className="w-3.5 h-3.5 text-[#FA586A]" />
+                      <Music className="w-3.5 h-3.5 text-accent" />
                       <span>Gapless Playback</span>
                     </div>
-                    <p className="text-[11px] text-[#71717A] leading-relaxed">
+                    <p className="text-2xs text-textMuted leading-relaxed">
                       Preloads the upcoming audio stream to eliminate silence between tracks.
                     </p>
                   </div>
@@ -677,41 +681,30 @@ export const SettingsView: React.FC = () => {
 
                 {/* Setting: ReplayGain Normalization */}
                 <div className="p-5 flex items-center justify-between">
-                  <div className="space-y-0.5 pr-4">
+                  <div className="space-y-1 pr-4">
                     <div className="text-xs font-bold text-white flex items-center space-x-2">
-                      <Sliders className="w-3.5 h-3.5 text-[#FA586A]" />
+                      <Sliders className="w-3.5 h-3.5 text-accent" />
                       <span>ReplayGain Normalization</span>
                     </div>
-                    <p className="text-[11px] text-[#71717A] leading-relaxed">
+                    <p className="text-2xs text-textMuted leading-relaxed">
                       Balance track loudness automatically using embedded ReplayGain tags.
                     </p>
                   </div>
-                  <div className="flex items-center space-x-1 bg-[#121216] p-1 rounded-xl border border-white/[0.08]">
+                  <div className="flex items-center space-x-1 bg-deck p-1 rounded-xl border border-white/[0.08]">
                     {(["off", "track", "album"] as ReplayGainMode[]).map((mode) => (
                       <button
                         key={mode}
                         onClick={() => setSetting("replayGainMode", mode)}
                         className={`px-3 py-1 rounded-lg text-xs font-semibold capitalize transition ${
                           settings.replayGainMode === mode
-                            ? "bg-[#FA586A] text-white shadow-sm"
-                            : "text-[#71717A] hover:text-white"
+                            ? "bg-accent-fill text-white shadow-sm"
+                            : "text-textMuted hover:text-white"
                         }`}
                       >
                         {mode}
                       </button>
                     ))}
                   </div>
-                </div>
-
-                {/* Engine Diagnostic Info */}
-                <div className="p-5 bg-[#121216]/50 space-y-2">
-                  <div className="flex items-center space-x-2 text-xs font-bold text-white">
-                    <Cpu className="w-3.5 h-3.5 text-green-400" />
-                    <span>Native Audio Engine</span>
-                  </div>
-                  <p className="text-[11px] text-[#71717A] leading-relaxed">
-                    Rodio backend on CPAL with a 2048-sample ring buffer, streaming 32-bit float audio directly to your audio sink.
-                  </p>
                 </div>
               </div>
             </div>
@@ -722,7 +715,7 @@ export const SettingsView: React.FC = () => {
             <div className="space-y-6 animate-fade-in max-w-3xl">
               <div>
                 <h2 className="text-base font-bold text-white">Appearance</h2>
-                <p className="text-xs text-[#71717A] mt-0.5">
+                <p className="text-xs text-textMuted mt-1">
                   Theme selection, accent color, and layout density.
                 </p>
               </div>
@@ -730,11 +723,11 @@ export const SettingsView: React.FC = () => {
               {/* Theme Mode Selector Cards */}
               <div className="space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div className="space-y-0.5">
-                    <div className="text-xs font-bold text-white uppercase tracking-wider text-[#71717A]">
+                  <div className="space-y-1">
+                    <div className="text-xs font-bold text-white uppercase tracking-wider text-textMuted">
                       Theme Presets
                     </div>
-                    <p className="text-[11px] text-[#71717A]">
+                    <p className="text-2xs text-textMuted">
                       Presets synchronize canvas, surfaces, typography, and signature accent color.
                     </p>
                   </div>
@@ -743,7 +736,7 @@ export const SettingsView: React.FC = () => {
                       setCustomThemeToEdit(customTheme || null);
                       setIsCustomThemeModalOpen(true);
                     }}
-                    className="self-start sm:self-auto flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-white transition-all shadow-sm active:scale-95"
+                    className="self-start sm:self-auto flex items-center space-x-2 px-3 py-2 text-xs font-semibold rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-white transition-all shadow-sm active:scale-95"
                   >
                     <Palette className="w-3.5 h-3.5" />
                     <span>Theme Maker</span>
@@ -751,7 +744,7 @@ export const SettingsView: React.FC = () => {
                 </div>
 
                 {/* Category Filters */}
-                <div className="flex items-center space-x-1.5 overflow-x-auto pb-1">
+                <div className="flex items-center space-x-2 overflow-x-auto pb-1">
                   {["all", "Standard", "Atmospheric", "Catppuccin"].map((cat) => (
                     <button
                       key={cat}
@@ -759,7 +752,7 @@ export const SettingsView: React.FC = () => {
                       className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${
                         themeCategoryFilter === cat
                           ? "bg-white/[0.12] text-white shadow-sm"
-                          : "text-[#71717A] hover:text-white hover:bg-white/[0.04]"
+                          : "text-textMuted hover:text-white hover:bg-white/[0.04]"
                       }`}
                     >
                       {cat === "all" ? "All Presets" : cat}
@@ -785,7 +778,7 @@ export const SettingsView: React.FC = () => {
                             ? `0 0 0 2px ${accent}40, 0 8px 20px -6px ${accent}25`
                             : undefined,
                         }}
-                        className={`p-3.5 rounded-2xl border text-left transition-all relative flex flex-col justify-between min-h-[6.5rem] group ${
+                        className={`p-4 rounded-2xl border text-left transition-all relative flex flex-col justify-between min-h-[6.5rem] group ${
                           isSelected ? "" : "hover:brightness-110"
                         }`}
                       >
@@ -807,14 +800,14 @@ export const SettingsView: React.FC = () => {
                         </div>
 
                         <p
-                          className="text-[11px] leading-snug mt-1 mb-2 font-normal"
+                          className="text-2xs leading-snug mt-1 mb-2 font-normal"
                           style={{ color: theme.textMuted }}
                         >
                           {theme.desc}
                         </p>
 
                         {/* Theme palette mini preview dots */}
-                        <div className="flex items-center space-x-1.5 pt-0.5">
+                        <div className="flex items-center space-x-2 pt-1">
                           <div
                             className="w-3 h-3 rounded-full border border-black/10 shadow-inner"
                             style={{ backgroundColor: theme.bg }}
@@ -854,7 +847,7 @@ export const SettingsView: React.FC = () => {
                             ? `0 0 0 2px ${settings.accentColor}40, 0 8px 20px -6px ${settings.accentColor}25`
                             : undefined,
                       }}
-                      className={`p-3.5 rounded-2xl border text-left transition-all relative flex flex-col justify-between min-h-[6.5rem] group ${
+                      className={`p-4 rounded-2xl border text-left transition-all relative flex flex-col justify-between min-h-[6.5rem] group ${
                         settings.themeMode === "custom" ? "" : "hover:brightness-110"
                       }`}
                     >
@@ -890,7 +883,7 @@ export const SettingsView: React.FC = () => {
                         </div>
 
                         <p
-                          className="text-[11px] leading-snug mt-1 mb-2 font-normal"
+                          className="text-2xs leading-snug mt-1 mb-2 font-normal"
                           style={{ color: customTheme?.textMuted || "#71717A" }}
                         >
                           {customTheme
@@ -899,9 +892,9 @@ export const SettingsView: React.FC = () => {
                         </p>
                       </div>
 
-                      <div className="flex items-center justify-between pt-0.5">
+                      <div className="flex items-center justify-between pt-1">
                         {customTheme ? (
-                          <div className="flex items-center space-x-1.5">
+                          <div className="flex items-center space-x-2">
                             <div
                               className="w-3 h-3 rounded-full border border-black/10 shadow-inner"
                               style={{ backgroundColor: customTheme.bg }}
@@ -924,7 +917,7 @@ export const SettingsView: React.FC = () => {
                             />
                           </div>
                         ) : (
-                          <span className="text-[10px] text-[#71717A]">
+                          <span className="text-2xs text-textMuted">
                             No theme configured
                           </span>
                         )}
@@ -934,7 +927,7 @@ export const SettingsView: React.FC = () => {
                             setCustomThemeToEdit(customTheme || null);
                             setIsCustomThemeModalOpen(true);
                           }}
-                          className="text-[11px] font-semibold text-[#A1A1AA] hover:text-white underline underline-offset-2 ml-auto"
+                          className="text-2xs font-semibold text-textSecondary hover:text-white underline underline-offset-2 ml-auto"
                         >
                           {customTheme ? "Edit" : "Create"}
                         </button>
@@ -945,9 +938,9 @@ export const SettingsView: React.FC = () => {
 
                 {/* Saved Custom Themes Drawer / List (if any) */}
                 {savedCustomThemes && savedCustomThemes.length > 0 && (
-                  <div className="mt-3 p-4 rounded-xl bg-[#16161A]/60 border border-white/[0.06] space-y-3">
+                  <div className="mt-3 p-4 rounded-xl bg-surface/60 border border-white/[0.06] space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-semibold text-[#A1A1AA] uppercase tracking-wider">
+                      <span className="text-2xs font-semibold text-textSecondary uppercase tracking-wider">
                         Saved Custom Themes ({savedCustomThemes.length})
                       </span>
                       <button
@@ -955,7 +948,7 @@ export const SettingsView: React.FC = () => {
                           setCustomThemeToEdit(null);
                           setIsCustomThemeModalOpen(true);
                         }}
-                        className="text-[11px] font-semibold text-[#A1A1AA] hover:text-white flex items-center space-x-1"
+                        className="text-2xs font-semibold text-textSecondary hover:text-white flex items-center space-x-1"
                       >
                         <Plus className="w-3 h-3" />
                         <span>New Custom Theme</span>
@@ -970,14 +963,14 @@ export const SettingsView: React.FC = () => {
                         return (
                           <div
                             key={st.id}
-                            className={`p-2.5 rounded-lg border flex items-center justify-between transition-all ${
+                            className={`p-3 rounded-lg border flex items-center justify-between transition-all ${
                               isCurrent
                                 ? "bg-white/[0.08] border-white/20"
                                 : "bg-black/20 border-white/[0.04] hover:border-white/10"
                             }`}
                           >
                             <div
-                              className="flex items-center space-x-2.5 cursor-pointer flex-1 min-w-0"
+                              className="flex items-center space-x-3 cursor-pointer flex-1 min-w-0"
                               onClick={() => applyCustomTheme(st)}
                             >
                               <div className="flex items-center -space-x-1">
@@ -998,25 +991,25 @@ export const SettingsView: React.FC = () => {
                                 {st.name}
                               </span>
                               {isCurrent && (
-                                <span className="text-[10px] font-bold text-[#10B981]">
+                                <span className="text-2xs font-bold text-success">
                                   (Active)
                                 </span>
                               )}
                             </div>
 
-                            <div className="flex items-center space-x-1.5 ml-2">
+                            <div className="flex items-center space-x-2 ml-2">
                               <button
                                 onClick={() => {
                                   setCustomThemeToEdit(st);
                                   setIsCustomThemeModalOpen(true);
                                 }}
-                                className="px-2 py-0.5 text-[10px] font-medium text-[#A1A1AA] hover:text-white bg-white/[0.04] hover:bg-white/[0.08] rounded transition-colors"
+                                className="px-2 py-1 text-2xs font-medium text-textSecondary hover:text-white bg-white/[0.04] hover:bg-white/[0.08] rounded transition-colors"
                               >
                                 Edit
                               </button>
                               <button
                                 onClick={() => deleteCustomTheme(st.id)}
-                                className="p-1 text-[#71717A] hover:text-[#FF453A] rounded transition-colors"
+                                className="p-1 text-textMuted hover:text-danger rounded transition-colors"
                                 title="Delete"
                               >
                                 <Trash2 className="w-3 h-3" />
@@ -1031,26 +1024,70 @@ export const SettingsView: React.FC = () => {
               </div>
 
               {/* Accent Color Picker */}
-              <div className="bg-[#16161A]/80 border border-white/[0.06] rounded-2xl p-5 space-y-4 shadow-xl">
-                <div className="space-y-0.5">
+              <div className="bg-surface/80 border border-white/[0.06] rounded-2xl p-5 space-y-4 shadow-xl">
+                <div className="space-y-1">
                   <div className="text-xs font-bold text-white">Accent Color</div>
-                  <p className="text-[11px] text-[#71717A]">
+                  <p className="text-2xs text-textMuted">
                     Color used for active buttons, sliders, and selection highlights.
                   </p>
                 </div>
 
-                {/* Preset Palettes */}
+                {/* Gradient Accents */}
                 <div className="space-y-2">
-                  <div className="text-[10px] font-semibold text-[#71717A] uppercase tracking-wider">
-                    Presets
+                  <div className="text-2xs font-semibold text-textMuted uppercase tracking-wider">
+                    Gradient Accents
                   </div>
-                  <div className="flex flex-wrap gap-2.5 pt-0.5">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                    {GRADIENT_ACCENT_PRESETS.map((grad) => {
+                      const isSelected =
+                        settings.accentGradient === grad.gradient;
+                      return (
+                        <button
+                          key={grad.name}
+                          type="button"
+                          onClick={() => {
+                            setSetting("accentGradient", grad.gradient);
+                            setSetting("accentColor", grad.primary);
+                          }}
+                          className={`flex items-center space-x-3 p-2 rounded-xl transition-all border text-left ${
+                            isSelected
+                              ? "bg-white/[0.08] border-white/20 shadow-md ring-1 ring-white/20"
+                              : "bg-white/[0.02] border-white/[0.04] hover:bg-white/[0.06] hover:border-white/[0.08]"
+                          }`}
+                        >
+                          <div
+                            style={{ background: grad.gradient }}
+                            className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 shadow-sm"
+                          >
+                            {isSelected && <Check className="w-3.5 h-3.5 text-white drop-shadow" />}
+                          </div>
+                          <span className="text-2xs font-medium text-white/90 truncate">
+                            {grad.name}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Preset Palettes */}
+                <div className="space-y-2 pt-2 border-t border-white/[0.06]">
+                  <div className="text-2xs font-semibold text-textMuted uppercase tracking-wider">
+                    Solid Colors
+                  </div>
+                  <div className="flex flex-wrap gap-3 pt-1">
                     {ACCENT_PALETTE.map((color) => {
-                      const isSelected = (settings.accentColor || "#FA586A").toLowerCase() === color.value.toLowerCase();
+                      const isSelected =
+                        !settings.accentGradient &&
+                        (settings.accentColor || "#FA586A").toLowerCase() === color.value.toLowerCase();
                       return (
                         <button
                           key={color.value}
-                          onClick={() => setSetting("accentColor", color.value)}
+                          type="button"
+                          onClick={() => {
+                            setSetting("accentGradient", "");
+                            setSetting("accentColor", color.value);
+                          }}
                           style={{ backgroundColor: color.value }}
                           className={`w-8 h-8 rounded-full transition-all flex items-center justify-center shadow-md relative ${
                             isSelected
@@ -1069,22 +1106,28 @@ export const SettingsView: React.FC = () => {
                 {/* Custom Colors */}
                 <div className="space-y-2 pt-2 border-t border-white/[0.06]">
                   <div className="flex items-center justify-between">
-                    <div className="text-[10px] font-semibold text-[#71717A] uppercase tracking-wider">
+                    <div className="text-2xs font-semibold text-textMuted uppercase tracking-wider">
                       Custom Colors
                     </div>
-                    <span className="text-[11px] text-[#71717A] font-mono">
-                      Current: {settings.accentColor || "#FA586A"}
+                    <span className="text-2xs text-textMuted font-mono">
+                      Current: {settings.accentGradient ? "Gradient Active" : (settings.accentColor || "#FA586A")}
                     </span>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2.5 pt-0.5">
+                  <div className="flex flex-wrap items-center gap-3 pt-1">
                     {/* User saved custom colors */}
                     {(settings.customColors || []).map((color) => {
-                      const isSelected = (settings.accentColor || "#FA586A").toLowerCase() === color.toLowerCase();
+                      const isSelected =
+                        !settings.accentGradient &&
+                        (settings.accentColor || "#FA586A").toLowerCase() === color.toLowerCase();
                       return (
                         <div key={color} className="relative group">
                           <button
-                            onClick={() => setSetting("accentColor", color)}
+                            type="button"
+                            onClick={() => {
+                              setSetting("accentGradient", "");
+                              setSetting("accentColor", color);
+                            }}
                             style={{ backgroundColor: color }}
                             className={`w-8 h-8 rounded-full transition-all flex items-center justify-center shadow-md ${
                               isSelected
@@ -1100,7 +1143,7 @@ export const SettingsView: React.FC = () => {
                               e.stopPropagation();
                               removeCustomColor(color);
                             }}
-                            className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#18181B] text-[#A1A1AA] hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-[10px]"
+                            className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-surface text-textSecondary hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-2xs"
                             title="Remove color"
                           >
                             <X className="w-2.5 h-2.5" />
@@ -1148,9 +1191,9 @@ export const SettingsView: React.FC = () => {
                     />
 
                     {/* Hex input & quick add */}
-                    <div className="flex items-center space-x-1.5 ml-auto">
+                    <div className="flex items-center space-x-2 ml-auto">
                       <div className="relative flex items-center">
-                        <span className="absolute left-2.5 text-xs text-[#71717A] font-mono">#</span>
+                        <span className="absolute left-2.5 text-xs text-textMuted font-mono">#</span>
                         <input
                           type="text"
                           value={customHexInput.replace(/^#/, "")}
@@ -1160,7 +1203,7 @@ export const SettingsView: React.FC = () => {
                             setCustomHexInput(`#${clean}`);
                           }}
                           placeholder="FA586A"
-                          className="w-24 pl-6 pr-2 py-1 text-xs bg-[#0F0F13] border border-white/10 rounded-lg text-white font-mono focus:outline-none focus:border-white/30"
+                          className="w-24 pl-6 pr-2 py-1 text-xs bg-sidebar border border-white/10 rounded-lg text-white font-mono focus:outline-none focus:border-white/30"
                         />
                       </div>
                       <button
@@ -1171,7 +1214,7 @@ export const SettingsView: React.FC = () => {
                           }
                         }}
                         disabled={!/^#[0-9A-F]{6}$/i.test(customHexInput.trim())}
-                        className="px-2.5 py-1 text-xs font-semibold bg-white/10 hover:bg-white/20 disabled:opacity-40 disabled:hover:bg-white/10 text-white rounded-lg transition-all"
+                        className="px-3 py-1 text-xs font-semibold bg-white/10 hover:bg-white/20 disabled:opacity-40 disabled:hover:bg-white/10 text-white rounded-lg transition-all"
                       >
                         Add
                       </button>
@@ -1181,24 +1224,24 @@ export const SettingsView: React.FC = () => {
               </div>
 
               {/* Layout & Visual Density */}
-              <div className="bg-[#16161A]/80 border border-white/[0.06] rounded-2xl divide-y divide-white/[0.06] shadow-xl overflow-hidden">
+              <div className="bg-surface/80 border border-white/[0.06] rounded-2xl divide-y divide-white/[0.06] shadow-xl overflow-hidden">
                 {/* Album Grid Card Size */}
                 <div className="p-5 flex items-center justify-between">
-                  <div className="space-y-0.5 pr-4">
+                  <div className="space-y-1 pr-4">
                     <div className="text-xs font-bold text-white">Album Grid Size</div>
-                    <p className="text-[11px] text-[#71717A]">
+                    <p className="text-2xs text-textMuted">
                       Card dimension scaling in album and artist views.
                     </p>
                   </div>
-                  <div className="flex items-center space-x-1 bg-[#121216] p-1 rounded-xl border border-white/[0.08]">
+                  <div className="flex items-center space-x-1 bg-deck p-1 rounded-xl border border-white/[0.08]">
                     {(["compact", "medium", "spacious"] as AlbumGridSize[]).map((size) => (
                       <button
                         key={size}
                         onClick={() => setSetting("albumGridSize", size)}
                         className={`px-3 py-1 rounded-lg text-xs font-semibold capitalize transition ${
                           settings.albumGridSize === size
-                            ? "bg-[#FA586A] text-white shadow-sm"
-                            : "text-[#71717A] hover:text-white"
+                            ? "bg-accent-fill text-white shadow-sm"
+                            : "text-textMuted hover:text-white"
                         }`}
                       >
                         {size}
@@ -1209,21 +1252,21 @@ export const SettingsView: React.FC = () => {
 
                 {/* Track Row Density */}
                 <div className="p-5 flex items-center justify-between">
-                  <div className="space-y-0.5 pr-4">
+                  <div className="space-y-1 pr-4">
                     <div className="text-xs font-bold text-white">Track List Density</div>
-                    <p className="text-[11px] text-[#71717A]">
+                    <p className="text-2xs text-textMuted">
                       Controls vertical spacing in track tables.
                     </p>
                   </div>
-                  <div className="flex items-center space-x-1 bg-[#121216] p-1 rounded-xl border border-white/[0.08]">
+                  <div className="flex items-center space-x-1 bg-deck p-1 rounded-xl border border-white/[0.08]">
                     {(["comfortable", "compact"] as RowDensity[]).map((density) => (
                       <button
                         key={density}
                         onClick={() => setSetting("rowDensity", density)}
                         className={`px-3 py-1 rounded-lg text-xs font-semibold capitalize transition ${
                           settings.rowDensity === density
-                            ? "bg-[#FA586A] text-white shadow-sm"
-                            : "text-[#71717A] hover:text-white"
+                            ? "bg-accent-fill text-white shadow-sm"
+                            : "text-textMuted hover:text-white"
                         }`}
                       >
                         {density}
@@ -1234,12 +1277,12 @@ export const SettingsView: React.FC = () => {
 
                 {/* Waveform Visualizer Toggle */}
                 <div className="p-5 flex items-center justify-between">
-                  <div className="space-y-0.5 pr-4">
+                  <div className="space-y-1 pr-4">
                     <div className="text-xs font-bold text-white flex items-center space-x-2">
-                      <Activity className="w-3.5 h-3.5 text-[#FA586A]" />
+                      <Activity className="w-3.5 h-3.5 text-accent" />
                       <span>Playing Waveform Animation</span>
                     </div>
-                    <p className="text-[11px] text-[#71717A]">
+                    <p className="text-2xs text-textMuted">
                       Show small animated waveform bars next to playing songs.
                     </p>
                   </div>
@@ -1251,12 +1294,12 @@ export const SettingsView: React.FC = () => {
 
                 {/* Smooth Lyrics Scrolling */}
                 <div className="p-5 flex items-center justify-between">
-                  <div className="space-y-0.5 pr-4">
+                  <div className="space-y-1 pr-4">
                     <div className="text-xs font-bold text-white flex items-center space-x-2">
-                      <Music className="w-3.5 h-3.5 text-[#FA586A]" />
+                      <Music className="w-3.5 h-3.5 text-accent" />
                       <span>Smooth Lyrics Auto-Scroll</span>
                     </div>
-                    <p className="text-[11px] text-[#71717A]">
+                    <p className="text-2xs text-textMuted">
                       Center the active line smoothly as songs progress in fullscreen.
                     </p>
                   </div>
@@ -1268,12 +1311,12 @@ export const SettingsView: React.FC = () => {
 
                 {/* Interface Gradients */}
                 <div className="p-5 flex items-center justify-between">
-                  <div className="space-y-0.5 pr-4">
+                  <div className="space-y-1 pr-4">
                     <div className="text-xs font-bold text-white flex items-center space-x-2">
                       <Sparkles className="w-3.5 h-3.5 text-accent" />
                       <span>Interface Gradients</span>
                     </div>
-                    <p className="text-[11px] text-[#71717A]">
+                    <p className="text-2xs text-textMuted">
                       Enable subtle surface lighting and hover washes. When off, all surfaces stay solid.
                     </p>
                   </div>
@@ -1285,12 +1328,12 @@ export const SettingsView: React.FC = () => {
 
                 {/* Simplify Low Resource Mode */}
                 <div className="p-5 flex items-center justify-between">
-                  <div className="space-y-0.5 pr-4">
+                  <div className="space-y-1 pr-4">
                     <div className="text-xs font-bold text-white flex items-center space-x-2">
-                      <Zap className="w-3.5 h-3.5 text-[#00D2D3]" />
+                      <Zap className="w-3.5 h-3.5 text-warning" />
                       <span>Low-Resource Mode</span>
                     </div>
-                    <p className="text-[11px] text-[#71717A]">
+                    <p className="text-2xs text-textMuted">
                       Disables glass blur and transition effects for better battery life or slower GPUs.
                     </p>
                   </div>
@@ -1308,12 +1351,12 @@ export const SettingsView: React.FC = () => {
             <div className="space-y-6 animate-fade-in max-w-3xl">
               <div>
                 <h2 className="text-base font-bold text-white">Keyboard Shortcuts</h2>
-                <p className="text-xs text-[#71717A] mt-0.5">
+                <p className="text-xs text-textMuted mt-1">
                   Hotkeys for playback, search, and window navigation.
                 </p>
               </div>
 
-              <div className="bg-[#16161A]/80 border border-white/[0.06] rounded-2xl divide-y divide-white/[0.06] shadow-xl overflow-hidden">
+              <div className="bg-surface/80 border border-white/[0.06] rounded-2xl divide-y divide-white/[0.06] shadow-xl overflow-hidden">
                 {[
                   { label: "Play / Pause", key: settings.keybindings?.togglePlay || "Space", desc: "Toggle playback" },
                   { label: "Next Track", key: settings.keybindings?.nextTrack || "Ctrl+Right", desc: "Skip to next song in queue" },
@@ -1330,9 +1373,9 @@ export const SettingsView: React.FC = () => {
                   <div key={idx} className="p-4 flex items-center justify-between hover:bg-white/[0.02] transition">
                     <div>
                       <div className="text-xs font-bold text-white">{item.label}</div>
-                      <p className="text-[11px] text-[#71717A]">{item.desc}</p>
+                      <p className="text-2xs text-textMuted">{item.desc}</p>
                     </div>
-                    <kbd className="px-2.5 py-1 bg-white/[0.08] border border-white/[0.12] rounded-lg font-mono text-xs text-white font-semibold shadow-inner">
+                    <kbd className="px-3 py-1 bg-white/[0.08] border border-white/[0.12] rounded-lg font-mono text-xs text-white font-semibold shadow-inner">
                       {formatKeyCombo(item.key)}
                     </kbd>
                   </div>
@@ -1346,17 +1389,17 @@ export const SettingsView: React.FC = () => {
             <div className="space-y-6 animate-fade-in max-w-3xl">
               <div>
                 <h2 className="text-base font-bold text-white">Library & Storage</h2>
-                <p className="text-xs text-[#71717A]">
+                <p className="text-xs text-textMuted">
                   Folder locations, database indexing, and artwork cache maintenance.
                 </p>
               </div>
 
               {/* Maintenance Callout Warning */}
-              <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex items-start space-x-3 text-xs">
-                <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+              <div className="bg-warning/10 border border-warning/30 rounded-2xl p-4 flex items-start space-x-3 text-xs">
+                <AlertTriangle className="w-5 h-5 text-warning flex-shrink-0 mt-1" />
                 <div className="space-y-1">
-                  <p className="font-bold text-amber-300">Note on tag edits:</p>
-                  <p className="text-amber-200/80 leading-relaxed text-[11px]">
+                  <p className="font-bold text-warning">Note on tag edits:</p>
+                  <p className="text-warning/80 leading-relaxed text-2xs">
                     Rebuilding clears database caches and rescans all audio files directly from disk.
                     <strong> If you edited metadata without writing changes back to the audio file tags (ID3/FLAC), those changes will be replaced by what is currently on disk.</strong>
                   </p>
@@ -1365,49 +1408,86 @@ export const SettingsView: React.FC = () => {
 
               {/* Storage Info Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="p-4 bg-[#16161A]/80 border border-white/[0.06] rounded-2xl space-y-1 shadow-md">
-                  <p className="text-[10px] font-bold text-[#71717A] uppercase tracking-wider">
+                <div className="p-4 bg-surface/80 border border-white/[0.06] rounded-2xl space-y-1 shadow-md">
+                  <p className="text-2xs font-bold text-textMuted uppercase tracking-wider">
                     Music Folder
                   </p>
                   <p className="font-mono text-white text-xs select-all truncate" title={settings.managedDirectory || undefined}>
                     {settings.managedDirectory || "~/.local/share/wavery/library"}
                   </p>
-                  <p className="text-[11px] text-[#71717A] pt-1">
+                  <p className="text-2xs text-textMuted pt-1">
                     {tracks.length} songs in {albums.length} albums, {artists.length} artists.
                   </p>
                 </div>
 
-                <div className="p-4 bg-[#16161A]/80 border border-white/[0.06] rounded-2xl space-y-1 shadow-md">
-                  <p className="text-[10px] font-bold text-[#71717A] uppercase tracking-wider">
+                <div className="p-4 bg-surface/80 border border-white/[0.06] rounded-2xl space-y-1 shadow-md">
+                  <p className="text-2xs font-bold text-textMuted uppercase tracking-wider">
                     Database File
                   </p>
                   <p className="font-mono text-white text-xs select-all truncate" title={settings.databasePath || undefined}>
                     {settings.databasePath || "~/.local/share/wavery/library.db"}
                   </p>
-                  <p className="text-[11px] text-[#71717A] pt-1">
+                  <p className="text-2xs text-textMuted pt-1">
                     SQLite WAL mode with FTS5 search index.
                   </p>
                 </div>
               </div>
 
-              {/* Protected Artists Management Card */}
-              <div className="p-5 bg-[#16161A]/80 border border-white/[0.06] rounded-2xl space-y-4 shadow-xl">
+              {/* Online Metadata & Lyrics Mass Fill Card */}
+              <div className="p-5 bg-surface/80 border border-white/[0.06] rounded-2xl space-y-4 shadow-xl">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-center space-x-2.5">
-                    <div className="w-8 h-8 rounded-xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center flex-shrink-0 text-[#FA586A]">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center flex-shrink-0 text-accent">
+                      <Sparkles className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-xs font-bold text-white">Online Metadata & Lyrics Enrichment</h3>
+                      <p className="text-2xs text-textMuted mt-1">
+                        Batch enrich track tags, high-res artwork, release year, genre, and time-synced lyrics from Apple Music & LRCLIB.
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => useEnrichmentStore.getState().openModal()}
+                    className="inline-flex items-center space-x-2 px-4 py-2 rounded-xl bg-accent-fill hover:bg-accentHover active:scale-95 text-xs font-semibold text-white shadow-lg shadow-accent/20 transition flex-shrink-0 self-start sm:self-auto"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Launch Mass Fill</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div className="px-4 py-2 rounded-xl bg-white/[0.02] border border-white/[0.04] text-2xs flex items-center justify-between">
+                    <span className="text-textSecondary">Missing Lyrics</span>
+                    <span className="font-mono font-bold text-accent">{missingLyricsCount} tracks</span>
+                  </div>
+                  <div className="px-4 py-2 rounded-xl bg-white/[0.02] border border-white/[0.04] text-2xs flex items-center justify-between">
+                    <span className="text-textSecondary">Missing Release Year</span>
+                    <span className="font-mono font-bold text-textSecondary">{missingYearCount} tracks</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Protected Artists Management Card */}
+              <div className="p-5 bg-surface/80 border border-white/[0.06] rounded-2xl space-y-4 shadow-xl">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 rounded-xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center flex-shrink-0 text-accent">
                       <Shield className="w-4 h-4" />
                     </div>
                     <div>
                       <div className="flex items-center space-x-2">
                         <h3 className="text-xs font-bold text-white">Protected Artist Names</h3>
-                        <span className="px-2 py-0.5 rounded-full bg-white/[0.06] border border-white/[0.08] text-[10px] font-semibold text-[#A1A1AA]">
+                        <span className="px-2 py-1 rounded-full bg-white/[0.06] border border-white/[0.08] text-2xs font-semibold text-textSecondary">
                           {filteredProtectedArtists.length}{" "}
                           {filteredProtectedArtists.length === protectedArtists.length
                             ? "artists"
                             : `of ${protectedArtists.length}`}
                         </span>
                       </div>
-                      <p className="text-[11px] text-[#71717A] mt-0.5">
+                      <p className="text-2xs text-textMuted mt-1">
                         Artist names containing commas, ampersands, or slashes that should never be split into separate artists.
                       </p>
                     </div>
@@ -1419,10 +1499,10 @@ export const SettingsView: React.FC = () => {
                       resetProtectedArtists();
                       setProtectedArtistSearch("");
                     }}
-                    className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] active:scale-95 text-xs text-[#A1A1AA] hover:text-white border border-white/[0.08] transition flex-shrink-0 self-start sm:self-auto"
+                    className="inline-flex items-center space-x-2 px-3 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] active:scale-95 text-xs text-textSecondary hover:text-white border border-white/[0.08] transition flex-shrink-0 self-start sm:self-auto"
                     title="Restore default list of protected artists"
                   >
-                    <RotateCcw className="w-3 h-3 text-[#71717A]" />
+                    <RotateCcw className="w-3 h-3 text-textMuted" />
                     <span>Reset Defaults</span>
                   </button>
                 </div>
@@ -1443,12 +1523,12 @@ export const SettingsView: React.FC = () => {
                     value={newProtectedArtistInput}
                     onChange={(e) => setNewProtectedArtistInput(e.target.value)}
                     placeholder="Add protected artist (e.g. Tyler, The Creator or Earth, Wind & Fire)..."
-                    className="flex-1 bg-[#121216] border border-white/[0.08] focus:border-[#FA586A]/60 rounded-xl px-3.5 py-2 text-xs text-white placeholder-[#71717A] focus:outline-none focus:ring-1 focus:ring-[#FA586A]/30 transition"
+                    className="flex-1 bg-deck border border-white/[0.08] focus:border-accent/60 rounded-xl px-4 py-2 text-xs text-white placeholder-textMuted focus:outline-none focus:ring-1 focus:ring-accent/30 transition"
                   />
                   <button
                     type="submit"
                     disabled={!newProtectedArtistInput.trim()}
-                    className="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-[#FA586A] hover:bg-[#FA586A]/90 active:scale-95 text-white rounded-xl text-xs font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed shadow-md shadow-[#FA586A]/20"
+                    className="inline-flex items-center space-x-2 px-4 py-2 bg-accent-fill hover:bg-accent/90 active:scale-95 text-white rounded-xl text-xs font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed shadow-md shadow-accent/20"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Add Artist</span>
@@ -1458,19 +1538,19 @@ export const SettingsView: React.FC = () => {
                 {/* Filter Search Input (shown when list > 6) */}
                 {protectedArtists.length > 6 && (
                   <div className="relative">
-                    <Search className="w-3.5 h-3.5 text-[#71717A] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <Search className="w-3.5 h-3.5 text-textMuted absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                     <input
                       type="text"
                       value={protectedArtistSearch}
                       onChange={(e) => setProtectedArtistSearch(e.target.value)}
                       placeholder="Search protected artists list..."
-                      className="w-full bg-[#121216]/60 border border-white/[0.06] focus:border-white/[0.15] rounded-xl pl-8 pr-8 py-1.5 text-xs text-white placeholder-[#71717A] focus:outline-none transition"
+                      className="w-full bg-deck/60 border border-white/[0.06] focus:border-white/[0.15] rounded-xl pl-8 pr-8 py-2 text-xs text-white placeholder-textMuted focus:outline-none transition"
                     />
                     {protectedArtistSearch && (
                       <button
                         type="button"
                         onClick={() => setProtectedArtistSearch("")}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#71717A] hover:text-white transition"
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-textMuted hover:text-white transition"
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
@@ -1479,19 +1559,19 @@ export const SettingsView: React.FC = () => {
                 )}
 
                 {/* Protected Artists Chips Container */}
-                <div className="p-3 bg-[#121216] border border-white/[0.06] rounded-xl max-h-56 overflow-y-auto custom-scrollbar">
+                <div className="p-3 bg-deck border border-white/[0.06] rounded-xl max-h-56 overflow-y-auto custom-scrollbar">
                   {filteredProtectedArtists.length > 0 ? (
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="flex flex-wrap gap-2">
                       {filteredProtectedArtists.map((artist) => (
                         <span
                           key={artist}
-                          className="inline-flex items-center space-x-1.5 px-2.5 py-1 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] rounded-lg text-xs text-white/90 group transition"
+                          className="inline-flex items-center space-x-2 px-3 py-1 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] rounded-lg text-xs text-white/90 group transition"
                         >
                           <span className="select-text">{artist}</span>
                           <button
                             type="button"
                             onClick={() => removeProtectedArtist(artist)}
-                            className="text-[#71717A] hover:text-red-400 p-0.5 rounded transition"
+                            className="text-textMuted hover:text-danger p-1 rounded transition"
                             title={`Remove "${artist}" from protected list`}
                           >
                             <X className="w-3 h-3" />
@@ -1500,7 +1580,7 @@ export const SettingsView: React.FC = () => {
                       ))}
                     </div>
                   ) : (
-                    <div className="py-6 text-center text-xs text-[#71717A]">
+                    <div className="py-6 text-center text-xs text-textMuted">
                       {protectedArtistSearch
                         ? `No protected artists matching "${protectedArtistSearch}"`
                         : "No protected artists configured. Click 'Reset Defaults' to restore."}
@@ -1512,20 +1592,20 @@ export const SettingsView: React.FC = () => {
               {/* Maintenance Actions Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {/* Action 1: Rebuild */}
-                <div className="p-4 bg-[#16161A]/80 border border-white/[0.06] rounded-2xl flex flex-col justify-between space-y-3 shadow-md">
+                <div className="p-4 bg-surface/80 border border-white/[0.06] rounded-2xl flex flex-col justify-between space-y-3 shadow-md">
                   <div>
-                    <h3 className="text-xs font-bold text-white flex items-center gap-1.5">
-                      <RefreshCw className="w-3.5 h-3.5 text-[#FA586A]" />
+                    <h3 className="text-xs font-bold text-white flex items-center gap-2">
+                      <RefreshCw className="w-3.5 h-3.5 text-accent" />
                       <span>Rebuild Database</span>
                     </h3>
-                    <p className="text-[11px] text-[#71717A] mt-1 leading-relaxed">
+                    <p className="text-2xs text-textMuted mt-1 leading-relaxed">
                       Clears SQLite tables and indexes your music folder from scratch.
                     </p>
                   </div>
                   <button
                     onClick={() => setShowConfirmModal(true)}
                     disabled={isRebuilding}
-                    className="w-full inline-flex items-center justify-center space-x-2 px-3 py-2 bg-[#FA586A] hover:bg-[#E04859] active:scale-95 text-white rounded-xl text-xs font-bold transition shadow-md shadow-[#FA586A]/20 disabled:opacity-50"
+                    className="w-full inline-flex items-center justify-center space-x-2 px-3 py-2 bg-accent-fill hover:bg-accentHover active:scale-95 text-white rounded-xl text-xs font-bold transition shadow-md shadow-accent/20 disabled:opacity-50"
                   >
                     {isRebuilding ? (
                       <>
@@ -1542,13 +1622,13 @@ export const SettingsView: React.FC = () => {
                 </div>
 
                 {/* Action 2: Vacuum & Optimize */}
-                <div className="p-4 bg-[#16161A]/80 border border-white/[0.06] rounded-2xl flex flex-col justify-between space-y-3 shadow-md">
+                <div className="p-4 bg-surface/80 border border-white/[0.06] rounded-2xl flex flex-col justify-between space-y-3 shadow-md">
                   <div>
-                    <h3 className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <h3 className="text-xs font-bold text-white flex items-center gap-2">
                       <Database className="w-3.5 h-3.5 text-white" />
                       <span>Optimize SQLite</span>
                     </h3>
-                    <p className="text-[11px] text-[#71717A] mt-1 leading-relaxed">
+                    <p className="text-2xs text-textMuted mt-1 leading-relaxed">
                       Reclaims unused disk space, checkpoints WAL log, and cleans search tables.
                     </p>
                   </div>
@@ -1564,7 +1644,7 @@ export const SettingsView: React.FC = () => {
                       </>
                     ) : (
                       <>
-                        <RefreshCw className="w-3.5 h-3.5 text-[#FA586A]" />
+                        <RefreshCw className="w-3.5 h-3.5 text-accent" />
                         <span>Vacuum Database</span>
                       </>
                     )}
@@ -1572,13 +1652,13 @@ export const SettingsView: React.FC = () => {
                 </div>
 
                 {/* Action 3: Clear Artwork Cache */}
-                <div className="p-4 bg-[#16161A]/80 border border-white/[0.06] rounded-2xl flex flex-col justify-between space-y-3 shadow-md">
+                <div className="p-4 bg-surface/80 border border-white/[0.06] rounded-2xl flex flex-col justify-between space-y-3 shadow-md">
                   <div>
-                    <h3 className="text-xs font-bold text-white flex items-center gap-1.5">
-                      <Trash2 className="w-3.5 h-3.5 text-[#FF453A]" />
+                    <h3 className="text-xs font-bold text-white flex items-center gap-2">
+                      <Trash2 className="w-3.5 h-3.5 text-danger" />
                       <span>Purge Art Cache</span>
                     </h3>
-                    <p className="text-[11px] text-[#71717A] mt-1 leading-relaxed">
+                    <p className="text-2xs text-textMuted mt-1 leading-relaxed">
                       Deletes cached covers so they get extracted fresh from audio files.
                     </p>
                   </div>
@@ -1594,7 +1674,7 @@ export const SettingsView: React.FC = () => {
                       </>
                     ) : (
                       <>
-                        <Trash2 className="w-3.5 h-3.5 text-[#FF453A]" />
+                        <Trash2 className="w-3.5 h-3.5 text-danger" />
                         <span>Purge Cache</span>
                       </>
                     )}
@@ -1609,21 +1689,21 @@ export const SettingsView: React.FC = () => {
             <div className="space-y-6 animate-fade-in max-w-3xl">
               <div>
                 <h2 className="text-base font-bold text-white">Local Web Server</h2>
-                <p className="text-xs text-[#71717A] mt-0.5">
+                <p className="text-xs text-textMuted mt-1">
                   Stream audio and load the web client through the built-in HTTP server.
                 </p>
               </div>
 
-              <div className="bg-[#16161A]/80 border border-white/[0.06] rounded-2xl divide-y divide-white/[0.06] shadow-xl overflow-hidden">
+              <div className="bg-surface/80 border border-white/[0.06] rounded-2xl divide-y divide-white/[0.06] shadow-xl overflow-hidden">
                 <div className="p-5 flex items-center justify-between">
                   <div>
                     <div className="text-xs font-bold text-white">Server Address</div>
-                    <p className="text-[11px] text-[#71717A] mt-0.5">
+                    <p className="text-2xs text-textMuted mt-1">
                       Local endpoint for web playback and cover art streaming.
                     </p>
                   </div>
-                  <div className="flex items-center space-x-2 bg-white/[0.06] px-3 py-1.5 rounded-xl border border-white/[0.08]">
-                    <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                  <div className="flex items-center space-x-2 bg-white/[0.06] px-3 py-2 rounded-xl border border-white/[0.08]">
+                    <span className="w-2 h-2 rounded-full bg-success animate-pulse" />
                     <span className="font-mono text-xs text-white font-bold">http://127.0.0.1:4242</span>
                   </div>
                 </div>
@@ -1631,19 +1711,19 @@ export const SettingsView: React.FC = () => {
                 <div className="p-5 flex items-center justify-between">
                   <div>
                     <div className="text-xs font-bold text-white">HTTP Range Requests</div>
-                    <p className="text-[11px] text-[#71717A] mt-0.5">
+                    <p className="text-2xs text-textMuted mt-1">
                       Supports partial content requests (HTTP 206) for instant seeking in browsers.
                     </p>
                   </div>
-                  <span className="px-2.5 py-1 bg-green-500/10 text-green-400 border border-green-500/20 text-[11px] font-bold rounded-lg">
+                  <span className="px-3 py-1 bg-success/10 text-success border border-success/20 text-2xs font-bold rounded-lg">
                     Active (64KB Chunks)
                   </span>
                 </div>
 
                 <div className="p-5 flex items-center justify-between">
-                  <div className="space-y-0.5 pr-4">
+                  <div className="space-y-1 pr-4">
                     <div className="text-xs font-bold text-white">Browser Client</div>
-                    <p className="text-[11px] text-[#71717A] mt-0.5">
+                    <p className="text-2xs text-textMuted mt-1">
                       Open Wavery directly in your default web browser.
                     </p>
                   </div>
@@ -1653,7 +1733,7 @@ export const SettingsView: React.FC = () => {
                       onClick={() => {
                         usePlayerStore.getState().switchToWeb();
                       }}
-                      className="px-3 py-1.5 bg-[#FA586A]/20 hover:bg-[#FA586A]/30 text-[#FA586A] border border-[#FA586A]/30 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition"
+                      className="px-3 py-2 bg-accent/20 hover:bg-accent/30 text-accent border border-accent/30 rounded-xl text-xs font-bold flex items-center space-x-2 transition"
                       title="Open in default browser"
                     >
                       <span>Open Browser</span>
@@ -1669,174 +1749,132 @@ export const SettingsView: React.FC = () => {
           {activeTab === "integrations" && (
             <div className="space-y-6 animate-fade-in max-w-3xl">
               <div>
-                <h2 className="text-base font-bold text-white">Integrations</h2>
-                <p className="text-xs text-[#71717A] mt-0.5">
-                  Connect Wavery to OS media controls, Discord, and other external services.
+                <h2 className="text-base font-bold text-white tracking-tight">Integrations</h2>
+                <p className="text-xs text-textSecondary mt-1">
+                  System media controls and connected desktop services.
                 </p>
               </div>
 
-              {/* ── Media Session API ── */}
-              <div>
-                <div className="flex items-center space-x-2 mb-3">
-                  <MonitorSpeaker className="w-3.5 h-3.5 text-[#FA586A]" />
-                  <h3 className="text-xs font-bold text-white uppercase tracking-wider">Browser & OS Media Controls</h3>
-                </div>
-                <div className="bg-[#16161A]/80 border border-white/[0.06] rounded-2xl divide-y divide-white/[0.06] shadow-xl overflow-hidden">
-                  <div className="p-5 flex items-start justify-between gap-4">
-                    <div className="space-y-1 min-w-0">
-                      <div className="text-xs font-bold text-white flex items-center space-x-2">
-                        <MonitorSpeaker className="w-3.5 h-3.5 text-[#FA586A] flex-shrink-0" />
-                        <span>Browser Media Controls</span>
-                        {/* Live status badge */}
-                        <span className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ml-1 ${
-                          isMediaSessionSupported()
-                            ? "bg-green-500/10 border-green-500/30 text-green-400"
-                            : "bg-[#3F3F46]/60 border-white/[0.08] text-[#71717A]"
-                        }`}>
-                          {isMediaSessionSupported() ? (
-                            <><Wifi className="w-2.5 h-2.5" /><span>Supported</span></>
-                          ) : (
-                            <><WifiOff className="w-2.5 h-2.5" /><span>Unsupported</span></>
-                          )}
+              {/* ── System Media Controls ── */}
+              <div className="bg-surface/80 border border-white/[0.06] rounded-2xl p-5 shadow-sm space-y-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center space-x-4 min-w-0">
+                    <div className="w-9 h-9 rounded-xl bg-white/[0.06] border border-white/[0.08] flex items-center justify-center text-white/90 flex-shrink-0">
+                      <MonitorSpeaker className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs font-semibold text-white">System Media Controls</span>
+                        <span
+                          className={`inline-flex items-center px-2 py-1 rounded-full text-2xs font-medium border ${
+                            isMediaSessionSupported()
+                              ? "bg-success/10 text-success border-success/20"
+                              : "bg-white/[0.05] text-textSecondary border-white/[0.08]"
+                          }`}
+                        >
+                          {isMediaSessionSupported() ? "Supported" : "Unsupported"}
                         </span>
                       </div>
-                      <p className="text-[11px] text-[#71717A] leading-relaxed">
-                        Show the current track in your browser's media panel, OS lock screen,
-                        notification shade, and hardware media key controls (⏮ ⏯ ⏭).
-                        Works in Chrome, Firefox, Safari, Edge — on Windows, macOS, Linux, Android, and iOS.
+                      <p className="text-2xs text-textSecondary mt-1 leading-relaxed">
+                        Sync playback, metadata, and hardware media keys with your OS media overlay and lock screen.
                       </p>
-                      {!isMediaSessionSupported() && (
-                        <p className="text-[11px] text-amber-400/80 mt-1">
-                          Your browser does not support the Media Session API. Try Chrome 73+, Firefox 82+, or Safari 15+.
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex-shrink-0">
-                      <ToggleSwitch
-                        checked={settings.enableMediaSession}
-                        onChange={(val) => setSetting("enableMediaSession", val)}
-                      />
                     </div>
                   </div>
-
-                  {/* Info row */}
-                  <div className="px-5 py-3 bg-[#FA586A]/5 border-t border-[#FA586A]/10">
-                    <p className="text-[11px] text-[#A1A1AA] leading-relaxed">
-                      <span className="text-[#FA586A] font-semibold">How it works:</span>{" "}
-                      Wavery pushes track metadata and artwork into the browser's native media overlay
-                      on every status update. No extensions or installs required.
-                    </p>
+                  <div className="flex-shrink-0">
+                    <ToggleSwitch
+                      checked={settings.enableMediaSession}
+                      onChange={(val) => setSetting("enableMediaSession", val)}
+                    />
                   </div>
                 </div>
               </div>
 
               {/* ── Discord Rich Presence ── */}
-              <div>
-                <div className="flex items-center space-x-2 mb-3">
-                  <MessageSquare className="w-3.5 h-3.5 text-[#5865F2]" />
-                  <h3 className="text-xs font-bold text-white uppercase tracking-wider">Discord Rich Presence</h3>
-                </div>
-                <div className="bg-[#16161A]/80 border border-white/[0.06] rounded-2xl divide-y divide-white/[0.06] shadow-xl overflow-hidden">
-                  <div className="p-5 flex items-start justify-between gap-4">
-                    <div className="space-y-1 min-w-0">
-                      <div className="text-xs font-bold text-white flex items-center flex-wrap gap-2">
-                        <MessageSquare className="w-3.5 h-3.5 text-[#5865F2] flex-shrink-0" />
-                        <span>Show Currently Playing in Discord</span>
-                        {/* Live Discord connection badge */}
+              <div className="bg-surface/80 border border-white/[0.06] rounded-2xl p-5 shadow-sm space-y-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center space-x-4 min-w-0">
+                    <div className="w-9 h-9 rounded-xl bg-[#5865F2]/15 border border-[#5865F2]/25 flex items-center justify-center text-[#5865F2] flex-shrink-0">
+                      <MessageSquare className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs font-semibold text-white">Discord Rich Presence</span>
                         {discordStatusLoading && !discordStatus ? (
-                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-[#3F3F46]/60 border-white/[0.08] text-[#71717A]">
+                          <span className="inline-flex items-center space-x-1 px-2 py-1 rounded-full text-2xs font-medium border bg-white/[0.05] border-white/[0.08] text-textSecondary">
                             <Loader2 className="w-2.5 h-2.5 animate-spin" />
-                            <span>Checking…</span>
+                            <span>Checking</span>
                           </span>
-                        ) : discordStatus === null ? (
-                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-[#3F3F46]/60 border-white/[0.08] text-[#71717A]">
-                            <WifiOff className="w-2.5 h-2.5" />
-                            <span>Server unreachable</span>
-                          </span>
-                        ) : !discordStatus.discord_running ? (
-                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-amber-500/10 border-amber-500/30 text-amber-400">
-                            <AlertTriangle className="w-2.5 h-2.5" />
-                            <span>Discord not running</span>
-                          </span>
-                        ) : discordStatus.connected ? (
-                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-green-500/10 border-green-500/30 text-green-400">
-                            <Wifi className="w-2.5 h-2.5" />
+                        ) : discordStatus?.connected ? (
+                          <span className="inline-flex items-center space-x-2 px-2 py-1 rounded-full text-2xs font-medium border bg-success/10 text-success border-success/20">
+                            <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
                             <span>Connected</span>
                           </span>
+                        ) : discordStatus && !discordStatus.discord_running ? (
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-2xs font-medium border bg-warning/10 text-warning border-warning/20">
+                            Discord Not Running
+                          </span>
                         ) : (
-                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-red-500/10 border-red-500/30 text-red-400">
-                            <WifiOff className="w-2.5 h-2.5" />
-                            <span>Disconnected</span>
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-2xs font-medium border bg-white/[0.05] border-white/[0.08] text-textSecondary">
+                            Offline
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] text-[#71717A] leading-relaxed">
-                        Display the track you're listening to as your Discord activity status —
-                        "Listening to Wavery". Updates in real-time as tracks change.
-                        Requires Discord desktop to be running on this machine.
+                      <p className="text-2xs text-textSecondary mt-1 leading-relaxed">
+                        Display the current song and artist in your Discord status as you listen.
                       </p>
                     </div>
-                    <div className="flex-shrink-0">
-                      <ToggleSwitch
-                        checked={settings.enableDiscordRpc}
-                        onChange={(val) => setSetting("enableDiscordRpc", val)}
-                      />
-                    </div>
                   </div>
+                  <div className="flex-shrink-0">
+                    <ToggleSwitch
+                      checked={settings.enableDiscordRpc}
+                      onChange={(val) => {
+                        setSetting("enableDiscordRpc", val);
+                        if (val) {
+                          const ps = usePlayerStore.getState();
+                          if (ps.currentTrack && ps.status.state !== "Stopped") {
+                            updateDiscordPresence({
+                              title: ps.currentTrack.metadata.title ?? "Unknown Title",
+                              artist: ps.currentTrack.metadata.artist ?? "Unknown Artist",
+                              album: ps.currentTrack.metadata.album ?? "",
+                              position_secs: ps.status.position_secs,
+                              duration_secs: ps.status.duration_secs ?? ps.currentTrack.metadata.duration.secs,
+                              is_playing: ps.status.state === "Playing",
+                            });
+                          }
+                        } else {
+                          clearDiscordPresence();
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
 
-                  {/* Discord Application ID input */}
-                  <div className="p-5 space-y-2">
-                    <label className="block text-xs font-semibold text-[#A1A1AA]">
-                      Discord Application ID <span className="text-[10px] text-[#71717A] font-normal">(Optional)</span>
-                    </label>
+                {/* Optional Custom App ID field when Discord RPC is enabled */}
+                {settings.enableDiscordRpc && (
+                  <div className="pt-3 border-t border-white/[0.06] space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-2xs font-medium text-textSecondary">
+                        Custom Application ID <span className="text-textMuted font-normal">(Optional)</span>
+                      </label>
+                      <a
+                        href="https://discord.com/developers/applications"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-2xs text-textSecondary hover:text-white transition flex items-center space-x-1"
+                      >
+                        <span>Discord Developer Portal</span>
+                        <ExternalLink className="w-3 h-3 text-textMuted" />
+                      </a>
+                    </div>
                     <input
                       type="text"
                       value={settings.discordAppId || ""}
                       onChange={(e) => setSetting("discordAppId", e.target.value.trim())}
-                      placeholder="1205619376275980288 (Default: Music)"
-                      className="w-full bg-[#1C1C22] border border-white/[0.08] rounded-xl px-3 py-2 text-xs text-white placeholder-[#52525B] focus:outline-none focus:border-[#5865F2]/60 focus:ring-1 focus:ring-[#5865F2]/40 transition font-mono"
+                      placeholder="1565571268797931641 (Default: Wavery)"
+                      className="w-full bg-surfaceHover border border-white/[0.08] rounded-xl px-3 py-2 text-xs text-white placeholder-textMuted focus:outline-none focus:border-white/20 transition font-mono"
                     />
-                    <p className="text-[11px] text-[#71717A] leading-relaxed">
-                      Leave empty to use the built-in Music application ID (displays as <span className="text-white font-medium">"Listening to Music"</span>).
-                      Or enter your own custom Application ID from <a href="https://discord.com/developers/applications" target="_blank" rel="noreferrer" className="text-[#5865F2] hover:underline">discord.com/developers/applications</a> to display as <span className="text-white font-medium">"Listening to Wavery"</span>.
-                    </p>
                   </div>
-
-                  {/* Setup info */}
-                  <div className="p-5 space-y-3">
-                    <div className="text-xs font-semibold text-[#A1A1AA]">Requirements & Status</div>
-                    <div className="space-y-2">
-                      {[
-                        { label: "Discord desktop app running", met: discordStatus?.discord_running ?? false },
-                        { label: playerAdapter.isTauri() ? "Desktop IPC bridge available" : "Wavery server running", met: discordStatus !== null },
-                        { label: "Discord Rich Presence connected", met: discordStatus?.connected ?? false },
-                      ].map((req) => (
-                        <div key={req.label} className="flex items-center space-x-2.5">
-                          <div className={`w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 ${
-                            req.met ? "bg-green-500/20 text-green-400" : "bg-white/[0.06] text-[#52525B]"
-                          }`}>
-                            {req.met
-                              ? <Check className="w-2.5 h-2.5" />
-                              : <X className="w-2.5 h-2.5" />}
-                          </div>
-                          <span className={`text-[11px] ${req.met ? "text-[#D4D4D8]" : "text-[#52525B]"}`}>
-                            {req.label}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* How it works */}
-                  <div className="px-5 py-3 bg-[#5865F2]/5 border-t border-[#5865F2]/10">
-                    <p className="text-[11px] text-[#A1A1AA] leading-relaxed">
-                      <span className="text-[#5865F2] font-semibold">How it works:</span>{" "}
-                      Wavery connects directly to Discord's desktop application via local IPC (Unix socket on Linux/macOS, named pipe on Windows).
-                      Works natively in the desktop app and in any browser (Chrome, Firefox, Safari, Edge) without browser extensions.
-                      All communication is completely local to your machine.
-                    </p>
-                  </div>
-                </div>
+                )}
               </div>
             </div>
           )}
@@ -1846,7 +1884,7 @@ export const SettingsView: React.FC = () => {
             <div className="space-y-6 animate-fade-in max-w-3xl">
               <div>
                 <h2 className="text-base font-bold text-white">About Wavery</h2>
-                <p className="text-xs text-[#71717A] mt-0.5">
+                <p className="text-xs text-textMuted mt-1">
                   Version, dependencies, and subsystem components.
                 </p>
               </div>
@@ -1859,53 +1897,53 @@ export const SettingsView: React.FC = () => {
                   <div>
                     <h3 className="text-lg font-black text-white tracking-tight">Wavery</h3>
                     <p className="text-xs text-accent font-semibold">Version 0.2.1 • Beta</p>
-                    <p className="text-[11px] text-[#71717A] mt-0.5">
+                    <p className="text-2xs text-textMuted mt-1">
                       Local-first music player built with Rust, Tauri v2, and React. No accounts, no telemetry, no internet required.
                     </p>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 text-xs">
-                  <div className="p-3 bg-[#121216] border border-white/[0.06] rounded-xl space-y-0.5">
-                    <p className="text-[10px] text-[#71717A] uppercase font-bold">Audio Engine</p>
+                  <div className="p-3 bg-deck border border-white/[0.06] rounded-xl space-y-1">
+                    <p className="text-2xs text-textMuted uppercase font-bold">Audio Engine</p>
                     <p className="font-semibold text-white">Rodio + cpal</p>
                   </div>
-                  <div className="p-3 bg-[#121216] border border-white/[0.06] rounded-xl space-y-0.5">
-                    <p className="text-[10px] text-[#71717A] uppercase font-bold">Database</p>
+                  <div className="p-3 bg-deck border border-white/[0.06] rounded-xl space-y-1">
+                    <p className="text-2xs text-textMuted uppercase font-bold">Database</p>
                     <p className="font-semibold text-white">SQLite + FTS5</p>
                   </div>
-                  <div className="p-3 bg-[#121216] border border-white/[0.06] rounded-xl space-y-0.5">
-                    <p className="text-[10px] text-[#71717A] uppercase font-bold">Tag Parser</p>
+                  <div className="p-3 bg-deck border border-white/[0.06] rounded-xl space-y-1">
+                    <p className="text-2xs text-textMuted uppercase font-bold">Tag Parser</p>
                     <p className="font-semibold text-white">Lofty</p>
                   </div>
-                  <div className="p-3 bg-[#121216] border border-white/[0.06] rounded-xl space-y-0.5">
-                    <p className="text-[10px] text-[#71717A] uppercase font-bold">Streaming</p>
+                  <div className="p-3 bg-deck border border-white/[0.06] rounded-xl space-y-1">
+                    <p className="text-2xs text-textMuted uppercase font-bold">Streaming</p>
                     <p className="font-semibold text-white">Axum + Tokio</p>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                  <div className="p-3 bg-[#121216] border border-white/[0.06] rounded-xl space-y-0.5">
-                    <p className="text-[10px] text-[#71717A] uppercase font-bold">Desktop Shell</p>
+                  <div className="p-3 bg-deck border border-white/[0.06] rounded-xl space-y-1">
+                    <p className="text-2xs text-textMuted uppercase font-bold">Desktop Shell</p>
                     <p className="font-semibold text-white">Tauri v2</p>
                   </div>
-                  <div className="p-3 bg-[#121216] border border-white/[0.06] rounded-xl space-y-0.5">
-                    <p className="text-[10px] text-[#71717A] uppercase font-bold">UI Framework</p>
+                  <div className="p-3 bg-deck border border-white/[0.06] rounded-xl space-y-1">
+                    <p className="text-2xs text-textMuted uppercase font-bold">UI Framework</p>
                     <p className="font-semibold text-white">React 18</p>
                   </div>
-                  <div className="p-3 bg-[#121216] border border-white/[0.06] rounded-xl space-y-0.5">
-                    <p className="text-[10px] text-[#71717A] uppercase font-bold">Linux MPRIS</p>
+                  <div className="p-3 bg-deck border border-white/[0.06] rounded-xl space-y-1">
+                    <p className="text-2xs text-textMuted uppercase font-bold">Linux MPRIS</p>
                     <p className="font-semibold text-white">zbus</p>
                   </div>
-                  <div className="p-3 bg-[#121216] border border-white/[0.06] rounded-xl space-y-0.5">
-                    <p className="text-[10px] text-[#71717A] uppercase font-bold">State</p>
+                  <div className="p-3 bg-deck border border-white/[0.06] rounded-xl space-y-1">
+                    <p className="text-2xs text-textMuted uppercase font-bold">State</p>
                     <p className="font-semibold text-white">Zustand</p>
                   </div>
                 </div>
 
-                <div className="p-4 bg-[#121216] border border-white/[0.06] rounded-xl space-y-1.5 text-xs">
+                <div className="p-4 bg-deck border border-white/[0.06] rounded-xl space-y-2 text-xs">
                   <p className="font-bold text-white">What's new in 0.2.1 Beta:</p>
-                  <ul className="text-[11px] leading-relaxed text-[#71717A] space-y-1 mt-1">
+                  <ul className="text-2xs leading-relaxed text-textMuted space-y-1 mt-1">
                     <li>• VSync continuous scrubber interpolation with hardware refresh rate sync</li>
                     <li>• Centered global search bar with instant autocomplete and category browsing</li>
                     <li>• Apple HIG contrast and typography overhaul across Light and Dark themes</li>
@@ -1922,21 +1960,21 @@ export const SettingsView: React.FC = () => {
       {/* Confirmation Modal for Database Rebuild */}
       {showConfirmModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-          <div className="bg-[#18181D] border border-white/[0.08] w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-5">
+          <div className="bg-surface border border-white/[0.08] w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-5">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 flex-shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-warning/15 border border-warning/30 flex items-center justify-center text-warning flex-shrink-0">
                 <AlertTriangle className="w-5 h-5" />
               </div>
               <div>
                 <h3 className="text-sm font-bold text-white">Rebuild Database?</h3>
-                <p className="text-xs text-[#71717A]">This action cannot be undone.</p>
+                <p className="text-xs text-textMuted">This action cannot be undone.</p>
               </div>
             </div>
 
-            <p className="text-xs text-[#A1A1AA] leading-relaxed">
+            <p className="text-xs text-textSecondary leading-relaxed">
               This clears the database index and rescans all audio files directly from your music folder.
               <br /><br />
-              <span className="text-amber-800 dark:text-amber-300 font-semibold">
+              <span className="text-warning dark:text-warning font-semibold">
                 ⚠️ Metadata edits that were not saved to audio file tags (ID3/FLAC) will be reset.
               </span>
             </p>
@@ -1944,13 +1982,13 @@ export const SettingsView: React.FC = () => {
             <div className="flex items-center justify-end space-x-3 pt-2">
               <button
                 onClick={() => setShowConfirmModal(false)}
-                className="px-4 py-2 text-xs font-semibold text-[#A1A1AA] hover:text-white transition"
+                className="px-4 py-2 text-xs font-semibold text-textSecondary hover:text-white transition"
               >
                 Cancel
               </button>
               <button
                 onClick={handleRebuild}
-                className="inline-flex items-center space-x-2 px-5 py-2 bg-[#FF453A] hover:bg-[#E03A30] active:scale-95 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-[#FF453A]/25"
+                className="inline-flex items-center space-x-2 px-5 py-2 bg-danger hover:bg-accentHover active:scale-95 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-danger/25"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
                 <span>Rebuild</span>
@@ -1963,31 +2001,31 @@ export const SettingsView: React.FC = () => {
       {/* Confirmation Modal for Reset Defaults */}
       {showResetModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-          <div className="bg-[#18181D] border border-white/[0.08] w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-5">
+          <div className="bg-surface border border-white/[0.08] w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-5">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-xl bg-red-500/15 border border-red-500/30 flex items-center justify-center text-red-400 flex-shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-danger/15 border border-danger/30 flex items-center justify-center text-danger flex-shrink-0">
                 <RotateCcw className="w-5 h-5" />
               </div>
               <div>
                 <h3 className="text-sm font-bold text-white">Reset Settings?</h3>
-                <p className="text-xs text-[#71717A]">Restore default configuration.</p>
+                <p className="text-xs text-textMuted">Restore default configuration.</p>
               </div>
             </div>
 
-            <p className="text-xs text-[#A1A1AA] leading-relaxed">
+            <p className="text-xs text-textSecondary leading-relaxed">
               Reset audio, appearance, theme, and keyboard shortcuts back to default values?
             </p>
 
             <div className="flex items-center justify-end space-x-3 pt-2">
               <button
                 onClick={() => setShowResetModal(false)}
-                className="px-4 py-2 text-xs font-semibold text-[#A1A1AA] hover:text-white transition"
+                className="px-4 py-2 text-xs font-semibold text-textSecondary hover:text-white transition"
               >
                 Cancel
               </button>
               <button
                 onClick={handleResetConfirm}
-                className="inline-flex items-center space-x-2 px-5 py-2 bg-[#FF453A] hover:bg-[#E03A30] active:scale-95 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-[#FF453A]/25"
+                className="inline-flex items-center space-x-2 px-5 py-2 bg-danger hover:bg-accentHover active:scale-95 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-danger/25"
               >
                 <span>Reset to Defaults</span>
               </button>
@@ -1999,14 +2037,14 @@ export const SettingsView: React.FC = () => {
       {/* Import Configuration Modal */}
       {showImportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-          <div className="bg-[#18181D] border border-white/[0.08] w-full max-w-lg rounded-2xl shadow-2xl p-6 space-y-5">
+          <div className="bg-surface border border-white/[0.08] w-full max-w-lg rounded-2xl shadow-2xl p-6 space-y-5">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-xl bg-[#FA586A]/15 border border-[#FA586A]/30 flex items-center justify-center text-[#FA586A] flex-shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-accent/15 border border-accent/30 flex items-center justify-center text-accent flex-shrink-0">
                 <Upload className="w-5 h-5" />
               </div>
               <div>
                 <h3 className="text-sm font-bold text-white">Import Configuration JSON</h3>
-                <p className="text-xs text-[#71717A]">Paste exported settings JSON below</p>
+                <p className="text-xs text-textMuted">Paste exported settings JSON below</p>
               </div>
             </div>
 
@@ -2015,7 +2053,7 @@ export const SettingsView: React.FC = () => {
               value={importJsonText}
               onChange={(e) => setImportJsonText(e.target.value)}
               placeholder="Paste JSON configuration content here..."
-              className="w-full bg-[#121216] border border-white/[0.08] rounded-xl p-3 text-xs font-mono text-white placeholder-[#71717A] focus:outline-none focus:border-[#FA586A] transition"
+              className="w-full bg-deck border border-white/[0.08] rounded-xl p-3 text-xs font-mono text-white placeholder-textMuted focus:outline-none focus:border-accent transition"
             />
 
             <div className="flex items-center justify-end space-x-3 pt-2">
@@ -2024,14 +2062,14 @@ export const SettingsView: React.FC = () => {
                   setShowImportModal(false);
                   setImportJsonText("");
                 }}
-                className="px-4 py-2 text-xs font-semibold text-[#A1A1AA] hover:text-white transition"
+                className="px-4 py-2 text-xs font-semibold text-textSecondary hover:text-white transition"
               >
                 Cancel
               </button>
               <button
                 onClick={handleImportSubmit}
                 disabled={!importJsonText.trim()}
-                className="inline-flex items-center space-x-2 px-5 py-2 bg-[#FA586A] hover:bg-[#E04859] active:scale-95 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-[#FA586A]/25 disabled:opacity-50"
+                className="inline-flex items-center space-x-2 px-5 py-2 bg-accent-fill hover:bg-accentHover active:scale-95 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-accent/25 disabled:opacity-50"
               >
                 <span>Import & Apply</span>
               </button>
@@ -2069,7 +2107,7 @@ const ToggleSwitch: React.FC<ToggleSwitchProps> = ({ checked, onChange, disabled
       aria-label={label}
       disabled={disabled}
       onClick={() => !disabled && onChange(!checked)}
-      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer items-center rounded-full p-0.5 transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:opacity-40 disabled:cursor-not-allowed ${
+      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer items-center rounded-full p-1 transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:opacity-40 disabled:cursor-not-allowed ${
         checked
           ? "bg-accent hover:opacity-95"
           : "wavery-toggle-off"

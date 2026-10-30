@@ -64,6 +64,11 @@ fn test_config_defaults() {
     assert_eq!(cfg.keybinds.toggle_mute, "M");
     assert_eq!(cfg.keybinds.toggle_fullscreen, "F");
     assert_eq!(cfg.keybinds.toggle_lyrics, "L");
+
+    // Integrations defaults
+    assert!(cfg.integrations.enable_media_session);
+    assert!(!cfg.integrations.enable_discord_rpc);
+    assert_eq!(cfg.integrations.discord_app_id, None);
 }
 
 #[test]

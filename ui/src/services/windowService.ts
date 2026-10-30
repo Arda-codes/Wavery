@@ -40,6 +40,7 @@ export interface WindowService {
   startResize(direction: ResizeDirection): Promise<void>;
   getWindowState(): WindowState;
   onWindowStateChange(callback: (state: WindowState) => void): () => void;
+  onWindowResize?(callback: (size: { width: number; height: number }) => void): () => void;
 }
 
 class DesktopWindowService implements WindowService {
@@ -51,6 +52,7 @@ class DesktopWindowService implements WindowService {
     height: typeof window !== "undefined" ? window.innerHeight : 800,
   };
   private listeners: Set<(state: WindowState) => void> = new Set();
+  private resizeListeners: Set<(size: { width: number; height: number }) => void> = new Set();
   private initialized = false;
 
   constructor() {
@@ -61,15 +63,21 @@ class DesktopWindowService implements WindowService {
     if (typeof window === "undefined" || this.initialized) return;
     this.initialized = true;
 
-    // 1. Viewport resize listener
+    // 1. Viewport resize listener (throttled to 60fps via requestAnimationFrame)
+    let resizeRaf: number | null = null;
     window.addEventListener("resize", () => {
-      this.updateState({
-        width: window.innerWidth,
-        height: window.innerHeight,
-        isFullscreen: !isTauri ? Boolean(document.fullscreenElement) : this.currentState.isFullscreen,
-      });
+      if (resizeRaf === null) {
+        resizeRaf = window.requestAnimationFrame(() => {
+          resizeRaf = null;
+          this.updateState({
+            width: window.innerWidth,
+            height: window.innerHeight,
+            isFullscreen: !isTauri ? Boolean(document.fullscreenElement) : this.currentState.isFullscreen,
+          });
+        });
+      }
       if (isTauri) {
-        this.syncTauriWindowState();
+        this.debouncedSyncTauriWindowState();
       }
     });
 
@@ -104,12 +112,25 @@ class DesktopWindowService implements WindowService {
                 width: size.width,
                 height: size.height,
               });
-              this.syncTauriWindowState();
+              this.debouncedSyncTauriWindowState();
             })
             .catch(() => {});
         })
         .catch(() => {});
     }
+  }
+
+  private syncTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  private debouncedSyncTauriWindowState() {
+    if (!isTauri) return;
+    if (this.syncTimeout !== null) {
+      clearTimeout(this.syncTimeout);
+    }
+    this.syncTimeout = setTimeout(() => {
+      this.syncTimeout = null;
+      this.syncTauriWindowState();
+    }, 150);
   }
 
   private async syncTauriWindowState() {
@@ -133,19 +154,40 @@ class DesktopWindowService implements WindowService {
       ...this.currentState,
       ...partial,
     };
-    if (
+
+    const discreteChanged =
       nextState.isMaximized !== this.currentState.isMaximized ||
       nextState.isFullscreen !== this.currentState.isFullscreen ||
-      nextState.isMinimized !== this.currentState.isMinimized ||
+      nextState.isMinimized !== this.currentState.isMinimized;
+
+    const dimensionsChanged =
       nextState.width !== this.currentState.width ||
-      nextState.height !== this.currentState.height
-    ) {
+      nextState.height !== this.currentState.height;
+
+    if (discreteChanged || dimensionsChanged) {
       this.currentState = nextState;
-      for (const listener of this.listeners) {
-        try {
-          listener(this.currentState);
-        } catch (e) {
-          console.error("[WindowService] Listener error:", e);
+
+      // 1. Only broadcast to discrete state listeners (App, WindowControls, Handles)
+      // when maximize, fullscreen, or minimize state changes. This isolates continuous
+      // pixel dragging from triggering full React application tree re-renders.
+      if (discreteChanged) {
+        for (const listener of this.listeners) {
+          try {
+            listener(this.currentState);
+          } catch (e) {
+            console.error("[WindowService] Listener error:", e);
+          }
+        }
+      }
+
+      // 2. Broadcast dimension changes exclusively to dedicated resize listeners
+      if (dimensionsChanged) {
+        for (const resizeListener of this.resizeListeners) {
+          try {
+            resizeListener({ width: nextState.width, height: nextState.height });
+          } catch (e) {
+            console.error("[WindowService] Resize listener error:", e);
+          }
         }
       }
     }
@@ -160,6 +202,14 @@ class DesktopWindowService implements WindowService {
     callback(this.currentState);
     return () => {
       this.listeners.delete(callback);
+    };
+  }
+
+  onWindowResize(callback: (size: { width: number; height: number }) => void): () => void {
+    this.resizeListeners.add(callback);
+    callback({ width: this.currentState.width, height: this.currentState.height });
+    return () => {
+      this.resizeListeners.delete(callback);
     };
   }
 
@@ -270,13 +320,26 @@ class DesktopWindowService implements WindowService {
     }
   }
 
+  private isResizing = false;
+
   async startResize(direction: ResizeDirection): Promise<void> {
-    if (!isTauri || this.currentState.isMaximized || this.currentState.isFullscreen) return;
+    if (!isTauri || this.currentState.isMaximized || this.currentState.isFullscreen || this.isResizing) return;
+    this.isResizing = true;
+    if (typeof document !== "undefined") {
+      document.body.classList.add("is-resizing");
+    }
     try {
       const { getCurrentWindow } = await import("@tauri-apps/api/window");
       await getCurrentWindow().startResizeDragging(direction);
     } catch (e) {
       console.error("[WindowService] startResize failed:", e);
+    } finally {
+      setTimeout(() => {
+        this.isResizing = false;
+        if (typeof document !== "undefined") {
+          document.body.classList.remove("is-resizing");
+        }
+      }, 300);
     }
   }
 }

@@ -80,20 +80,20 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-background">
       {/* Hero Banner */}
-      <div className="p-4 sm:p-6 md:p-8 pb-6 flex flex-col sm:flex-row items-center sm:items-end gap-5 sm:gap-6 text-center sm:text-left bg-gradient-to-b from-accent/[0.12] via-surface/[0.04] to-transparent border-b border-white/[0.06] flex-shrink-0">
+      <div className="p-4 sm:p-6 md:p-8 pb-6 flex flex-col sm:flex-row items-center sm:items-end gap-5 sm:gap-6 text-center sm:text-left bg-surface border-b border-border flex-shrink-0">
         {/* Playlist Art Card */}
-        <div className="w-28 h-28 sm:w-36 sm:h-36 rounded-2xl bg-gradient-to-br from-indigo-950/40 via-surfaceActive to-surface text-textSecondary flex items-center justify-center shadow-2xl border border-white/[0.08] ring-1 ring-white/10 ring-inset flex-shrink-0 relative overflow-hidden group hover:brightness-105 transition-all">
+        <div className="w-28 h-28 sm:w-36 sm:h-36 rounded-2xl bg-surfaceActive text-textSecondary flex items-center justify-center shadow-lg border border-border flex-shrink-0 relative overflow-hidden group hover:brightness-105 transition-all">
           <ListMusic className="w-12 h-12 sm:w-16 sm:h-16 text-textMuted group-hover:text-accent transition-colors drop-shadow-sm" />
         </div>
 
         {/* Info & Action Controls */}
         <div className="flex-1 min-w-0 w-full">
           <div className="flex items-center justify-center sm:justify-start gap-2 mb-1">
-            <p className="text-[11px] font-bold text-textMuted uppercase tracking-widest">
+            <p className="text-2xs font-bold text-textMuted uppercase tracking-widest">
               Playlist
             </p>
             {isThisPlaylistPlaying && (
-              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] bg-accent/10 border border-accent/25 text-[10px] font-semibold text-accent uppercase tracking-wider animate-fade-in">
+              <span className="inline-flex items-center gap-2 px-2 py-1 rounded-[4px] bg-accent/10 border border-accent/25 text-2xs font-semibold text-accent uppercase tracking-wider animate-fade-in">
                 <EqualizerWave isPlaying={isPlaying} size="xs" color="bg-accent" />
                 <span>Now Playing</span>
               </span>
@@ -114,11 +114,11 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
                   }
                 }}
                 autoFocus
-                className="bg-[#1C1C22] border border-[#FA586A] rounded-lg px-3 py-1 text-xl sm:text-2xl font-black text-white focus:outline-none focus:ring-2 focus:ring-[#FA586A]/40"
+                className="bg-surfaceHover border border-accent rounded-lg px-3 py-1 text-xl sm:text-2xl font-black text-white focus:outline-none focus:ring-2 focus:ring-accent/40"
               />
               <button
                 onClick={handleSaveName}
-                className="p-1.5 rounded-lg bg-[#FA586A] text-white hover:bg-[#E04859] transition"
+                className="p-2 rounded-lg bg-accent-fill text-white hover:bg-accentHover transition"
                 title="Save Name"
               >
                 <Check className="w-4 h-4" />
@@ -128,7 +128,7 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
                   setIsEditingName(false);
                   setEditedName(playlist.name);
                 }}
-                className="p-1.5 rounded-lg bg-white/[0.08] text-[#A1A1AA] hover:text-white transition"
+                className="p-2 rounded-lg bg-white/[0.08] text-textSecondary hover:text-white transition"
                 title="Cancel"
               >
                 <X className="w-4 h-4" />
@@ -144,7 +144,7 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
                   setEditedName(playlist.name);
                   setIsEditingName(true);
                 }}
-                className="opacity-0 group-hover/title:opacity-100 p-1.5 rounded-lg hover:bg-white/[0.08] text-[#71717A] hover:text-white transition"
+                className="opacity-0 group-hover/title:opacity-100 p-2 rounded-lg hover:bg-white/[0.08] text-textMuted hover:text-white transition"
                 title="Rename Playlist"
               >
                 <Edit2 className="w-4 h-4" />
@@ -152,7 +152,7 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
             </div>
           )}
 
-          <p className="text-xs text-[#A1A1AA] font-medium flex items-center justify-center sm:justify-start gap-2 mb-4">
+          <p className="text-xs text-textSecondary font-medium flex items-center justify-center sm:justify-start gap-2 mb-4">
             <span className="text-white font-semibold">{tracks.length} tracks</span>
             <span>•</span>
             <span>{formatTotalDuration(totalDurationSecs)}</span>
@@ -182,7 +182,7 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
                   onDeletePlaylist();
                 }
               }}
-              className="p-2 bg-white/[0.06] hover:bg-red-500/20 text-[#71717A] hover:text-red-400 rounded-lg border border-white/[0.06] transition sm:ml-auto"
+              className="p-2 bg-white/[0.06] hover:bg-danger/20 text-textMuted hover:text-danger rounded-lg border border-white/[0.06] transition sm:ml-auto"
               title="Delete Playlist"
             >
               <Trash2 className="w-4 h-4" />

@@ -52,6 +52,13 @@ export interface AudioPlayerAdapter {
   addTracksToPlaylist(playlistId: string, trackIds: string[]): Promise<void>;
   removeTrackFromPlaylist(playlistId: string, trackId: string): Promise<void>;
   savePlaylist(playlist: Playlist): Promise<void>;
+  syncQueue?(payload: {
+    user_queue: Track[];
+    context_queue: Track[];
+    current_track_id?: string;
+    is_shuffle: boolean;
+    loop_mode: string;
+  }): Promise<void>;
   saveConfig?(config: unknown): Promise<void>;
   getConfig?(): Promise<unknown>;
   exportConfigJson?(): Promise<string>;
@@ -594,6 +601,18 @@ class BrowserAudioPlayer implements AudioPlayerAdapter {
     if (!res.ok) throw new Error(await res.text());
   }
 
+  async syncQueue(payload: {
+    user_queue: Track[];
+    context_queue: Track[];
+    current_track_id?: string;
+    is_shuffle: boolean;
+    loop_mode: string;
+  }): Promise<void> {
+    this.elements.forEach((el) => {
+      el.loop = payload.loop_mode === "Track";
+    });
+  }
+
   async getConfig(): Promise<unknown> {
     const res = await fetch("/api/config");
     if (!res.ok) throw new Error("Failed to fetch config");
@@ -893,6 +912,21 @@ class TauriAudioPlayer implements AudioPlayerAdapter {
   async saveConfig(config: unknown): Promise<void> {
     const invoke = await getTauriInvoke();
     return invoke("save_config", { config });
+  }
+
+  async syncQueue(payload: {
+    user_queue: Track[];
+    context_queue: Track[];
+    current_track_id?: string;
+    is_shuffle: boolean;
+    loop_mode: string;
+  }): Promise<void> {
+    try {
+      const invoke = await getTauriInvoke();
+      await invoke("sync_queue", { payload });
+    } catch (e) {
+      console.warn("Failed to sync queue with Tauri backend:", e);
+    }
   }
 
   async getConfig(): Promise<unknown> {

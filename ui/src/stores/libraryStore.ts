@@ -9,7 +9,7 @@ import { create } from "zustand";
 import { Track, AlbumInfo, ArtistInfo, ImportStrategy, Playlist } from "../types";
 import { playerAdapter } from "../services/adapter";
 import { groupTracksByAlbum, groupTracksByArtist } from "../utils/library";
-import { usePlayerStore } from "./playerStore";
+import { usePlayerStore, registerLibraryTracksGetter } from "./playerStore";
 
 interface LibraryState {
   tracks: Track[];
@@ -257,3 +257,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     }
   },
 }));
+
+// Connect library tracks to playerStore for seamless Autoplay continuous recommendations
+registerLibraryTracksGetter(() => useLibraryStore.getState().tracks);
+

@@ -1,11 +1,12 @@
 import React, { useState, useCallback } from "react";
 import { AlbumInfo } from "../types";
-import { Play, Disc, ListPlus, CornerDownRight, ListMusic, User, Pencil, Copy } from "lucide-react";
+import { Play, Disc, ListPlus, CornerDownRight, ListMusic, User, Pencil, Copy, Sparkles } from "lucide-react";
 import { useArtwork } from "../utils/useArtwork";
 import { ArtistLinks } from "./ArtistLinks";
 import { useLibraryStore } from "../stores/libraryStore";
 import { usePlayerStore } from "../stores/playerStore";
 import { useContextMenuStore, ContextMenuItem } from "../stores/contextMenuStore";
+import { useEnrichmentStore } from "../stores/enrichmentStore";
 
 interface AlbumCardProps {
   album: AlbumInfo;
@@ -118,6 +119,15 @@ const AlbumCardInner: React.FC<AlbumCardProps> = ({
         });
       }
 
+      menuItems.push({
+        id: "pull-online-album",
+        label: "Pull Online Metadata & Lyrics...",
+        icon: Sparkles,
+        onClick: () => {
+          useEnrichmentStore.getState().openModal(album.tracks, album.title);
+        },
+      });
+
       menuItems.push(
         {
           id: "divider-copy",
@@ -162,10 +172,10 @@ const AlbumCardInner: React.FC<AlbumCardProps> = ({
       onClick={() => onSelectAlbum(album.title, album.artist)}
       onContextMenu={handleContextMenu}
       style={{ contain: "content" }}
-      className="group cursor-pointer bg-[#16161A] hover:bg-[#202026] border border-white/[0.06] hover:border-white/[0.12] rounded-2xl p-3.5 flex flex-col transition-[background-color,border-color,box-shadow,transform] duration-250 ease-[cubic-bezier(0.16,1,0.3,1)] shadow-sm hover:shadow-xl hover:-translate-y-0.5 select-none"
+      className="group cursor-pointer bg-surface hover:bg-surfaceHover border border-white/[0.06] hover:border-white/[0.12] rounded-2xl p-4 flex flex-col transition-[background-color,border-color,box-shadow,transform] duration-250 ease-[cubic-bezier(0.16,1,0.3,1)] shadow-sm hover:shadow-xl hover:-translate-y-0.5 select-none"
     >
       {/* Cover Art */}
-      <div className="aspect-square rounded-xl bg-[#1C1C22] overflow-hidden mb-3 relative flex items-center justify-center border border-white/[0.06] shadow-md">
+      <div className="aspect-square rounded-xl bg-surfaceHover overflow-hidden mb-3 relative flex items-center justify-center border border-white/[0.06] shadow-md">
         {artworkUrl && !imgError ? (
           <img
             src={artworkUrl}
@@ -176,7 +186,7 @@ const AlbumCardInner: React.FC<AlbumCardProps> = ({
             onError={() => setImgError(true)}
           />
         ) : (
-          <Disc className="w-12 h-12 text-[#71717A]/60" />
+          <Disc className="w-12 h-12 text-textMuted/60" />
         )}
         <button
           type="button"
@@ -184,27 +194,27 @@ const AlbumCardInner: React.FC<AlbumCardProps> = ({
             e.stopPropagation();
             onPlayAlbum(album);
           }}
-          className="absolute bottom-2.5 right-2.5 w-10 h-10 rounded-full bg-[#FA586A] text-white flex items-center justify-center opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-250 ease-[cubic-bezier(0.16,1,0.3,1)] shadow-xl shadow-black/60 hover:scale-105 active:scale-95 z-10"
+          className="absolute bottom-2.5 right-2.5 w-10 h-10 rounded-full bg-accent-fill text-white flex items-center justify-center opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-250 ease-[cubic-bezier(0.16,1,0.3,1)] shadow-xl shadow-black/60 hover:scale-105 active:scale-95 z-10"
           title="Play Album"
         >
-          <Play className="w-4 h-4 fill-white ml-0.5" />
+          <Play className="w-4 h-4 fill-white ml-1" />
         </button>
       </div>
 
       {/* Title & Artist */}
-      <h4 className="font-bold text-xs text-white truncate group-hover:text-[#FA586A] transition-colors mb-0.5">
+      <h4 className="font-bold text-xs text-white truncate group-hover:text-accent transition-colors mb-1">
         {album.title}
       </h4>
-      <div className="text-[11px] text-[#A1A1AA] truncate">
+      <div className="text-2xs text-textSecondary truncate">
         <ArtistLinks
           artistName={album.artist}
           onSelectArtist={onSelectArtist}
           className="truncate block"
           linkClassName="hover:text-white hover:underline cursor-pointer transition-colors"
-          delimiterClassName="text-[#71717A]"
+          delimiterClassName="text-textMuted"
         />
       </div>
-      <span className="text-[10px] text-[#71717A] mt-1 font-medium">
+      <span className="text-2xs text-textMuted mt-1 font-medium">
         {album.year ? `${album.year} • ` : ""}
         {album.trackCount} {album.trackCount === 1 ? "track" : "tracks"}
       </span>

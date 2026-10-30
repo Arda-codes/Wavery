@@ -30,6 +30,7 @@ import { Breadcrumbs, BreadcrumbItem } from "./components/Breadcrumbs";
 import { ImportModal } from "./components/ImportModal";
 import { NowPlayingDrawer } from "./components/NowPlayingDrawer";
 import { FullscreenPlayer } from "./components/FullscreenPlayer";
+import { BatchEnrichmentModal } from "./components/BatchEnrichmentModal";
 import { ContextMenu } from "./components/ContextMenu";
 import { matchesKeyCombo, isEditableTarget } from "./utils/keybindings";
 import { WindowControls } from "./components/WindowControls";
@@ -673,7 +674,7 @@ export const App: React.FC = () => {
         <div
           data-tauri-drag-region="none"
           className={`flex items-center space-x-2 sm:space-x-3 min-w-0 flex-shrink-0 z-20 pointer-events-auto ${
-            isMac && isTauri ? "pl-16 sm:pl-18" : ""
+            isMac && isTauri ? "pl-16 sm:pl-20" : ""
           }`}
         >
           {/* Hamburger button on screens < lg */}
@@ -690,7 +691,7 @@ export const App: React.FC = () => {
           <button
             type="button"
             onClick={() => navigate("home")}
-            className="cursor-pointer flex-shrink-0 font-bold text-[15px] sm:text-base tracking-tight text-white hover:text-white/80 transition-colors focus:outline-none select-none hidden sm:inline"
+            className="cursor-pointer flex-shrink-0 font-bold text-base sm:text-base tracking-tight text-white hover:text-white/80 transition-colors focus:outline-none select-none hidden sm:inline"
           >
             Wavery
           </button>
@@ -739,9 +740,9 @@ export const App: React.FC = () => {
                 }
               }}
               placeholder="Search songs, albums, artists, playlists..."
-              className="w-full h-10 sm:h-10.5 bg-surface hover:bg-surfaceHover focus:bg-surfaceActive border border-white/[0.08] hover:border-white/[0.15] focus:border-accent rounded-full pl-10 sm:pl-11 pr-24 sm:pr-28 text-xs sm:text-sm text-textPrimary placeholder:text-textMuted focus:outline-none focus:ring-2 focus:ring-accent/30 transition-all duration-200 shadow-sm focus:shadow-md"
+              className="w-full h-10 sm:h-10.5 bg-surface hover:bg-surfaceHover focus:bg-surfaceActive border border-white/[0.08] hover:border-white/[0.15] focus:border-accent rounded-full pl-10 sm:pl-12 pr-24 sm:pr-28 text-xs sm:text-sm text-textPrimary placeholder:text-textMuted focus:outline-none focus:ring-2 focus:ring-accent/30 transition-all duration-200 shadow-sm focus:shadow-md"
             />
-            <div className="absolute right-2.5 sm:right-3.5 flex items-center space-x-1.5 pointer-events-auto">
+            <div className="absolute right-2.5 sm:right-3.5 flex items-center space-x-2 pointer-events-auto">
               {globalSearch ? (
                 <>
                   <button
@@ -756,7 +757,7 @@ export const App: React.FC = () => {
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
-                  <span className="hidden sm:inline-flex items-center text-[10px] font-mono text-textMuted/70 bg-white/[0.04] px-1.5 py-0.5 rounded border border-white/[0.05]">
+                  <span className="hidden sm:inline-flex items-center text-2xs font-mono text-textMuted/70 bg-white/[0.04] px-2 py-1 rounded border border-white/[0.05]">
                     ↵
                   </span>
                 </>
@@ -767,7 +768,7 @@ export const App: React.FC = () => {
                     searchInputRef.current?.focus();
                     searchInputRef.current?.select();
                   }}
-                  className="hidden sm:inline-flex items-center cursor-pointer text-[11px] font-mono font-medium text-textMuted bg-white/[0.06] hover:bg-white/[0.12] hover:text-white px-2 py-0.5 rounded-md border border-white/[0.06] transition select-none"
+                  className="hidden sm:inline-flex items-center cursor-pointer text-2xs font-mono font-medium text-textMuted bg-white/[0.06] hover:bg-white/[0.12] hover:text-white px-2 py-1 rounded-md border border-white/[0.06] transition select-none"
                   title={`Focus search (${isMac ? "⌘K" : "Ctrl+K"})`}
                 >
                   {isMac ? "⌘K" : "Ctrl+K"}
@@ -795,26 +796,26 @@ export const App: React.FC = () => {
       {/* Linux WebKitGTK Performance Banner */}
       {playerAdapter.isTauri() && !isLinuxBannerDismissed && (
         <div className="bg-surface border-b border-white/[0.07] px-6 py-2 flex items-center justify-between text-xs text-textSecondary flex-shrink-0">
-          <div className="flex items-center space-x-2.5 min-w-0">
+          <div className="flex items-center space-x-3 min-w-0">
             <span className="flex h-2 w-2 rounded-full bg-accent flex-shrink-0" />
             <p className="truncate">
               <span className="font-semibold text-white">Linux note:</span> Open in your browser for smoother rendering if needed.
             </p>
           </div>
-          <div className="flex items-center space-x-2.5 flex-shrink-0 ml-4">
+          <div className="flex items-center space-x-3 flex-shrink-0 ml-4">
             <button
               onClick={() => {
                 usePlayerStore.getState().switchToWeb();
               }}
-              className="px-2.5 py-1 bg-surfaceActive hover:bg-surfaceHover text-white rounded-md font-semibold text-[11px] flex items-center space-x-1 transition border border-white/[0.08]"
+              className="px-3 py-1 bg-surfaceActive hover:bg-surfaceHover text-white rounded-md font-semibold text-2xs flex items-center space-x-1 transition border border-white/[0.08]"
               title="Open in default browser"
             >
               <span>Open in Browser</span>
-              <ExternalLink className="w-3 h-3 ml-0.5 text-textSecondary" />
+              <ExternalLink className="w-3 h-3 ml-1 text-textSecondary" />
             </button>
             <button
               onClick={dismissLinuxBanner}
-              className="text-textMuted hover:text-white text-xs px-2 py-0.5 rounded hover:bg-white/[0.06] transition"
+              className="text-textMuted hover:text-white text-xs px-2 py-1 rounded hover:bg-white/[0.06] transition"
               title="Dismiss"
             >
               ✕
@@ -998,8 +999,8 @@ export const App: React.FC = () => {
             viewMode === "home" ? "text-accent" : "text-textMuted hover:text-textPrimary"
           }`}
         >
-          <Home className="w-4 h-4 mb-0.5" />
-          <span className="text-[10px] font-semibold">Home</span>
+          <Home className="w-4 h-4 mb-1" />
+          <span className="text-2xs font-semibold">Home</span>
         </button>
 
         <button
@@ -1012,8 +1013,8 @@ export const App: React.FC = () => {
             viewMode === "search" ? "text-accent" : "text-textMuted hover:text-textPrimary"
           }`}
         >
-          <Search className="w-4 h-4 mb-0.5" />
-          <span className="text-[10px] font-semibold">Search</span>
+          <Search className="w-4 h-4 mb-1" />
+          <span className="text-2xs font-semibold">Search</span>
         </button>
 
         <button
@@ -1023,8 +1024,8 @@ export const App: React.FC = () => {
             viewMode === "tracks" ? "text-accent" : "text-textMuted hover:text-textPrimary"
           }`}
         >
-          <Library className="w-4 h-4 mb-0.5" />
-          <span className="text-[10px] font-semibold">Library</span>
+          <Library className="w-4 h-4 mb-1" />
+          <span className="text-2xs font-semibold">Library</span>
         </button>
 
         <button
@@ -1036,8 +1037,8 @@ export const App: React.FC = () => {
               : "text-textMuted hover:text-textPrimary"
           }`}
         >
-          <ListMusic className="w-4 h-4 mb-0.5" />
-          <span className="text-[10px] font-semibold">Playlists</span>
+          <ListMusic className="w-4 h-4 mb-1" />
+          <span className="text-2xs font-semibold">Playlists</span>
         </button>
 
         <button
@@ -1045,8 +1046,8 @@ export const App: React.FC = () => {
           onClick={() => useNavigationStore.getState().toggleMobileSidebar()}
           className="flex flex-col items-center justify-center flex-1 py-1 text-textMuted hover:text-white transition-colors"
         >
-          <Menu className="w-4 h-4 mb-0.5" />
-          <span className="text-[10px] font-semibold">More</span>
+          <Menu className="w-4 h-4 mb-1" />
+          <span className="text-2xs font-semibold">More</span>
         </button>
       </nav>
 
@@ -1069,6 +1070,9 @@ export const App: React.FC = () => {
 
       {/* Immersive Fullscreen Now Playing & Live Lyrics */}
       <FullscreenPlayer />
+
+      {/* Batch Metadata & Lyrics Enrichment Modal */}
+      <BatchEnrichmentModal />
 
       {/* Global Custom Context Menu Portal */}
       <ContextMenu />

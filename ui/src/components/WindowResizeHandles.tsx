@@ -8,18 +8,17 @@ interface ResizeEdgeProps {
 }
 
 const ResizeEdge: React.FC<ResizeEdgeProps> = ({ direction, className }) => {
-  const handlePointerDown = (e: React.PointerEvent) => {
+  const handleMouseDown = (e: React.MouseEvent) => {
     // Only respond to primary mouse button
     if (e.button !== 0) return;
     e.preventDefault();
-    e.stopPropagation();
     windowService.startResize(direction);
   };
 
   return (
     <div
       data-tauri-drag-region="none"
-      onPointerDown={handlePointerDown}
+      onMouseDown={handleMouseDown}
       className={`fixed z-50 select-none ${className}`}
       aria-hidden="true"
     />

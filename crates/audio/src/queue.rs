@@ -6,7 +6,7 @@ use std::time::Duration;
 use wavery_core::models::{LoopMode, Track};
 use wavery_core::traits::QueueManager;
 
-/// Default implementation of linear and shuffled playback queue.
+/// Default implementation of linear, shuffled, and two-tier playback queue.
 pub struct StandardQueueManager {
     queue: Vec<Track>,
     current_idx: Option<usize>,
@@ -14,6 +14,8 @@ pub struct StandardQueueManager {
     loop_mode: LoopMode,
     shuffled_indices: Vec<usize>,
     shuffle_pos: usize,
+    user_queue: Vec<Track>,
+    history: Vec<Track>,
 }
 
 impl StandardQueueManager {
@@ -27,6 +29,8 @@ impl StandardQueueManager {
             loop_mode: LoopMode::Off,
             shuffled_indices: Vec::new(),
             shuffle_pos: 0,
+            user_queue: Vec::new(),
+            history: Vec::new(),
         }
     }
 
@@ -68,6 +72,8 @@ impl Default for StandardQueueManager {
 impl QueueManager for StandardQueueManager {
     fn set_queue(&mut self, tracks: Vec<Track>, start_index: usize) {
         self.queue = tracks;
+        self.user_queue.clear();
+        self.history.clear();
         if self.queue.is_empty() {
             self.current_idx = None;
             self.shuffled_indices.clear();
@@ -81,7 +87,23 @@ impl QueueManager for StandardQueueManager {
         }
     }
 
+    fn set_context_queue(&mut self, tracks: Vec<Track>, start_index: usize) {
+        if tracks.is_empty() {
+            self.set_queue(tracks, start_index);
+            return;
+        }
+
+        let pending_user = std::mem::take(&mut self.user_queue);
+        self.set_queue(tracks, start_index);
+
+        // Re-insert pending user queue items in reverse so original order is preserved
+        for track in pending_user.into_iter().rev() {
+            self.play_next(track);
+        }
+    }
+
     fn push_back(&mut self, track: Track) {
+        self.user_queue.push(track.clone());
         self.queue.push(track);
         let new_index = self.queue.len() - 1;
         if self.queue.len() == 1 {
@@ -100,6 +122,7 @@ impl QueueManager for StandardQueueManager {
     }
 
     fn play_next(&mut self, track: Track) {
+        self.user_queue.insert(0, track.clone());
         if self.queue.is_empty() || self.current_idx.is_none() {
             self.queue.push(track);
             self.current_idx = Some(0);
@@ -140,6 +163,19 @@ impl QueueManager for StandardQueueManager {
             return self.current_track();
         }
 
+        // Record history before transition
+        if let Some(curr) = self.current_track() {
+            self.history.push(curr.clone());
+            if self.history.len() > 100 {
+                self.history.remove(0);
+            }
+        }
+
+        // Pop from user_queue if next item was user-queued
+        if !self.user_queue.is_empty() {
+            self.user_queue.remove(0);
+        }
+
         if self.shuffle {
             if self.shuffle_pos + 1 < self.shuffled_indices.len() {
                 self.shuffle_pos += 1;
@@ -176,6 +212,10 @@ impl QueueManager for StandardQueueManager {
         // If played more than 3 seconds into track, restart current track
         if current_pos > Duration::from_secs(3) {
             return self.current_track();
+        }
+
+        if !self.history.is_empty() {
+            let _ = self.history.pop();
         }
 
         if self.shuffle {
@@ -219,6 +259,81 @@ impl QueueManager for StandardQueueManager {
 
     fn queue(&self) -> &[Track] {
         &self.queue
+    }
+
+    fn user_queue(&self) -> &[Track] {
+        &self.user_queue
+    }
+
+    fn clear_user_queue(&mut self) {
+        if self.user_queue.is_empty() {
+            return;
+        }
+
+        let user_ids: std::collections::HashSet<_> =
+            self.user_queue.iter().map(|t| t.id.clone()).collect();
+        self.user_queue.clear();
+
+        if let Some(curr_idx) = self.current_idx {
+            // Remove user queued items that appear after curr_idx
+            let mut i = curr_idx + 1;
+            while i < self.queue.len() {
+                if user_ids.contains(&self.queue[i].id) {
+                    self.queue.remove(i);
+                } else {
+                    i += 1;
+                }
+            }
+            if self.shuffle {
+                self.rebuild_shuffle();
+            }
+        }
+    }
+
+    fn remove_user_track(&mut self, index: usize) -> Option<Track> {
+        if index >= self.user_queue.len() {
+            return None;
+        }
+
+        let removed = self.user_queue.remove(index);
+        if let Some(curr_idx) = self.current_idx {
+            // Find in queue starting after current_idx
+            if let Some(pos) = self.queue[curr_idx + 1..]
+                .iter()
+                .position(|t| t.id == removed.id)
+            {
+                let queue_idx = curr_idx + 1 + pos;
+                self.queue.remove(queue_idx);
+                if self.shuffle {
+                    self.rebuild_shuffle();
+                }
+            }
+        }
+        Some(removed)
+    }
+
+    fn reorder_user_queue(&mut self, from: usize, to: usize) {
+        if from >= self.user_queue.len() || to >= self.user_queue.len() || from == to {
+            return;
+        }
+
+        let track = self.user_queue.remove(from);
+        self.user_queue.insert(to, track);
+
+        // Re-sync items in queue after current_idx
+        if let Some(curr_idx) = self.current_idx {
+            let start = curr_idx + 1;
+            let count = self.user_queue.len();
+            if start + count <= self.queue.len() {
+                for (offset, item) in self.user_queue.iter().enumerate() {
+                    self.queue[start + offset] = item.clone();
+                }
+            }
+        }
+    }
+
+    fn history(&self) -> &[Track] {
+        &self.history
     }
 
     fn is_shuffle(&self) -> bool {

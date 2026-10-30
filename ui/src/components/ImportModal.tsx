@@ -64,30 +64,30 @@ export const ImportModal: React.FC<ImportModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-      <div className="bg-[#18181D] border border-white/[0.08] w-full max-w-lg rounded-2xl p-5 sm:p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+      <div className="bg-surface border border-white/[0.08] w-full max-w-lg rounded-2xl p-5 sm:p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-[#71717A] hover:text-white hover:bg-white/[0.06] p-1 rounded-full transition"
+          className="absolute top-4 right-4 text-textMuted hover:text-white hover:bg-white/[0.06] p-1 rounded-full transition"
         >
           <X className="w-4 h-4" />
         </button>
 
         <h2 className="text-lg font-bold text-white mb-1 flex items-center gap-2">
-          <FolderOpen className="w-5 h-5 text-[#FA586A]" /> Import Music
+          <FolderOpen className="w-5 h-5 text-accent" /> Import Music
         </h2>
-        <p className="text-xs text-[#71717A] mb-5">
+        <p className="text-xs text-textMuted mb-5">
           Select a folder or audio file to add to your library.
         </p>
 
         {/* Mode Selector: Single File vs Folder */}
-        <div className="flex bg-[#121216] p-1 rounded-full border border-white/[0.08] mb-5">
+        <div className="flex bg-deck p-1 rounded-full border border-white/[0.08] mb-5">
           <button
             type="button"
             onClick={() => setMode("folder")}
-            className={`flex-1 flex items-center justify-center gap-2 py-1.5 rounded-full text-xs font-semibold transition-all ${
+            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-full text-xs font-semibold transition-all ${
               mode === "folder"
                 ? "bg-white/[0.14] text-white shadow-sm font-bold"
-                : "text-[#71717A] hover:text-white"
+                : "text-textMuted hover:text-white"
             }`}
           >
             <Folder className="w-3.5 h-3.5" />
@@ -96,10 +96,10 @@ export const ImportModal: React.FC<ImportModalProps> = ({
           <button
             type="button"
             onClick={() => setMode("file")}
-            className={`flex-1 flex items-center justify-center gap-2 py-1.5 rounded-full text-xs font-semibold transition-all ${
+            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-full text-xs font-semibold transition-all ${
               mode === "file"
                 ? "bg-white/[0.14] text-white shadow-sm font-bold"
-                : "text-[#71717A] hover:text-white"
+                : "text-textMuted hover:text-white"
             }`}
           >
             <FileAudio className="w-3.5 h-3.5" />
@@ -108,7 +108,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
         </div>
 
         {error && (
-          <div className="p-3 mb-4 rounded-xl bg-red-500/10 border border-red-500/30 text-xs text-red-400">
+          <div className="p-3 mb-4 rounded-xl bg-danger/10 border border-danger/30 text-xs text-danger">
             {error}
           </div>
         )}
@@ -116,7 +116,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* File Manager Picker Button & Input */}
           <div>
-            <label className="block text-xs font-semibold text-[#A1A1AA] mb-1.5">
+            <label className="block text-xs font-semibold text-textSecondary mb-2">
               {mode === "folder" ? "Selected Folder" : "Selected Audio File"}
             </label>
             <div className="flex gap-2">
@@ -130,14 +130,14 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                 }
                 value={targetPath}
                 onChange={(e) => setTargetPath(e.target.value)}
-                className="flex-1 px-3.5 py-2.5 bg-[#121216] border border-white/[0.08] focus:border-[#FA586A]/60 rounded-xl text-xs text-white placeholder-[#71717A] focus:outline-none focus:ring-1 focus:ring-[#FA586A]/30 transition"
+                className="flex-1 px-4 py-3 bg-deck border border-white/[0.08] focus:border-accent/60 rounded-xl text-xs text-white placeholder-textMuted focus:outline-none focus:ring-1 focus:ring-accent/30 transition"
               />
               <button
                 type="button"
                 onClick={handlePick}
-                className="flex items-center gap-1.5 px-4 py-2.5 bg-white/[0.08] hover:bg-white/[0.14] active:scale-95 text-white rounded-xl text-xs font-medium border border-white/[0.08] transition shadow-sm whitespace-nowrap"
+                className="flex items-center gap-2 px-4 py-3 bg-white/[0.08] hover:bg-white/[0.14] active:scale-95 text-white rounded-xl text-xs font-medium border border-white/[0.08] transition shadow-sm whitespace-nowrap"
               >
-                <HardDrive className="w-4 h-4 text-[#FA586A]" />
+                <HardDrive className="w-4 h-4 text-accent" />
                 <span>Browse</span>
               </button>
             </div>
@@ -145,23 +145,23 @@ export const ImportModal: React.FC<ImportModalProps> = ({
 
           {/* Import Method (Copy vs Move) */}
           <div>
-            <label className="block text-xs font-semibold text-[#A1A1AA] mb-2">
+            <label className="block text-xs font-semibold text-textSecondary mb-2">
               Import Method
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <button
                 type="button"
                 onClick={() => setStrategy("Copy")}
-                className={`p-3.5 rounded-xl border flex flex-col items-start gap-1 transition-all ${
+                className={`p-4 rounded-xl border flex flex-col items-start gap-1 transition-all ${
                   strategy === "Copy"
-                    ? "bg-[#FA586A]/10 border-[#FA586A]/60 text-white"
-                    : "border-white/[0.06] bg-[#121216] text-[#71717A] hover:border-white/[0.15]"
+                    ? "bg-accent/10 border-accent/60 text-white"
+                    : "border-white/[0.06] bg-deck text-textMuted hover:border-white/[0.15]"
                 }`}
               >
                 <div className="flex items-center gap-2 font-bold text-xs text-white">
-                  <Copy className="w-4 h-4 text-[#FA586A]" /> Copy
+                  <Copy className="w-4 h-4 text-accent" /> Copy
                 </div>
-                <span className="text-[10.5px] text-[#71717A] text-left leading-relaxed">
+                <span className="text-2xs text-textMuted text-left leading-relaxed">
                   Copies {mode === "folder" ? "all tracks" : "the file"} into your library folder. Source files stay where they are.
                 </span>
               </button>
@@ -169,16 +169,16 @@ export const ImportModal: React.FC<ImportModalProps> = ({
               <button
                 type="button"
                 onClick={() => setStrategy("Move")}
-                className={`p-3.5 rounded-xl border flex flex-col items-start gap-1 transition-all ${
+                className={`p-4 rounded-xl border flex flex-col items-start gap-1 transition-all ${
                   strategy === "Move"
-                    ? "bg-[#FA586A]/10 border-[#FA586A]/60 text-white"
-                    : "border-white/[0.06] bg-[#121216] text-[#71717A] hover:border-white/[0.15]"
+                    ? "bg-accent/10 border-accent/60 text-white"
+                    : "border-white/[0.06] bg-deck text-textMuted hover:border-white/[0.15]"
                 }`}
               >
                 <div className="flex items-center gap-2 font-bold text-xs text-white">
-                  <ArrowRightLeft className="w-4 h-4 text-[#FA586A]" /> Move
+                  <ArrowRightLeft className="w-4 h-4 text-accent" /> Move
                 </div>
-                <span className="text-[10.5px] text-[#71717A] text-left leading-relaxed">
+                <span className="text-2xs text-textMuted text-left leading-relaxed">
                   Moves {mode === "folder" ? "all tracks" : "the file"} into your library folder and removes them from the source location.
                 </span>
               </button>
@@ -189,14 +189,14 @@ export const ImportModal: React.FC<ImportModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-semibold text-[#71717A] hover:text-white transition"
+              className="px-4 py-2 text-xs font-semibold text-textMuted hover:text-white transition"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-bold bg-[#FA586A] hover:bg-[#E04859] active:scale-95 text-white transition shadow-md shadow-[#FA586A]/20 disabled:opacity-50"
+              className="flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-bold bg-accent-fill hover:bg-accentHover active:scale-95 text-white transition shadow-md shadow-accent/20 disabled:opacity-50"
             >
               {loading
                 ? mode === "folder"

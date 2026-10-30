@@ -16,12 +16,14 @@ import {
   FilePenLine,
   Trash2,
   CornerDownRight,
+  Sparkles,
 } from "lucide-react";
 import { useArtwork } from "../utils/useArtwork";
 import { ArtistLinks } from "./ArtistLinks";
 import { useLibraryStore } from "../stores/libraryStore";
 import { usePlayerStore } from "../stores/playerStore";
 import { useContextMenuStore, ContextMenuItem } from "../stores/contextMenuStore";
+import { useEnrichmentStore } from "../stores/enrichmentStore";
 import { EqualizerWave } from "./EqualizerWave";
 import { RowDensity } from "../stores/settingsStore";
 
@@ -265,6 +267,14 @@ const TrackRowInner: React.FC<TrackRowProps> = ({
             onClick: () => {
               onEditMetadata(track);
             },
+          },
+          {
+            id: "pull-online-track",
+            label: "Pull Online Metadata & Lyrics...",
+            icon: Sparkles,
+            onClick: () => {
+              useEnrichmentStore.getState().openModal([track]);
+            },
           }
         );
       }
@@ -326,15 +336,15 @@ const TrackRowInner: React.FC<TrackRowProps> = ({
       onDoubleClick={() => onPlay(track, index)}
       onContextMenu={handleContextMenu}
       className={`grid grid-cols-[36px_minmax(0,1fr)_auto] md:grid-cols-[40px_minmax(160px,1fr)_140px_80px] lg:grid-cols-[44px_minmax(180px,1fr)_150px_150px_90px] xl:grid-cols-[48px_minmax(180px,1fr)_160px_160px_80px_110px] gap-2 sm:gap-3 px-3 sm:px-6 items-center group cursor-pointer hover:bg-white/[0.06] transition-colors duration-150 ease-out border-b border-white/[0.03] select-none ${
-        isCompact ? "text-[11px]" : "text-xs"
+        isCompact ? "text-2xs" : "text-xs"
       } ${
-        isSelected ? "bg-white/[0.08] text-[#FA586A]" : "text-white"
+        isSelected ? "bg-white/[0.08] text-accent" : "text-white"
       }`}
     >
       {/* 1. Track Number / Play-Pause Button */}
       <div
         role="cell"
-        className={`flex items-center justify-center text-[#71717A] flex-shrink-0 w-8 ${isCompact ? "text-[10.5px]" : "text-xs"}`}
+        className={`flex items-center justify-center text-textMuted flex-shrink-0 w-8 ${isCompact ? "text-2xs" : "text-xs"}`}
       >
         {/* Not hovered state */}
         <span className="group-hover:hidden font-mono tabular-nums flex items-center justify-center">
@@ -354,11 +364,11 @@ const TrackRowInner: React.FC<TrackRowProps> = ({
             e.stopPropagation();
             onPlay(track, index);
           }}
-          className="hidden group-hover:inline-flex text-white hover:text-[#FA586A] hover:scale-110 active:scale-95 transition items-center justify-center"
+          className="hidden group-hover:inline-flex text-white hover:text-accent hover:scale-110 active:scale-95 transition items-center justify-center"
           title={isSelected && isPlaying ? "Pause Track" : isSelected ? "Resume Track" : "Play Track"}
         >
           {isSelected && isPlaying ? (
-            <Pause className={`${isCompact ? "w-3.5 h-3.5" : "w-4 h-4"} fill-current text-[#FA586A]`} />
+            <Pause className={`${isCompact ? "w-3.5 h-3.5" : "w-4 h-4"} fill-current text-accent`} />
           ) : (
             <Play className={`${isCompact ? "w-3.5 h-3.5" : "w-4 h-4"} fill-current`} />
           )}
@@ -366,8 +376,8 @@ const TrackRowInner: React.FC<TrackRowProps> = ({
       </div>
 
       {/* 2. Title & Artwork (with mobile-stacked Artist) */}
-      <div role="cell" className="flex items-center space-x-2.5 min-w-0 font-medium">
-        <div className={`${isCompact ? "w-6 h-6 rounded-md" : "w-8 h-8 rounded-lg"} bg-[#1C1C22] flex items-center justify-center overflow-hidden flex-shrink-0 shadow-sm relative border border-white/[0.06]`}>
+      <div role="cell" className="flex items-center space-x-3 min-w-0 font-medium">
+        <div className={`${isCompact ? "w-6 h-6 rounded-md" : "w-8 h-8 rounded-lg"} bg-surfaceHover flex items-center justify-center overflow-hidden flex-shrink-0 shadow-sm relative border border-white/[0.06]`}>
           {artworkUrl && !imgError ? (
             <img
               src={artworkUrl}
@@ -378,39 +388,39 @@ const TrackRowInner: React.FC<TrackRowProps> = ({
               onError={() => setImgError(true)}
             />
           ) : (
-            <Music className={`${isCompact ? "w-3 h-3" : "w-3.5 h-3.5"} text-[#71717A]`} />
+            <Music className={`${isCompact ? "w-3 h-3" : "w-3.5 h-3.5"} text-textMuted`} />
           )}
         </div>
         <div className="min-w-0 flex-1 truncate">
-          <span className={`truncate font-semibold block leading-tight ${isSelected ? "text-[#FA586A]" : "text-white"}`}>
+          <span className={`truncate font-semibold block leading-tight ${isSelected ? "text-accent" : "text-white"}`}>
             {track.metadata.title || "Untitled"}
           </span>
           {/* Mobile-only stacked artist subtitle */}
-          <div className="md:hidden text-[11px] text-[#A1A1AA] truncate leading-tight mt-0.5">
+          <div className="md:hidden text-2xs text-textSecondary truncate leading-tight mt-1">
             <ArtistLinks
               artistName={artistName}
               onSelectArtist={onSelectArtist}
               className="truncate block"
               linkClassName="hover:text-white hover:underline cursor-pointer transition-colors"
-              delimiterClassName="text-[#71717A]"
+              delimiterClassName="text-textMuted"
             />
           </div>
         </div>
       </div>
 
       {/* 3. Artist (visible on md+) */}
-      <div role="cell" className="hidden md:block text-[#A1A1AA] truncate min-w-0">
+      <div role="cell" className="hidden md:block text-textSecondary truncate min-w-0">
         <ArtistLinks
           artistName={artistName}
           onSelectArtist={onSelectArtist}
           className="truncate block"
           linkClassName="hover:text-white hover:underline cursor-pointer transition-colors"
-          delimiterClassName="text-[#71717A]"
+          delimiterClassName="text-textMuted"
         />
       </div>
 
       {/* 4. Album (visible on lg+) */}
-      <div role="cell" className="hidden lg:block text-[#A1A1AA] truncate min-w-0">
+      <div role="cell" className="hidden lg:block text-textSecondary truncate min-w-0">
         {onSelectAlbum ? (
           <span
             onClick={(e) => {
@@ -428,7 +438,7 @@ const TrackRowInner: React.FC<TrackRowProps> = ({
 
       {/* 5. Format (visible on xl+) */}
       <div role="cell" className="hidden xl:flex items-center justify-center">
-        <span className="px-2 py-0.5 text-[9.5px] font-bold bg-white/[0.06] text-[#A1A1AA] rounded-md tracking-wider border border-white/[0.04]">
+        <span className="px-2 py-1 text-2xs font-bold bg-white/[0.06] text-textSecondary rounded-md tracking-wider border border-white/[0.04]">
           {track.metadata.format}
         </span>
       </div>
@@ -436,7 +446,7 @@ const TrackRowInner: React.FC<TrackRowProps> = ({
       {/* 6. Actions (Like, Add to playlist) & Duration */}
       <div
         role="cell"
-        className="flex items-center justify-end space-x-2 text-xs text-[#71717A]"
+        className="flex items-center justify-end space-x-2 text-xs text-textMuted"
       >
         {/* Heart Like Toggle */}
         <button
@@ -444,12 +454,12 @@ const TrackRowInner: React.FC<TrackRowProps> = ({
           onClick={handleToggleLike}
           className={`p-1 rounded transition ${
             isLiked
-              ? "text-[#FA586A] opacity-100"
-              : "text-[#71717A] opacity-0 group-hover:opacity-100 hover:text-white"
+              ? "text-accent opacity-100"
+              : "text-textMuted opacity-0 group-hover:opacity-100 hover:text-white"
           }`}
           title={isLiked ? "Unlike song" : "Like song"}
         >
-          <Heart className={`w-3.5 h-3.5 ${isLiked ? "fill-[#FA586A]" : ""}`} />
+          <Heart className={`w-3.5 h-3.5 ${isLiked ? "fill-accent" : ""}`} />
         </button>
 
         {/* Add to Playlist Trigger */}
@@ -460,7 +470,7 @@ const TrackRowInner: React.FC<TrackRowProps> = ({
               e.stopPropagation();
               onAddToPlaylist(track);
             }}
-            className="p-1 text-[#71717A] hover:text-white opacity-0 group-hover:opacity-100 transition"
+            className="p-1 text-textMuted hover:text-white opacity-0 group-hover:opacity-100 transition"
             title="Add to Playlist"
           >
             <ListPlus className="w-3.5 h-3.5" />

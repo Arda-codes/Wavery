@@ -567,3 +567,97 @@ fn test_crossfade_player_configuration() {
     }
 }
 
+#[test]
+fn test_two_tier_user_queue_preservation_on_context_change() {
+    let mut q = StandardQueueManager::new();
+    let album1_tracks = vec![
+        make_test_track("a1_1", "Album 1 Track 1"),
+        make_test_track("a1_2", "Album 1 Track 2"),
+    ];
+    q.set_queue(album1_tracks, 0);
+
+    // User queues an explicit track
+    let u1 = make_test_track("user_1", "User Queued Track 1");
+    q.play_next(u1.clone());
+
+    assert_eq!(q.user_queue().len(), 1);
+    assert_eq!(q.user_queue()[0].id, "user_1");
+
+    // Switch context to Album 2 using set_context_queue
+    let album2_tracks = vec![
+        make_test_track("a2_1", "Album 2 Track 1"),
+        make_test_track("a2_2", "Album 2 Track 2"),
+        make_test_track("a2_3", "Album 2 Track 3"),
+    ];
+    q.set_context_queue(album2_tracks, 0);
+
+    // User queue MUST be preserved at the top of upcoming tracks
+    assert_eq!(q.user_queue().len(), 1);
+    assert_eq!(q.user_queue()[0].id, "user_1");
+    assert_eq!(q.current_track().map(|t| t.id.as_str()), Some("a2_1"));
+
+    // Next track must be the user-queued track
+    let next = q.next();
+    assert_eq!(next.map(|t| t.id.as_str()), Some("user_1"));
+    assert_eq!(q.user_queue().len(), 0);
+
+    // Next track must resume album 2 context
+    let next2 = q.next();
+    assert_eq!(next2.map(|t| t.id.as_str()), Some("a2_2"));
+}
+
+#[test]
+fn test_two_tier_user_queue_reordering_and_removal() {
+    let mut q = StandardQueueManager::new();
+    let base_tracks = vec![
+        make_test_track("b1", "Base 1"),
+        make_test_track("b2", "Base 2"),
+    ];
+    q.set_queue(base_tracks, 0);
+
+    let u1 = make_test_track("u1", "User 1");
+    let u2 = make_test_track("u2", "User 2");
+    q.play_next(u1.clone());
+    q.play_next(u2.clone()); // u2 is now at index 0, u1 at index 1
+
+    assert_eq!(q.user_queue().len(), 2);
+    assert_eq!(q.user_queue()[0].id, "u2");
+    assert_eq!(q.user_queue()[1].id, "u1");
+
+    // Reorder: move u2 to position 1
+    q.reorder_user_queue(0, 1);
+    assert_eq!(q.user_queue()[0].id, "u1");
+    assert_eq!(q.user_queue()[1].id, "u2");
+
+    // Remove index 0 (u1)
+    let removed = q.remove_user_track(0);
+    assert_eq!(removed.map(|t| t.id), Some("u1".into()));
+    assert_eq!(q.user_queue().len(), 1);
+    assert_eq!(q.user_queue()[0].id, "u2");
+
+    // Clear user queue
+    q.clear_user_queue();
+    assert_eq!(q.user_queue().len(), 0);
+}
+
+#[test]
+fn test_playback_history_recording() {
+    let mut q = StandardQueueManager::new();
+    let tracks = vec![
+        make_test_track("t1", "Track 1"),
+        make_test_track("t2", "Track 2"),
+        make_test_track("t3", "Track 3"),
+    ];
+    q.set_queue(tracks, 0);
+
+    assert_eq!(q.history().len(), 0);
+    let _ = q.next();
+    assert_eq!(q.history().len(), 1);
+    assert_eq!(q.history()[0].id, "t1");
+
+    let _ = q.next();
+    assert_eq!(q.history().len(), 2);
+    assert_eq!(q.history()[1].id, "t2");
+}
+
+

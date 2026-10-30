@@ -33,6 +33,7 @@ pub struct Config {
     pub theme: ThemeConfig,
     pub keybinds: KeybindsConfig,
     pub ui: UiConfig,
+    pub integrations: IntegrationsConfig,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -156,6 +157,25 @@ pub struct UiConfig {
     pub simplify_mode: bool,
     pub is_linux_banner_dismissed: bool,
     pub enable_gradients: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct IntegrationsConfig {
+    pub enable_media_session: bool,
+    pub enable_discord_rpc: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discord_app_id: Option<String>,
+}
+
+impl Default for IntegrationsConfig {
+    fn default() -> Self {
+        Self {
+            enable_media_session: true,
+            enable_discord_rpc: false,
+            discord_app_id: None,
+        }
+    }
 }
 
 pub fn default_protected_artists() -> Vec<String> {

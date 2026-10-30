@@ -39,57 +39,17 @@ interface SearchViewProps {
 
 type SearchFilterTab = "all" | "songs" | "albums" | "artists" | "playlists";
 
-const GRADIENT_PALETTES = [
-  {
-    cardGradient: "bg-gradient-to-br from-emerald-950/40 via-surface to-surface hover:from-emerald-900/50 border-emerald-500/20 hover:border-emerald-500/40",
-    iconColor: "text-emerald-400",
-    icon: Guitar,
-  },
-  {
-    cardGradient: "bg-gradient-to-br from-indigo-950/40 via-surface to-surface hover:from-indigo-900/50 border-indigo-500/20 hover:border-indigo-500/40",
-    iconColor: "text-indigo-400",
-    icon: Flame,
-  },
-  {
-    cardGradient: "bg-gradient-to-br from-rose-950/40 via-surface to-surface hover:from-rose-900/50 border-rose-500/20 hover:border-rose-500/40",
-    iconColor: "text-rose-400",
-    icon: Zap,
-  },
-  {
-    cardGradient: "bg-gradient-to-br from-pink-950/40 via-surface to-surface hover:from-pink-900/50 border-pink-500/20 hover:border-pink-500/40",
-    iconColor: "text-pink-400",
-    icon: Heart,
-  },
-  {
-    cardGradient: "bg-gradient-to-br from-amber-950/40 via-surface to-surface hover:from-amber-900/50 border-amber-500/20 hover:border-amber-500/40",
-    iconColor: "text-amber-400",
-    icon: Radio,
-  },
-  {
-    cardGradient: "bg-gradient-to-br from-sky-950/40 via-surface to-surface hover:from-sky-900/50 border-sky-500/20 hover:border-sky-500/40",
-    iconColor: "text-sky-400",
-    icon: Headphones,
-  },
-  {
-    cardGradient: "bg-gradient-to-br from-teal-950/40 via-surface to-surface hover:from-teal-900/50 border-teal-500/20 hover:border-teal-500/40",
-    iconColor: "text-teal-400",
-    icon: Compass,
-  },
-  {
-    cardGradient: "bg-gradient-to-br from-blue-950/40 via-surface to-surface hover:from-blue-900/50 border-blue-500/20 hover:border-blue-500/40",
-    iconColor: "text-blue-400",
-    icon: Music,
-  },
-  {
-    cardGradient: "bg-gradient-to-br from-violet-950/40 via-surface to-surface hover:from-violet-900/50 border-violet-500/20 hover:border-violet-500/40",
-    iconColor: "text-violet-400",
-    icon: Disc,
-  },
-  {
-    cardGradient: "bg-gradient-to-br from-fuchsia-950/40 via-surface to-surface hover:from-fuchsia-900/50 border-fuchsia-500/20 hover:border-fuchsia-500/40",
-    iconColor: "text-fuchsia-400",
-    icon: Users,
-  },
+const CATEGORY_PALETTES = [
+  { iconColor: "text-accent", icon: Guitar },
+  { iconColor: "text-warning", icon: Flame },
+  { iconColor: "text-accent", icon: Zap },
+  { iconColor: "text-danger", icon: Heart },
+  { iconColor: "text-success", icon: Radio },
+  { iconColor: "text-textPrimary", icon: Headphones },
+  { iconColor: "text-accent", icon: Compass },
+  { iconColor: "text-warning", icon: Music },
+  { iconColor: "text-success", icon: Disc },
+  { iconColor: "text-textSecondary", icon: Users },
 ];
 
 export const SearchView: React.FC<SearchViewProps> = ({
@@ -139,13 +99,13 @@ export const SearchView: React.FC<SearchViewProps> = ({
     const sorted = Array.from(genreMap.entries()).sort((a, b) => b[1] - a[1]);
     if (sorted.length > 0) {
       return sorted.slice(0, 10).map(([name, count], index) => {
-        const palette = GRADIENT_PALETTES[index % GRADIENT_PALETTES.length];
+        const palette = CATEGORY_PALETTES[index % CATEGORY_PALETTES.length];
         return {
           id: `genre-${name.toLowerCase().replace(/\s+/g, "-")}`,
           name,
           query: name,
           subtitle: `${count} ${count === 1 ? "track" : "tracks"}`,
-          cardGradient: palette.cardGradient,
+          cardGradient: "bg-surface hover:bg-surfaceHover border-border hover:border-white/20",
           iconColor: palette.iconColor,
           icon: palette.icon,
         };
@@ -165,13 +125,13 @@ export const SearchView: React.FC<SearchViewProps> = ({
     const decadeEntries = Array.from(decadeMap.entries()).sort((a, b) => b[0].localeCompare(a[0]));
     if (decadeEntries.length > 0) {
       return decadeEntries.slice(0, 8).map(([decade, count], index) => {
-        const palette = GRADIENT_PALETTES[index % GRADIENT_PALETTES.length];
+        const palette = CATEGORY_PALETTES[index % CATEGORY_PALETTES.length];
         return {
           id: `decade-${decade}`,
           name: `${decade} Music`,
           query: decade.replace("s", ""),
           subtitle: `${count} tracks`,
-          cardGradient: palette.cardGradient,
+          cardGradient: "bg-surface hover:bg-surfaceHover border-border hover:border-white/20",
           iconColor: palette.iconColor,
           icon: palette.icon,
         };
@@ -180,13 +140,13 @@ export const SearchView: React.FC<SearchViewProps> = ({
 
     // Fallback if neither genre nor year: top artists
     return artists.slice(0, 8).map((artist, index) => {
-      const palette = GRADIENT_PALETTES[index % GRADIENT_PALETTES.length];
+      const palette = CATEGORY_PALETTES[index % CATEGORY_PALETTES.length];
       return {
         id: `artist-${artist.name.toLowerCase().replace(/\s+/g, "-")}`,
         name: artist.name,
         query: artist.name,
         subtitle: `${artist.trackCount} tracks`,
-        cardGradient: palette.cardGradient,
+        cardGradient: "bg-surface hover:bg-surfaceHover border-border hover:border-white/20",
         iconColor: palette.iconColor,
         icon: palette.icon,
       };
@@ -490,7 +450,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
   return (
     <div
       ref={scrollContainerRef}
-      className="flex-1 overflow-y-auto px-4 sm:px-6 md:px-8 py-4 sm:py-6 space-y-7 select-none pb-28 sm:pb-24"
+      className="flex-1 overflow-y-auto px-4 sm:px-6 md:px-8 py-4 sm:py-6 space-y-8 select-none pb-28 sm:pb-24"
     >
       {/* 1. Header & Active Search Filters */}
       <div className="space-y-4">
@@ -509,7 +469,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
           {trimmedQuery && (
             <button
               onClick={() => setGlobalSearch("")}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-textMuted hover:text-white bg-white/[0.06] hover:bg-white/[0.12] active:scale-95 rounded-lg border border-white/[0.08] transition-all"
+              className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold text-textMuted hover:text-white bg-white/[0.06] hover:bg-white/[0.12] active:scale-95 rounded-lg border border-white/[0.08] transition-all"
               title="Clear search query"
             >
               <X className="w-3.5 h-3.5" />
@@ -523,7 +483,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
           <div className="flex items-center gap-2 overflow-x-auto pt-1 pb-1">
             <button
               onClick={() => setActiveTab("all")}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition ${
+              className={`px-4 py-2 rounded-full text-xs font-semibold transition ${
                 activeTab === "all"
                   ? "bg-white text-black font-bold shadow-sm"
                   : "bg-white/[0.06] text-textSecondary hover:text-white hover:bg-white/[0.10]"
@@ -533,7 +493,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
             </button>
             <button
               onClick={() => setActiveTab("songs")}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition ${
+              className={`px-4 py-2 rounded-full text-xs font-semibold transition ${
                 activeTab === "songs"
                   ? "bg-white text-black font-bold shadow-sm"
                   : "bg-white/[0.06] text-textSecondary hover:text-white hover:bg-white/[0.10]"
@@ -543,7 +503,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
             </button>
             <button
               onClick={() => setActiveTab("albums")}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition ${
+              className={`px-4 py-2 rounded-full text-xs font-semibold transition ${
                 activeTab === "albums"
                   ? "bg-white text-black font-bold shadow-sm"
                   : "bg-white/[0.06] text-textSecondary hover:text-white hover:bg-white/[0.10]"
@@ -553,7 +513,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
             </button>
             <button
               onClick={() => setActiveTab("artists")}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition ${
+              className={`px-4 py-2 rounded-full text-xs font-semibold transition ${
                 activeTab === "artists"
                   ? "bg-white text-black font-bold shadow-sm"
                   : "bg-white/[0.06] text-textSecondary hover:text-white hover:bg-white/[0.10]"
@@ -563,7 +523,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
             </button>
             <button
               onClick={() => setActiveTab("playlists")}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition ${
+              className={`px-4 py-2 rounded-full text-xs font-semibold transition ${
                 activeTab === "playlists"
                   ? "bg-white text-black font-bold shadow-sm"
                   : "bg-white/[0.06] text-textSecondary hover:text-white hover:bg-white/[0.10]"
@@ -577,7 +537,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
 
       {/* 2. STATE A: BROWSE & EXPLORE (When query is empty) */}
       {!trimmedQuery && (
-        <div className="space-y-9">
+        <div className="space-y-8">
           {/* Recent Searches Chips */}
           {recentSearches.length > 0 && (
             <div className="space-y-3">
@@ -599,7 +559,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                   <div
                     key={search}
                     onClick={() => setGlobalSearch(search)}
-                    className="group inline-flex items-center space-x-2 px-3 py-1.5 bg-surface hover:bg-surfaceActive border border-white/[0.08] hover:border-white/[0.18] rounded-full text-xs font-medium text-textPrimary cursor-pointer transition shadow-sm"
+                    className="group inline-flex items-center space-x-2 px-3 py-2 bg-surface hover:bg-surfaceActive border border-white/[0.08] hover:border-white/[0.18] rounded-full text-xs font-medium text-textPrimary cursor-pointer transition shadow-sm"
                   >
                     <Search className="w-3 h-3 text-textMuted group-hover:text-accent transition-colors" />
                     <span>{search}</span>
@@ -608,7 +568,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                         e.stopPropagation();
                         removeRecentSearch(search);
                       }}
-                      className="text-textMuted hover:text-white p-0.5 rounded-full transition ml-1"
+                      className="text-textMuted hover:text-white p-1 rounded-full transition ml-1"
                       title="Remove"
                     >
                       <X className="w-3 h-3" />
@@ -620,7 +580,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
           )}
 
           {/* Browse Categories (Apple Music Vibrant Category Grid) */}
-          <div className="space-y-3.5">
+          <div className="space-y-4">
             <div className="flex items-center space-x-2">
               <Compass className="w-4 h-4 text-accent" />
               <h2 className="text-lg font-bold text-white tracking-tight">
@@ -647,7 +607,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                       <IconComponent className={`w-5 h-5 ${cat.iconColor} group-hover:scale-110 transition-transform flex-shrink-0`} />
                     </div>
 
-                    <div className="flex items-center justify-between text-[11px] font-semibold text-textSecondary group-hover:text-textPrimary transition-colors">
+                    <div className="flex items-center justify-between text-2xs font-semibold text-textSecondary group-hover:text-textPrimary transition-colors">
                       <span>{cat.subtitle}</span>
                       <span className="group-hover:translate-x-1 transition-transform">→</span>
                     </div>
@@ -659,7 +619,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
 
           {/* Suggested Albums from Library based on history */}
           {suggestedAlbums.length > 0 && (
-            <div className="space-y-3.5">
+            <div className="space-y-4">
               <h2 className="text-lg font-bold text-white tracking-tight">
                 Suggested From Your Library
               </h2>
@@ -701,7 +661,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                       <p className="mt-2 text-xs font-semibold text-white truncate group-hover:text-accent transition">
                         {album.title}
                       </p>
-                      <p className="text-[11px] text-textMuted truncate">
+                      <p className="text-2xs text-textMuted truncate">
                         {album.artist}
                       </p>
                     </div>
@@ -738,7 +698,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                     {/* Top Result Hero Card (Apple Music style) */}
                     {topResult && (
-                      <div className="lg:col-span-5 space-y-2.5">
+                      <div className="lg:col-span-5 space-y-3">
                         <h2 className="text-base font-bold text-white tracking-tight">
                           Top Result
                         </h2>
@@ -799,13 +759,13 @@ export const SearchView: React.FC<SearchViewProps> = ({
                           </div>
 
                           <div>
-                            <span className="text-[10px] font-black tracking-wider uppercase px-2 py-0.5 rounded-full bg-white/[0.08] text-accent border border-white/[0.06]">
+                            <span className="text-2xs font-black tracking-wider uppercase px-2 py-1 rounded-full bg-white/[0.08] text-accent border border-white/[0.06]">
                               {topResult.type.toUpperCase()}
                             </span>
-                            <h3 className="text-xl font-extrabold text-white mt-1.5 truncate group-hover:text-accent transition-colors">
+                            <h3 className="text-xl font-extrabold text-white mt-2 truncate group-hover:text-accent transition-colors">
                               {topResult.title}
                             </h3>
-                            <p className="text-xs text-textSecondary truncate mt-0.5">
+                            <p className="text-xs text-textSecondary truncate mt-1">
                               {topResult.subtitle}
                             </p>
                           </div>
@@ -817,7 +777,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                     <div
                       className={`${
                         topResult ? "lg:col-span-7" : "lg:col-span-12"
-                      } space-y-2.5`}
+                      } space-y-3`}
                     >
                       <div className="flex items-center justify-between">
                         <h2 className="text-base font-bold text-white tracking-tight">
@@ -879,7 +839,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                                   >
                                     {track.metadata.title || "Untitled Track"}
                                   </p>
-                                  <p className="text-[11px] text-textSecondary truncate">
+                                  <p className="text-2xs text-textSecondary truncate">
                                     {track.metadata.artist || "Unknown Artist"}
                                   </p>
                                 </div>
@@ -949,7 +909,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                               <p className="mt-2 text-xs font-semibold text-white truncate group-hover:text-accent transition">
                                 {album.title}
                               </p>
-                              <p className="text-[11px] text-textMuted truncate">
+                              <p className="text-2xs text-textMuted truncate">
                                 {album.artist}
                               </p>
                             </div>
@@ -1013,7 +973,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                               <p className="mt-2 text-xs font-semibold text-white truncate max-w-full group-hover:text-accent transition">
                                 {artist.name}
                               </p>
-                              <p className="text-[10px] text-textMuted">
+                              <p className="text-2xs text-textMuted">
                                 {artist.trackCount} {artist.trackCount === 1 ? "song" : "songs"}
                               </p>
                             </div>
@@ -1038,7 +998,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                           >
                             <div className="flex items-center justify-between mb-2">
                               <ListMusic className="w-5 h-5 text-accent" />
-                              <span className="text-[10px] text-textMuted font-mono">
+                              <span className="text-2xs text-textMuted font-mono">
                                 {pl.track_ids.length} songs
                               </span>
                             </div>
@@ -1118,7 +1078,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                               >
                                 {track.metadata.title || "Untitled Track"}
                               </p>
-                              <p className="text-[11px] text-textSecondary truncate">
+                              <p className="text-2xs text-textSecondary truncate">
                                 {track.metadata.artist || "Unknown Artist"} • {track.metadata.album || "Unknown Album"}
                               </p>
                             </div>
@@ -1173,7 +1133,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                         <p className="mt-2 text-xs font-semibold text-white truncate group-hover:text-accent transition">
                           {album.title}
                         </p>
-                        <p className="text-[11px] text-textMuted truncate">
+                        <p className="text-2xs text-textMuted truncate">
                           {album.artist}
                         </p>
                       </div>
@@ -1219,10 +1179,10 @@ export const SearchView: React.FC<SearchViewProps> = ({
                             </button>
                           </div>
                         </div>
-                        <p className="mt-2.5 text-xs font-semibold text-white truncate max-w-full group-hover:text-accent transition">
+                        <p className="mt-3 text-xs font-semibold text-white truncate max-w-full group-hover:text-accent transition">
                           {artist.name}
                         </p>
-                        <p className="text-[10px] text-textMuted">
+                        <p className="text-2xs text-textMuted">
                           {artist.trackCount} {artist.trackCount === 1 ? "song" : "songs"}
                         </p>
                       </div>
@@ -1242,7 +1202,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                     >
                       <div className="flex items-center justify-between mb-2">
                         <ListMusic className="w-5 h-5 text-accent" />
-                        <span className="text-[10px] text-textMuted font-mono">
+                        <span className="text-2xs text-textMuted font-mono">
                           {pl.track_ids.length} songs
                         </span>
                       </div>

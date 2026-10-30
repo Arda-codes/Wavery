@@ -28,27 +28,23 @@ Pre-built binaries for Linux and Windows are available directly on the [Releases
 
 Wavery separates its backend into modular Cargo crates governed by domain traits in `wavery-core`. Subsystems communicate through interfaces rather than concrete dependencies, keeping audio engines, databases, and network transports cleanly isolated.
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                       wavery-ui                             │
-│       React 18 · TypeScript · Zustand · TanStack Virtual    │
-└──────────────┬───────────────────────────────┬──────────────┘
-               │ IPC                           │ HTTP / REST
-┌──────────────▼──────────────┐ ┌──────────────▼──────────────┐
-│        wavery-tauri         │ │        wavery-server        │
-│    Tauri v2 Desktop Shell   │ │    Axum RFC 7233 Streamer   │
-└──────────────┬──────────────┘ └──────────────┬──────────────┘
-               │                               │
-┌──────────────▼───────────────────────────────▼──────────────┐
-│  wavery-audio   │  wavery-library  │  wavery-mpris          │
-│  Rodio + CPAL   │  SQLite FTS5+WAL │  Linux D-Bus (zbus)    │
-│  64KB Buffering │  Lofty Metadata  │                        │
-└─────────────────┴──────────────────┴────────────────────────┘
-               │                               │
-┌──────────────▼───────────────────────────────▼──────────────┐
-│            wavery-core          │       wavery-config       │
-│     Domain Models & Traits      │    XDG Atomic TOML Config │
-└─────────────────────────────────┴───────────────────────────┘
+```mermaid
+flowchart TD
+    UI["<b>wavery-ui</b><br/>React 18 · TypeScript · Zustand"]
+
+    UI -->|Desktop IPC| Tauri["<b>wavery-tauri</b><br/>Tauri v2 Desktop Shell"]
+    UI -->|HTTP / REST| Server["<b>wavery-server</b><br/>Axum Web Daemon"]
+
+    Tauri --> Audio["<b>wavery-audio</b><br/>Rodio Audio Backend"]
+    Tauri --> MPRIS["<b>wavery-mpris</b><br/>Linux D-Bus Media Keys"]
+    Tauri --> Library["<b>wavery-library</b><br/>SQLite Storage & Tag Indexer"]
+
+    Server --> Library
+
+    Audio --> Core["<b>wavery-core</b><br/>Domain Traits & Models"]
+    MPRIS --> Core
+    Library --> Core
+    Library --> Config["<b>wavery-config</b><br/>Atomic TOML Settings"]
 ```
 
 ### Workspace Crate Breakdown

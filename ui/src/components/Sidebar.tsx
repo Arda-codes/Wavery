@@ -318,7 +318,7 @@ const SidebarInner: React.FC<SidebarProps> = ({
 
         {/* Library Section */}
         <div>
-          <p className="text-[11px] font-bold text-textMuted tracking-wider uppercase mb-2 px-3">
+          <p className="text-2xs font-bold text-textMuted tracking-wider uppercase mb-2 px-3">
             Library
           </p>
           <nav className="space-y-1">
@@ -343,7 +343,7 @@ const SidebarInner: React.FC<SidebarProps> = ({
                 </span>
               )}
               <span
-                className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-mono transition-colors ${
+                className={`ml-auto text-2xs px-2 py-1 rounded-full font-mono transition-colors ${
                   isTracksActive
                     ? "bg-accent text-white font-bold shadow-sm shadow-accent/30"
                     : "bg-surfaceHover text-textMuted group-hover:text-textSecondary"
@@ -376,7 +376,7 @@ const SidebarInner: React.FC<SidebarProps> = ({
                 </span>
               )}
               <span
-                className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-mono transition-colors ${
+                className={`ml-auto text-2xs px-2 py-1 rounded-full font-mono transition-colors ${
                   isLikedActive
                     ? "bg-accent text-white font-bold shadow-sm"
                     : "bg-surfaceHover text-textMuted group-hover:text-textSecondary"
@@ -408,7 +408,7 @@ const SidebarInner: React.FC<SidebarProps> = ({
               )}
               {playHistory.length > 0 && (
                 <span
-                  className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-mono transition-colors ${
+                  className={`ml-auto text-2xs px-2 py-1 rounded-full font-mono transition-colors ${
                     isHistoryActive
                       ? "bg-accent text-white font-bold shadow-sm shadow-accent/30"
                       : "bg-surfaceHover text-textMuted group-hover:text-textSecondary"
@@ -435,7 +435,7 @@ const SidebarInner: React.FC<SidebarProps> = ({
               />
               <span>Artists</span>
               <span
-                className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-mono transition-colors ${
+                className={`ml-auto text-2xs px-2 py-1 rounded-full font-mono transition-colors ${
                   isArtistsActive
                     ? "bg-accent text-white font-bold shadow-sm shadow-accent/30"
                     : "bg-surfaceHover text-textMuted group-hover:text-textSecondary"
@@ -461,7 +461,7 @@ const SidebarInner: React.FC<SidebarProps> = ({
               />
               <span>Albums</span>
               <span
-                className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-mono transition-colors ${
+                className={`ml-auto text-2xs px-2 py-1 rounded-full font-mono transition-colors ${
                   isAlbumsActive
                     ? "bg-accent text-white font-bold shadow-sm shadow-accent/30"
                     : "bg-surfaceHover text-textMuted group-hover:text-textSecondary"
@@ -478,7 +478,7 @@ const SidebarInner: React.FC<SidebarProps> = ({
           <div className="flex items-center justify-between px-3 mb-2">
             <button
               onClick={() => onNavigate("playlists")}
-              className={`text-[11px] font-bold transition-colors tracking-wider uppercase ${
+              className={`text-2xs font-bold transition-colors tracking-wider uppercase ${
                 isPlaylistsActive ? "text-accent" : "text-textMuted hover:text-textPrimary"
               }`}
             >
@@ -495,9 +495,9 @@ const SidebarInner: React.FC<SidebarProps> = ({
             )}
           </div>
 
-          <nav className="space-y-0.5 max-h-48 overflow-y-auto pr-1">
+          <nav className="space-y-1 max-h-48 overflow-y-auto pr-1">
             {playlists.length === 0 ? (
-              <p className="text-[11px] text-textMuted px-3 py-1.5 italic">
+              <p className="text-2xs text-textMuted px-3 py-2 italic">
                 No playlists yet
               </p>
             ) : (
@@ -517,7 +517,7 @@ const SidebarInner: React.FC<SidebarProps> = ({
                   >
                     <button
                       onClick={() => onSelectPlaylist && onSelectPlaylist(pl.id)}
-                      className={`w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all text-left truncate ${
+                      className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-medium transition-all text-left truncate ${
                         isSelected
                           ? "bg-surfaceActive text-textPrimary font-semibold border border-border"
                           : isThisPlaylistPlaying
@@ -535,7 +535,7 @@ const SidebarInner: React.FC<SidebarProps> = ({
                         />
                       )}
                       <span className="truncate flex-1">{pl.name}</span>
-                      <span className="text-[10px] text-textMuted font-mono pr-4">
+                      <span className="text-2xs text-textMuted font-mono pr-4">
                         {pl.track_ids.length}
                       </span>
                     </button>
@@ -548,7 +548,7 @@ const SidebarInner: React.FC<SidebarProps> = ({
                             onDeletePlaylist(pl.id);
                           }
                         }}
-                        className="absolute right-1.5 p-1 rounded hover:bg-red-500/20 text-textMuted hover:text-red-400 transition"
+                        className="absolute right-1.5 p-1 rounded hover:bg-danger/20 text-textMuted hover:text-danger transition"
                         title="Delete Playlist"
                       >
                         <Trash2 className="w-3 h-3" />
@@ -563,10 +563,10 @@ const SidebarInner: React.FC<SidebarProps> = ({
 
         {/* Manage & Settings Section */}
         <div>
-          <p className="text-[11px] font-bold text-textMuted tracking-wider uppercase mb-2 px-3">
+          <p className="text-2xs font-bold text-textMuted tracking-wider uppercase mb-2 px-3">
             Manage
           </p>
-          <nav className="space-y-1.5">
+          <nav className="space-y-2">
             {/* Import Music CTA */}
             {onOpenImport && (
               <button
@@ -634,7 +634,7 @@ const SidebarInner: React.FC<SidebarProps> = ({
             <div className="flex items-center justify-between pb-3 border-b border-border/40 mb-3 flex-shrink-0">
               <div className="flex items-center space-x-2">
                 <span className="font-bold text-sm text-textPrimary tracking-tight">Wavery</span>
-                <span className="text-[10px] text-textMuted font-medium uppercase tracking-wider px-2 py-0.5 rounded-full bg-surfaceHover border border-border">Menu</span>
+                <span className="text-2xs text-textMuted font-medium uppercase tracking-wider px-2 py-1 rounded-full bg-surfaceHover border border-border">Menu</span>
               </div>
               <button
                 type="button"

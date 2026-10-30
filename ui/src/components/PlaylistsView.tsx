@@ -12,16 +12,6 @@ interface PlaylistsViewProps {
   onDeletePlaylist?: (id: string) => void;
 }
 
-const PLAYLIST_COVER_GRADIENTS = [
-  "bg-gradient-to-br from-slate-900 via-surfaceActive to-surface",
-  "bg-gradient-to-br from-indigo-950/70 via-surfaceActive to-surface",
-  "bg-gradient-to-br from-zinc-900 via-surfaceActive to-surface",
-  "bg-gradient-to-br from-teal-950/60 via-surfaceActive to-surface",
-  "bg-gradient-to-br from-amber-950/50 via-surfaceActive to-surface",
-  "bg-gradient-to-br from-purple-950/50 via-surfaceActive to-surface",
-  "bg-gradient-to-br from-rose-950/50 via-surfaceActive to-surface",
-];
-
 export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
   playlists,
   onSelectPlaylist,
@@ -149,18 +139,18 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
   );
 
   return (
-    <div className="flex-1 flex flex-col overflow-y-auto p-8 bg-[#0D0D10]">
+    <div className="flex-1 flex flex-col overflow-y-auto p-8 bg-background">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-black text-white tracking-tight">Playlists</h1>
-          <p className="text-xs text-[#71717A] font-medium mt-1">
+          <p className="text-xs text-textMuted font-medium mt-1">
             {playlists.length} {playlists.length === 1 ? "playlist" : "playlists"} in your library
           </p>
         </div>
         <button
           onClick={onCreatePlaylist}
-          className="flex items-center space-x-2 px-4 py-2 bg-[#FA586A] hover:bg-[#E04859] active:scale-[0.98] text-white rounded-full text-xs font-bold shadow-md shadow-[#FA586A]/20 transition"
+          className="flex items-center space-x-2 px-4 py-2 bg-accent-fill hover:bg-accentHover active:scale-[0.98] text-white rounded-full text-xs font-bold shadow-md shadow-accent/20 transition"
         >
           <Plus className="w-4 h-4" />
           <span>New Playlist</span>
@@ -174,18 +164,17 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
           onClick={onCreatePlaylist}
           className="group cursor-pointer aspect-square rounded-2xl border-2 border-dashed border-white/[0.10] hover:border-accent/50 bg-white/[0.02] hover:bg-white/[0.05] transition flex flex-col items-center justify-center p-6 text-center select-none"
         >
-          <div className="w-12 h-12 rounded-2xl bg-white/[0.06] group-hover:bg-accent group-hover:text-white text-[#71717A] flex items-center justify-center transition mb-3 shadow-inner">
+          <div className="w-12 h-12 rounded-2xl bg-white/[0.06] group-hover:bg-accent group-hover:text-white text-textMuted flex items-center justify-center transition mb-3 shadow-inner">
             <Plus className="w-6 h-6" />
           </div>
-          <span className="text-xs font-bold text-[#A1A1AA] group-hover:text-white transition">
+          <span className="text-xs font-bold text-textSecondary group-hover:text-white transition">
             Create Playlist
           </span>
         </div>
 
         {/* Existing Playlists */}
-        {playlists.map((pl, idx) => {
+        {playlists.map((pl) => {
           const isCurrentLoading = playingId === pl.id;
-          const coverGradient = PLAYLIST_COVER_GRADIENTS[idx % PLAYLIST_COVER_GRADIENTS.length];
 
           return (
             <div
@@ -196,7 +185,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
             >
               {/* Art Card with Hover Play Overlay */}
               <div
-                className={`w-full aspect-square rounded-2xl ${coverGradient} p-4 flex items-end justify-between relative overflow-hidden shadow-md group-hover:shadow-xl group-hover:border-white/20 transition-all border border-white/[0.08]`}
+                className="w-full aspect-square rounded-2xl bg-surfaceActive p-4 flex items-end justify-between relative overflow-hidden shadow-md group-hover:shadow-xl group-hover:border-white/20 transition-all border border-border"
               >
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                   <ListMusic className="w-10 h-10 text-textMuted/70 group-hover:text-accent transition-colors" />
@@ -220,7 +209,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
                   <h3 className="text-xs font-bold text-white truncate group-hover:text-accent transition">
                     {pl.name}
                   </h3>
-                  <p className="text-[11px] text-[#71717A] font-medium mt-0.5">
+                  <p className="text-2xs text-textMuted font-medium mt-1">
                     {pl.track_ids.length} {pl.track_ids.length === 1 ? "track" : "tracks"}
                   </p>
                 </div>
@@ -233,7 +222,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
                         onDeletePlaylist(pl.id);
                       }
                     }}
-                    className="opacity-0 group-hover:opacity-100 p-1 text-[#71717A] hover:text-red-400 rounded transition ml-1"
+                    className="opacity-0 group-hover:opacity-100 p-1 text-textMuted hover:text-danger rounded transition ml-1"
                     title="Delete Playlist"
                   >
                     <Trash2 className="w-3.5 h-3.5" />

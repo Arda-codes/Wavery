@@ -66,7 +66,7 @@ export const WindowControls: React.FC<WindowControlsProps> = ({
           type="button"
           data-tauri-drag-region="none"
           onClick={handleClose}
-          className="w-3 h-3 rounded-full bg-[#FF5F56] border border-[#E0443E]/50 flex items-center justify-center transition-transform duration-100 hover:scale-105 active:brightness-90 focus:outline-none focus:ring-1 focus:ring-red-400"
+          className="w-3 h-3 rounded-full bg-[#FF5F56] border border-[#E0443E]/50 flex items-center justify-center transition-transform duration-100 hover:scale-105 active:brightness-90 focus:outline-none focus:ring-1 focus:ring-danger"
           title="Close (⌘W)"
           aria-label="Close Window"
         >
@@ -86,7 +86,7 @@ export const WindowControls: React.FC<WindowControlsProps> = ({
           type="button"
           data-tauri-drag-region="none"
           onClick={handleMinimize}
-          className="w-3 h-3 rounded-full bg-[#FFBD2E] border border-[#DEA123]/50 flex items-center justify-center transition-transform duration-100 hover:scale-105 active:brightness-90 focus:outline-none focus:ring-1 focus:ring-yellow-400"
+          className="w-3 h-3 rounded-full bg-[#FFBD2E] border border-[#DEA123]/50 flex items-center justify-center transition-transform duration-100 hover:scale-105 active:brightness-90 focus:outline-none focus:ring-1 focus:ring-warning"
           title="Minimize (⌘M)"
           aria-label="Minimize Window"
         >
@@ -106,7 +106,7 @@ export const WindowControls: React.FC<WindowControlsProps> = ({
           type="button"
           data-tauri-drag-region="none"
           onClick={handleToggleFullscreen}
-          className="w-3 h-3 rounded-full bg-[#27C93F] border border-[#1AAB29]/50 flex items-center justify-center transition-transform duration-100 hover:scale-105 active:brightness-90 focus:outline-none focus:ring-1 focus:ring-green-400"
+          className="w-3 h-3 rounded-full bg-[#27C93F] border border-[#1AAB29]/50 flex items-center justify-center transition-transform duration-100 hover:scale-105 active:brightness-90 focus:outline-none focus:ring-1 focus:ring-success"
           title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen (⌃⌘F)"}
           aria-label={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
         >
@@ -170,7 +170,7 @@ export const WindowControls: React.FC<WindowControlsProps> = ({
         type="button"
         data-tauri-drag-region="none"
         onClick={handleClose}
-        className="w-8 h-8 rounded-md bg-transparent hover:bg-[#E81123] active:bg-[#C4101F] text-textMuted hover:text-white flex items-center justify-center transition-colors duration-150 focus:outline-none focus:ring-1 focus:ring-red-400"
+        className="w-8 h-8 rounded-md bg-transparent hover:bg-[#E81123] active:bg-[#C4101F] text-textMuted hover:text-white flex items-center justify-center transition-colors duration-150 focus:outline-none focus:ring-1 focus:ring-danger"
         title="Close"
         aria-label="Close"
       >

@@ -14,8 +14,11 @@ import {
   Volume1,
   VolumeX,
   Mic2,
-  Infinity,
+  Sparkles,
+  Loader2,
 } from "lucide-react";
+import { fetchLyrics } from "../services/lyrics";
+import { playerAdapter } from "../services/adapter";
 import { usePlayerStore } from "../stores/playerStore";
 import { useLibraryStore } from "../stores/libraryStore";
 import { useNavigationStore } from "../stores/navigationStore";
@@ -57,7 +60,7 @@ const FullscreenVolumeControl: React.FC = React.memo(() => {
       <button
         type="button"
         onClick={handleToggleMute}
-        className="text-textMuted hover:text-textPrimary hover:bg-surfaceHover transition p-1.5 focus:outline-none rounded-lg"
+        className="text-textMuted hover:text-textPrimary hover:bg-surfaceHover transition p-2 focus:outline-none rounded-lg"
         title={volume === 0 ? "Unmute" : `Mute (${Math.round(volume * 100)}%)`}
       >
         <VolumeIcon className="w-4 h-4" />
@@ -86,7 +89,6 @@ export const FullscreenPlayer: React.FC = () => {
       s.status.duration_secs || s.currentTrack?.metadata.duration?.secs || 0
   );
   const isShuffle = usePlayerStore((s) => s.isShuffle);
-  const isAutoplay = usePlayerStore((s) => s.isAutoplay);
   const loopMode = usePlayerStore((s) => s.status.loop_mode);
   const isLiked = useLibraryStore(
     (s) => !!currentTrack?.id && s.likedTrackIds.has(currentTrack.id)
@@ -99,11 +101,45 @@ export const FullscreenPlayer: React.FC = () => {
   const playPrevious = usePlayerStore((s) => s.playPrevious);
   const seek = usePlayerStore((s) => s.seek);
   const toggleShuffle = usePlayerStore((s) => s.toggleShuffle);
-  const toggleAutoplay = usePlayerStore((s) => s.toggleAutoplay);
   const cycleLoopMode = usePlayerStore((s) => s.cycleLoopMode);
 
   const artworkUrl = useArtwork(currentTrack?.id);
   const lyricsContainerRef = useRef<HTMLDivElement>(null);
+
+  const [isFetchingLyrics, setIsFetchingLyrics] = useState(false);
+  const [lyricsFetchError, setLyricsFetchError] = useState<string | null>(null);
+
+  const handleFetchLyricsOnline = async () => {
+    if (!currentTrack) return;
+    setIsFetchingLyrics(true);
+    setLyricsFetchError(null);
+    try {
+      const res = await fetchLyrics(
+        currentTrack.metadata.artist || "",
+        currentTrack.metadata.title || "",
+        currentTrack.metadata.album,
+        currentTrack.metadata.duration.secs
+      );
+      if (res?.bestLyrics) {
+        const updated = await playerAdapter.updateTrackMetadata({
+          track_id: currentTrack.id,
+          lyrics: res.bestLyrics,
+          write_tags: false,
+        });
+        const allTracks = useLibraryStore.getState().tracks;
+        useLibraryStore.setState({
+          tracks: allTracks.map((t) => (t.id === updated.id ? updated : t)),
+        });
+        usePlayerStore.setState({ currentTrack: updated });
+      } else {
+        setLyricsFetchError("No lyrics found on LRCLIB");
+      }
+    } catch {
+      setLyricsFetchError("Failed to query LRCLIB");
+    } finally {
+      setIsFetchingLyrics(false);
+    }
+  };
 
   // VSync continuous interpolation hook for scrubber
   const {
@@ -255,7 +291,7 @@ export const FullscreenPlayer: React.FC = () => {
             className="flex flex-col items-center group transition text-center focus:outline-none max-w-[200px] sm:max-w-sm truncate"
             title={`Jump to ${playbackContext.name}`}
           >
-            <span className="text-[10px] sm:text-[10.5px] text-textMuted uppercase font-semibold tracking-wider transition-colors group-hover:text-textSecondary truncate">
+            <span className="text-2xs sm:text-2xs text-textMuted uppercase font-semibold tracking-wider transition-colors group-hover:text-textSecondary truncate">
               {playbackContext.type === "liked" ? "Playing from Liked Songs" : `Playing from ${playbackContext.type}`}
             </span>
             <span className="text-xs sm:text-sm font-medium text-textSecondary group-hover:text-textPrimary transition-colors truncate">
@@ -269,7 +305,7 @@ export const FullscreenPlayer: React.FC = () => {
         {/* Right: Exit / Dismiss Button */}
         <div className="flex items-center space-x-2 sm:space-x-3">
           <span className="text-xs text-textMuted hidden md:inline font-medium">
-            Press <kbd className="px-1.5 py-0.5 rounded bg-surfaceHover border border-borderSubtle text-textSecondary font-mono text-[10px]">Esc</kbd> to exit
+            Press <kbd className="px-2 py-1 rounded bg-surfaceHover border border-borderSubtle text-textSecondary font-mono text-2xs">Esc</kbd> to exit
           </span>
           <button
             onClick={closeFullscreen}
@@ -306,7 +342,7 @@ export const FullscreenPlayer: React.FC = () => {
               </h1>
               <button
                 onClick={() => toggleLike(currentTrack.id)}
-                className={`p-1.5 mt-1 rounded-lg transition-transform active:scale-75 focus:outline-none ${
+                className={`p-2 mt-1 rounded-lg transition-transform active:scale-75 focus:outline-none ${
                   isLiked ? "text-accent scale-110" : "text-textMuted hover:text-textPrimary"
                 }`}
                 title={isLiked ? "Unlike song" : "Like song"}
@@ -345,7 +381,7 @@ export const FullscreenPlayer: React.FC = () => {
             )}
 
             <div className="pt-1 flex items-center justify-center lg:justify-start">
-              <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] bg-surfaceHover border border-border text-[10px] font-semibold tracking-wider uppercase text-textSecondary">
+              <span className="inline-flex items-center px-2 py-1 rounded-[4px] bg-surfaceHover border border-border text-2xs font-semibold tracking-wider uppercase text-textSecondary">
                 {currentTrack.metadata.format.toUpperCase() === "FLAC" ||
                 currentTrack.metadata.format.toUpperCase() === "WAV"
                   ? "Lossless"
@@ -359,7 +395,7 @@ export const FullscreenPlayer: React.FC = () => {
         {/* Right Column: Time-Synchronized Live Lyrics */}
         <div className="flex-1 w-full h-80 sm:h-96 lg:h-[500px] flex flex-col overflow-hidden relative">
           {lyrics.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-center p-8 space-y-3">
+            <div className="flex-1 flex flex-col items-center justify-center text-center p-8 space-y-4">
               <div className="w-14 h-14 rounded-2xl bg-surfaceHover border border-border flex items-center justify-center shadow-lg">
                 <Mic2 className="w-6 h-6 text-textMuted/50" />
               </div>
@@ -369,6 +405,27 @@ export const FullscreenPlayer: React.FC = () => {
               <p className="text-xs text-textMuted max-w-xs">
                 Embedded LRC or tag lyrics will appear here during playback.
               </p>
+              <button
+                type="button"
+                onClick={handleFetchLyricsOnline}
+                disabled={isFetchingLyrics}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-accent-fill hover:bg-accentHover active:scale-95 transition shadow-lg shadow-accent/20 disabled:opacity-50"
+              >
+                {isFetchingLyrics ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Searching LRCLIB...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Search Lyrics Online</span>
+                  </>
+                )}
+              </button>
+              {lyricsFetchError && (
+                <p className="text-2xs text-rose-400">{lyricsFetchError}</p>
+              )}
             </div>
           ) : (
             <div
@@ -412,7 +469,7 @@ export const FullscreenPlayer: React.FC = () => {
           </span>
           <div
             onPointerDown={handleContainerPointerDown}
-            className="relative w-full flex items-center py-1.5 cursor-pointer"
+            className="relative w-full flex items-center py-2 cursor-pointer"
           >
             <input
               ref={sliderRef}
@@ -474,7 +531,7 @@ export const FullscreenPlayer: React.FC = () => {
               {isPlaying ? (
                 <Pause className="w-5 h-5 fill-current" />
               ) : (
-                <Play className="w-5 h-5 ml-0.5 fill-current" />
+                <Play className="w-5 h-5 ml-1 fill-current" />
               )}
             </button>
 
@@ -502,23 +559,6 @@ export const FullscreenPlayer: React.FC = () => {
               ) : (
                 <Repeat className="w-4 h-4" />
               )}
-            </button>
-
-            <button
-              type="button"
-              onClick={toggleAutoplay}
-              className={`p-2 rounded-xl transition ${
-                isAutoplay
-                  ? "text-accent bg-accent/15 hover:bg-accent/20"
-                  : "text-textMuted hover:text-textPrimary hover:bg-surfaceHover"
-              }`}
-              title={
-                isAutoplay
-                  ? "Autoplay is on (continues playing after queue finishes)"
-                  : "Autoplay is off"
-              }
-            >
-              <Infinity className="w-4 h-4" />
             </button>
           </div>
 

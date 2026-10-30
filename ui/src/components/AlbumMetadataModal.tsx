@@ -149,27 +149,27 @@ export const AlbumMetadataModal: React.FC<AlbumMetadataModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
       <div
-        className="bg-[#18181D] border border-white/[0.08] w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-scaleUp"
+        className="bg-surface border border-white/[0.08] w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-scaleUp"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-white/[0.06] flex-shrink-0">
-          <div className="flex items-center space-x-3.5">
-            <div className="w-10 h-10 rounded-xl bg-[#1C1C22] overflow-hidden flex items-center justify-center flex-shrink-0 border border-white/[0.08]">
+          <div className="flex items-center space-x-4">
+            <div className="w-10 h-10 rounded-xl bg-surfaceHover overflow-hidden flex items-center justify-center flex-shrink-0 border border-white/[0.08]">
               {artworkUrl ? (
                 <img src={artworkUrl} alt="" className="w-full h-full object-cover" />
               ) : (
-                <Disc className="w-5 h-5 text-[#71717A]" />
+                <Disc className="w-5 h-5 text-textMuted" />
               )}
             </div>
             <div>
               <h2 className="text-sm font-bold text-white">Edit Album Metadata</h2>
-              <p className="text-xs text-[#71717A] truncate max-w-sm">{album.title}</p>
+              <p className="text-xs text-textMuted truncate max-w-sm">{album.title}</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white/[0.06] hover:bg-white/[0.12] text-[#71717A] hover:text-white flex items-center justify-center transition"
+            className="w-8 h-8 rounded-full bg-white/[0.06] hover:bg-white/[0.12] text-textMuted hover:text-white flex items-center justify-center transition"
           >
             <X className="w-4 h-4" />
           </button>
@@ -179,7 +179,7 @@ export const AlbumMetadataModal: React.FC<AlbumMetadataModalProps> = ({
         <form onSubmit={handleSave} className="flex-1 flex flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
             {errorMessage && (
-              <div className="flex items-center space-x-2 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs">
+              <div className="flex items-center space-x-2 p-3 bg-danger/10 border border-danger/20 rounded-xl text-danger text-xs">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
                 <span>{errorMessage}</span>
               </div>
@@ -188,7 +188,7 @@ export const AlbumMetadataModal: React.FC<AlbumMetadataModalProps> = ({
             {/* Album-level Common Fields */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-[#A1A1AA] mb-1.5">
+                <label className="block text-xs font-semibold text-textSecondary mb-2">
                   Album Title
                 </label>
                 <input
@@ -197,12 +197,12 @@ export const AlbumMetadataModal: React.FC<AlbumMetadataModalProps> = ({
                   onChange={(e) => setAlbumTitle(e.target.value)}
                   placeholder="Album Title"
                   required
-                  className="w-full bg-[#121216] border border-white/[0.08] focus:border-[#FA586A]/60 rounded-xl px-3 py-2 text-xs text-white placeholder-[#71717A] focus:outline-none focus:ring-1 focus:ring-[#FA586A]/30 transition"
+                  className="w-full bg-deck border border-white/[0.08] focus:border-accent/60 rounded-xl px-3 py-2 text-xs text-white placeholder-textMuted focus:outline-none focus:ring-1 focus:ring-accent/30 transition"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-[#A1A1AA] mb-1.5">
+                <label className="block text-xs font-semibold text-textSecondary mb-2">
                   Album Artist (Band Name)
                 </label>
                 <input
@@ -211,12 +211,12 @@ export const AlbumMetadataModal: React.FC<AlbumMetadataModalProps> = ({
                   onChange={(e) => setAlbumArtist(e.target.value)}
                   placeholder="e.g. Radiohead, Muse"
                   required
-                  className="w-full bg-[#121216] border border-white/[0.08] focus:border-[#FA586A]/60 rounded-xl px-3 py-2 text-xs text-white placeholder-[#71717A] focus:outline-none focus:ring-1 focus:ring-[#FA586A]/30 transition"
+                  className="w-full bg-deck border border-white/[0.08] focus:border-accent/60 rounded-xl px-3 py-2 text-xs text-white placeholder-textMuted focus:outline-none focus:ring-1 focus:ring-accent/30 transition"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-[#A1A1AA] mb-1.5">
+                <label className="block text-xs font-semibold text-textSecondary mb-2">
                   Release Year
                 </label>
                 <input
@@ -226,12 +226,12 @@ export const AlbumMetadataModal: React.FC<AlbumMetadataModalProps> = ({
                   placeholder="e.g. 2007"
                   min="1900"
                   max="2099"
-                  className="w-full bg-[#121216] border border-white/[0.08] focus:border-[#FA586A]/60 rounded-xl px-3 py-2 text-xs text-white placeholder-[#71717A] focus:outline-none focus:ring-1 focus:ring-[#FA586A]/30 transition"
+                  className="w-full bg-deck border border-white/[0.08] focus:border-accent/60 rounded-xl px-3 py-2 text-xs text-white placeholder-textMuted focus:outline-none focus:ring-1 focus:ring-accent/30 transition"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-[#A1A1AA] mb-1.5">
+                <label className="block text-xs font-semibold text-textSecondary mb-2">
                   Genre
                 </label>
                 <input
@@ -239,7 +239,7 @@ export const AlbumMetadataModal: React.FC<AlbumMetadataModalProps> = ({
                   value={genre}
                   onChange={(e) => setGenre(e.target.value)}
                   placeholder="e.g. Alternative Rock"
-                  className="w-full bg-[#121216] border border-white/[0.08] focus:border-[#FA586A]/60 rounded-xl px-3 py-2 text-xs text-white placeholder-[#71717A] focus:outline-none focus:ring-1 focus:ring-[#FA586A]/30 transition"
+                  className="w-full bg-deck border border-white/[0.08] focus:border-accent/60 rounded-xl px-3 py-2 text-xs text-white placeholder-textMuted focus:outline-none focus:ring-1 focus:ring-accent/30 transition"
                 />
               </div>
             </div>
@@ -250,12 +250,12 @@ export const AlbumMetadataModal: React.FC<AlbumMetadataModalProps> = ({
                 <h3 className="text-xs font-bold uppercase tracking-wider text-white">
                   Album Tracks ({trackRows.length})
                 </h3>
-                <span className="text-[11px] text-[#71717A]">
+                <span className="text-2xs text-textMuted">
                   Edit song titles and artists
                 </span>
               </div>
 
-              <div className="border border-white/[0.08] rounded-xl overflow-hidden bg-[#121216]/60">
+              <div className="border border-white/[0.08] rounded-xl overflow-hidden bg-deck/60">
                 <div className="max-h-56 overflow-y-auto divide-y divide-white/[0.04]">
                   {trackRows.map((row, idx) => (
                     <div
@@ -263,7 +263,7 @@ export const AlbumMetadataModal: React.FC<AlbumMetadataModalProps> = ({
                       className="flex flex-col sm:flex-row items-stretch sm:items-center px-3 py-2 gap-2 text-xs hover:bg-white/[0.04] transition"
                     >
                       <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <span className="w-6 text-center text-[#71717A] text-[11px] font-mono flex-shrink-0">
+                        <span className="w-6 text-center text-textMuted text-2xs font-mono flex-shrink-0">
                           {row.trackNumber}
                         </span>
                         <input
@@ -271,7 +271,7 @@ export const AlbumMetadataModal: React.FC<AlbumMetadataModalProps> = ({
                           value={row.title}
                           onChange={(e) => handleTrackChange(idx, "title", e.target.value)}
                           placeholder="Track Title"
-                          className="flex-1 bg-[#18181D] border border-white/[0.08] focus:border-[#FA586A]/60 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none"
+                          className="flex-1 bg-surface border border-white/[0.08] focus:border-accent/60 rounded-lg px-3 py-1 text-xs text-white focus:outline-none"
                         />
                       </div>
                       <input
@@ -279,7 +279,7 @@ export const AlbumMetadataModal: React.FC<AlbumMetadataModalProps> = ({
                         value={row.artist}
                         onChange={(e) => handleTrackChange(idx, "artist", e.target.value)}
                         placeholder="Track Artist"
-                        className="w-full sm:w-1/3 sm:min-w-[120px] bg-[#18181D] border border-white/[0.08] focus:border-[#FA586A]/60 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none"
+                        className="w-full sm:w-1/3 sm:min-w-[120px] bg-surface border border-white/[0.08] focus:border-accent/60 rounded-lg px-3 py-1 text-xs text-white focus:outline-none"
                       />
                     </div>
                   ))}
@@ -294,7 +294,7 @@ export const AlbumMetadataModal: React.FC<AlbumMetadataModalProps> = ({
                 id="writeTagsCheckbox"
                 checked={writeTags}
                 onChange={(e) => setWriteTags(e.target.checked)}
-                className="w-4 h-4 rounded text-[#FA586A] bg-[#121216] border-white/[0.12] focus:ring-0 focus:ring-offset-0 cursor-pointer accent-[#FA586A]"
+                className="w-4 h-4 rounded text-accent bg-deck border-white/[0.12] focus:ring-0 focus:ring-offset-0 cursor-pointer accent-accent"
               />
               <label
                 htmlFor="writeTagsCheckbox"
@@ -306,19 +306,19 @@ export const AlbumMetadataModal: React.FC<AlbumMetadataModalProps> = ({
           </div>
 
           {/* Modal Footer */}
-          <div className="flex items-center justify-end space-x-3 px-4 sm:px-6 py-4 border-t border-white/[0.06] bg-[#121216] flex-shrink-0">
+          <div className="flex items-center justify-end space-x-3 px-4 sm:px-6 py-4 border-t border-white/[0.06] bg-deck flex-shrink-0">
             <button
               type="button"
               onClick={onClose}
               disabled={isSaving}
-              className="px-4 py-2 text-xs font-semibold text-[#71717A] hover:text-white transition"
+              className="px-4 py-2 text-xs font-semibold text-textMuted hover:text-white transition"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSaving}
-              className="inline-flex items-center space-x-2 px-5 py-2 bg-[#FA586A] hover:bg-[#E04859] active:scale-95 text-white rounded-xl text-xs font-bold transition shadow-md shadow-[#FA586A]/20 disabled:opacity-50"
+              className="inline-flex items-center space-x-2 px-5 py-2 bg-accent-fill hover:bg-accentHover active:scale-95 text-white rounded-xl text-xs font-bold transition shadow-md shadow-accent/20 disabled:opacity-50"
             >
               {isSaving ? (
                 <>
@@ -327,7 +327,7 @@ export const AlbumMetadataModal: React.FC<AlbumMetadataModalProps> = ({
                 </>
               ) : success ? (
                 <>
-                  <Check className="w-3.5 h-3.5 text-green-300" />
+                  <Check className="w-3.5 h-3.5 text-success" />
                   <span>Saved</span>
                 </>
               ) : (

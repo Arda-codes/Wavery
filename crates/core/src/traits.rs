@@ -121,16 +121,21 @@ pub trait MetadataReader: Send + Sync {
 
 /// Queue & Playback Order Trait (QueueManager)
 ///
-/// Manages active linear queue, shuffle ordering, and repeat policies.
+/// Manages active linear queue, two-tier user priority queue, shuffle ordering, and repeat policies.
 pub trait QueueManager: Send + Sync {
     /// Replace queue items.
     fn set_queue(&mut self, tracks: Vec<Track>, start_index: usize);
 
-    /// Append track to back of queue.
+    /// Append track to back of queue (or user priority queue).
     fn push_back(&mut self, track: Track);
 
-    /// Insert track directly after currently playing index.
+    /// Insert track directly to play next (at the front of user priority queue).
     fn play_next(&mut self, track: Track);
+
+    /// Set context queue while preserving any pending user-queued items.
+    fn set_context_queue(&mut self, tracks: Vec<Track>, start_index: usize) {
+        self.set_queue(tracks, start_index);
+    }
 
     /// Advance to next track, returning next Track if available.
     fn next(&mut self) -> Option<&Track>;
@@ -152,6 +157,27 @@ pub trait QueueManager: Send + Sync {
 
     /// View entire linear queue.
     fn queue(&self) -> &[Track];
+
+    /// View user-queued items.
+    fn user_queue(&self) -> &[Track] {
+        &[]
+    }
+
+    /// Clear user priority queue.
+    fn clear_user_queue(&mut self) {}
+
+    /// Remove a track from user priority queue at index.
+    fn remove_user_track(&mut self, _index: usize) -> Option<Track> {
+        None
+    }
+
+    /// Reorder a track inside user priority queue.
+    fn reorder_user_queue(&mut self, _from: usize, _to: usize) {}
+
+    /// Played track history for current session.
+    fn history(&self) -> &[Track] {
+        &[]
+    }
 
     /// Whether shuffle is enabled.
     fn is_shuffle(&self) -> bool {

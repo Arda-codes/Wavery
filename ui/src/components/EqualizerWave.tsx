@@ -11,15 +11,15 @@ interface EqualizerWaveProps {
 
 const SIZE_MAP = {
   xs: {
-    container: "h-3 gap-[1.5px]",
+    container: "h-3 gap-1",
     bar: "w-[2px] h-3 rounded-full",
   },
   sm: {
-    container: "h-3.5 gap-[2px]",
+    container: "h-3.5 gap-1",
     bar: "w-[2.5px] h-3.5 rounded-full",
   },
   md: {
-    container: "h-5 gap-[3px]",
+    container: "h-5 gap-1",
     bar: "w-[3px] h-5 rounded-full",
   },
   lg: {
@@ -39,7 +39,7 @@ export const EqualizerWave: React.FC<EqualizerWaveProps> = ({
   isPlaying = true,
   bars = 4,
   size = "sm",
-  color = "bg-[#FA586A]",
+  color = "bg-accent-fill",
   className = "",
 }) => {
   const showVisualizer = useSettingsStore((s) => s.showVisualizer);

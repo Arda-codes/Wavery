@@ -39,7 +39,7 @@ export const ModeSwitcher: React.FC<ModeSwitcherProps> = ({ onSwitchStart }) => 
 
   return (
     <div
-      className="inline-flex items-center p-0.5 rounded-full select-none ml-2 wavery-segment-track"
+      className="inline-flex items-center p-1 rounded-full select-none ml-2 wavery-segment-track"
       role="radiogroup"
       aria-label="Application Mode"
     >
@@ -51,7 +51,7 @@ export const ModeSwitcher: React.FC<ModeSwitcherProps> = ({ onSwitchStart }) => 
         disabled={isSwitching}
         onClick={() => handleSwitch("native")}
         title="Desktop App: Native Rodio audio engine with system tray and media keys"
-        className={`relative flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs transition-all duration-200 focus:outline-none ${
+        className={`relative flex items-center space-x-2 px-3 py-1 rounded-full text-xs transition-all duration-200 focus:outline-none ${
           isNative
             ? "wavery-segment-active font-bold shadow-sm"
             : "wavery-segment-inactive font-medium"
@@ -60,7 +60,7 @@ export const ModeSwitcher: React.FC<ModeSwitcherProps> = ({ onSwitchStart }) => 
         {isSwitching && switchingTo === "native" ? (
           <Loader2 className="w-3.5 h-3.5 animate-spin text-accent" />
         ) : (
-          <Monitor className={`w-3.5 h-3.5 ${isNative ? "text-accent" : "text-[#71717A]"}`} />
+          <Monitor className={`w-3.5 h-3.5 ${isNative ? "text-accent" : "text-textMuted"}`} />
         )}
         <span>Native</span>
         {isNative && !isSwitching && (
@@ -76,7 +76,7 @@ export const ModeSwitcher: React.FC<ModeSwitcherProps> = ({ onSwitchStart }) => 
         disabled={isSwitching}
         onClick={() => handleSwitch("web")}
         title="Web Client: In-browser streaming from the local server"
-        className={`relative flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs transition-all duration-200 focus:outline-none ${
+        className={`relative flex items-center space-x-2 px-3 py-1 rounded-full text-xs transition-all duration-200 focus:outline-none ${
           !isNative
             ? "wavery-segment-active font-bold shadow-sm"
             : "wavery-segment-inactive font-medium"
@@ -85,7 +85,7 @@ export const ModeSwitcher: React.FC<ModeSwitcherProps> = ({ onSwitchStart }) => 
         {isSwitching && switchingTo === "web" ? (
           <Loader2 className="w-3.5 h-3.5 animate-spin text-accent" />
         ) : (
-          <Globe className={`w-3.5 h-3.5 ${!isNative ? "text-accent" : "text-[#71717A]"}`} />
+          <Globe className={`w-3.5 h-3.5 ${!isNative ? "text-accent" : "text-textMuted"}`} />
         )}
         <span>Web</span>
         {!isNative && !isSwitching && (

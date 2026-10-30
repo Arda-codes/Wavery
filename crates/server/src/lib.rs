@@ -293,6 +293,34 @@ impl AppState {
             discord_handle: new_discord_handle(None),
         }
     }
+
+    /// Creates a new `AppState` with an explicit config, config path, and shared `DiscordHandle`.
+    #[must_use]
+    pub fn with_config_and_discord(
+        library: Arc<tokio::sync::Mutex<SqliteLibraryManager>>,
+        reader: LoftyMetadataReader,
+        static_dir: Option<PathBuf>,
+        config: wavery_config::Config,
+        config_path: PathBuf,
+        discord_handle: DiscordHandle,
+    ) -> Self {
+        let session = wavery_config::default_session_path()
+            .ok()
+            .and_then(|p| wavery_config::load_session(&p).ok())
+            .flatten();
+        let (app_signal_tx, _) = tokio::sync::broadcast::channel(16);
+        Self {
+            library,
+            reader,
+            static_dir,
+            artwork_cache: Arc::new(tokio::sync::RwLock::new(ArtworkCache::with_default_capacity())),
+            config: Arc::new(tokio::sync::RwLock::new(config)),
+            config_path,
+            session: Arc::new(tokio::sync::RwLock::new(session)),
+            app_signal_tx,
+            discord_handle,
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -1742,11 +1770,12 @@ async fn discord_set_presence_handler(
 ) -> impl IntoResponse {
     let handle = Arc::clone(&state.discord_handle);
     tokio::task::spawn_blocking(move || {
-        if let Ok(lock) = handle.try_read() {
-            if let Ok(mut rpc) = lock.try_lock() {
-                rpc.set_activity(&payload);
-            }
-        }
+        let lock = handle.blocking_read();
+        let mut rpc = match lock.lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
+        rpc.set_activity(&payload);
     })
     .await
     .ok();
@@ -1762,11 +1791,12 @@ async fn discord_clear_presence_handler(
 ) -> impl IntoResponse {
     let handle = Arc::clone(&state.discord_handle);
     tokio::task::spawn_blocking(move || {
-        if let Ok(lock) = handle.try_read() {
-            if let Ok(mut rpc) = lock.try_lock() {
-                rpc.clear_activity();
-            }
-        }
+        let lock = handle.blocking_read();
+        let mut rpc = match lock.lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
+        rpc.clear_activity();
     })
     .await
     .ok();
@@ -1788,18 +1818,15 @@ async fn discord_status_handler(
 ) -> impl IntoResponse {
     let handle = Arc::clone(&state.discord_handle);
     let status = tokio::task::spawn_blocking(move || {
-        if let Ok(lock) = handle.try_read() {
-            if let Ok(mut rpc) = lock.try_lock() {
-                if let Some(ref id) = query.app_id {
-                    rpc.set_app_id(Some(id));
-                }
-                return rpc.status();
-            }
+        let lock = handle.blocking_read();
+        let mut rpc = match lock.lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
+        if let Some(ref id) = query.app_id {
+            rpc.set_app_id(Some(id));
         }
-        discord::DiscordStatusPayload {
-            connected: false,
-            discord_running: false,
-        }
+        rpc.status()
     })
     .await
     .unwrap_or(discord::DiscordStatusPayload {

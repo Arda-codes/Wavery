@@ -544,6 +544,41 @@ async fn play_track(
     Ok(())
 }
 
+#[derive(serde::Deserialize)]
+pub struct SyncQueuePayload {
+    pub user_queue: Vec<Track>,
+    pub context_queue: Vec<Track>,
+    pub current_track_id: Option<String>,
+    pub is_shuffle: bool,
+    pub loop_mode: String,
+}
+
+#[tauri::command]
+async fn sync_queue(
+    payload: SyncQueuePayload,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<(), IpcError> {
+    let mut queue = state.queue.lock();
+    let start_idx = if let Some(ref tid) = payload.current_track_id {
+        payload.context_queue.iter().position(|t| &t.id == tid).unwrap_or(0)
+    } else {
+        0
+    };
+    queue.set_context_queue(payload.context_queue, start_idx);
+    queue.set_shuffle(payload.is_shuffle);
+    let loop_mode = match payload.loop_mode.as_str() {
+        "Track" => LoopMode::Track,
+        "Queue" => LoopMode::Queue,
+        _ => LoopMode::Off,
+    };
+    queue.set_loop_mode(loop_mode);
+    queue.clear_user_queue();
+    for track in payload.user_queue.into_iter().rev() {
+        queue.play_next(track);
+    }
+    Ok(())
+}
+
 #[tauri::command]
 async fn pause_playback(state: tauri::State<'_, Arc<AppState>>) -> Result<(), IpcError> {
     let mut player_guard = state.player.lock().await;
@@ -599,7 +634,7 @@ async fn get_status(state: tauri::State<'_, Arc<AppState>>) -> Result<PlayerStat
             position_secs: player.position().as_secs_f64(),
             duration_secs: player.duration().map(|d| d.as_secs_f64()),
             current_track: queue_guard.current_track().cloned(),
-            loop_mode: LoopMode::Off,
+            loop_mode: queue_guard.loop_mode(),
         })
     } else {
         Ok(PlayerStatus {
@@ -608,7 +643,7 @@ async fn get_status(state: tauri::State<'_, Arc<AppState>>) -> Result<PlayerStat
             position_secs: 0.0,
             duration_secs: None,
             current_track: None,
-            loop_mode: LoopMode::Off,
+            loop_mode: queue_guard.loop_mode(),
         })
     }
 }
@@ -751,6 +786,46 @@ async fn open_external_url(url: String) -> Result<(), IpcError> {
 }
 
 #[tauri::command]
+async fn show_desktop_notification(
+    title: String,
+    body: Option<String>,
+    app_handle: tauri::AppHandle,
+) -> Result<(), IpcError> {
+    #[cfg(target_os = "linux")]
+    {
+        let _ = app_handle;
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        std::thread::spawn(move || {
+            let mut notification = notify_rust::Notification::new();
+            notification.summary(&title);
+            if let Some(ref b) = body {
+                notification.body(b);
+            }
+            notification.auto_icon();
+            let res = notification.show().map_err(|e| IpcError::Task(e.to_string()));
+            let _ = tx.send(res.map(|_| ()));
+        });
+        rx.await
+            .map_err(|e| IpcError::Task(e.to_string()))?
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        std::thread::spawn(move || {
+            use tauri_plugin_notification::NotificationExt;
+            let mut builder = app_handle.notification().builder().title(&title);
+            if let Some(ref b) = body {
+                builder = builder.body(b);
+            }
+            let res = builder.show().map_err(|e| IpcError::Task(e.to_string()));
+            let _ = tx.send(res);
+        });
+        rx.await
+            .map_err(|e| IpcError::Task(e.to_string()))?
+    }
+}
+
+#[tauri::command]
 async fn export_config_to_file(content: String) -> Result<bool, IpcError> {
     let file = rfd::AsyncFileDialog::new()
         .add_filter("JSON Files", &["json"])
@@ -776,11 +851,12 @@ async fn update_discord_presence(
 ) -> Result<(), IpcError> {
     let handle = Arc::clone(&state.discord_handle);
     tokio::task::spawn_blocking(move || {
-        if let Ok(lock) = handle.try_read() {
-            if let Ok(mut rpc) = lock.try_lock() {
-                rpc.set_activity(&payload);
-            }
-        }
+        let lock = handle.blocking_read();
+        let mut rpc = match lock.lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
+        rpc.set_activity(&payload);
     })
     .await
     .map_err(|e| IpcError::Task(e.to_string()))?;
@@ -793,11 +869,12 @@ async fn clear_discord_presence(
 ) -> Result<(), IpcError> {
     let handle = Arc::clone(&state.discord_handle);
     tokio::task::spawn_blocking(move || {
-        if let Ok(lock) = handle.try_read() {
-            if let Ok(mut rpc) = lock.try_lock() {
-                rpc.clear_activity();
-            }
-        }
+        let lock = handle.blocking_read();
+        let mut rpc = match lock.lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
+        rpc.clear_activity();
     })
     .await
     .map_err(|e| IpcError::Task(e.to_string()))?;
@@ -811,24 +888,18 @@ async fn get_discord_status(
 ) -> Result<wavery_server::discord::DiscordStatusPayload, IpcError> {
     let handle = Arc::clone(&state.discord_handle);
     let status = tokio::task::spawn_blocking(move || {
-        if let Ok(lock) = handle.try_read() {
-            if let Ok(mut rpc) = lock.try_lock() {
-                if let Some(ref id) = custom_app_id {
-                    rpc.set_app_id(Some(id));
-                }
-                return rpc.status();
-            }
+        let lock = handle.blocking_read();
+        let mut rpc = match lock.lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
+        if let Some(ref id) = custom_app_id {
+            rpc.set_app_id(Some(id));
         }
-        wavery_server::discord::DiscordStatusPayload {
-            connected: false,
-            discord_running: false,
-        }
+        rpc.status()
     })
     .await
-    .unwrap_or(wavery_server::discord::DiscordStatusPayload {
-        connected: false,
-        discord_running: false,
-    });
+    .map_err(|e| IpcError::Task(e.to_string()))?;
     Ok(status)
 }
 
@@ -1156,12 +1227,13 @@ fn start_in_process_server(state: &Arc<AppState>) {
     let config = state.config.lock().clone();
     let cfg_path = wavery_config::default_config_path().unwrap_or_else(|_| PathBuf::from("config.toml"));
 
-    let server_app_state = Arc::new(wavery_server::AppState::with_config(
+    let server_app_state = Arc::new(wavery_server::AppState::with_config_and_discord(
         shared_lib,
         wavery_library::LoftyMetadataReader::new(),
         static_dir,
         config,
         cfg_path,
+        state.discord_handle.clone(),
     ));
 
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
@@ -1588,7 +1660,7 @@ async fn is_window_fullscreen(window: tauri::WebviewWindow) -> Result<bool, IpcE
 #[tauri::command]
 async fn close_app_window(
     window: tauri::WebviewWindow,
-    app_handle: tauri::AppHandle,
+    _app_handle: tauri::AppHandle,
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<(), IpcError> {
     let minimize_to_tray = {
@@ -1598,9 +1670,7 @@ async fn close_app_window(
     if minimize_to_tray {
         let _ = window.hide();
     } else {
-        kill_all_subprocesses(&state);
-        terminate_server_instances();
-        app_handle.exit(0);
+        let _ = window.close();
     }
     Ok(())
 }
@@ -1731,12 +1801,26 @@ fn start_header_drag(
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(target_os = "linux")]
     {
+        // 1. Window backend: on native Wayland sessions (WAYLAND_DISPLAY set), prioritize native
+        // Wayland to leverage zero-latency explicit sync (linux-drm-syncobj-v1). Forcing X11 on
+        // Wayland routes the app through Xwayland, which causes severe scaling lag and frame latency.
         if std::env::var("GDK_BACKEND").is_err() {
-            std::env::set_var("GDK_BACKEND", "x11,wayland");
+            if std::env::var("WAYLAND_DISPLAY").is_ok() {
+                std::env::set_var("GDK_BACKEND", "wayland,x11");
+            } else {
+                std::env::set_var("GDK_BACKEND", "x11");
+            }
         }
-        if std::env::var("WEBKIT_DISABLE_COMPOSITING_MODE").is_err() {
-            std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+
+        // 2. Safe default for DMA-BUF renderer: prevents driver deadlocks on older Mesa / NVIDIA
+        // without disabling GPU acceleration. Power users can override via WEBKIT_DISABLE_DMABUF_RENDERER=0.
+        if std::env::var("WEBKIT_DISABLE_DMABUF_RENDERER").is_err() {
+            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         }
+
+        // 3. Note: NEVER force WEBKIT_DISABLE_COMPOSITING_MODE=1 by default. Disabling compositing
+        // forces WebKit into Cairo CPU software rasterization, turning all CSS blurs and glassmorphism
+        // into multi-second CPU bottlenecks during window resize.
     }
 
     let cfg_path = default_config_path().unwrap_or_else(|_| PathBuf::from("config.toml"));
@@ -1804,6 +1888,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let _ = window.set_focus();
             }
         }))
+        .plugin(tauri_plugin_notification::init())
         .manage(state.clone())
         .setup(move |app| {
             #[cfg(target_os = "macos")]
@@ -1933,6 +2018,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             "next" => {
                                 let state_handle = app_handle.state::<Arc<AppState>>();
                                 let state_clone = state_handle.inner().clone();
+                                let app_clone = app_handle.clone();
                                 tauri::async_runtime::spawn(async move {
                                     let next_track = {
                                         let mut queue = state_clone.queue.lock();
@@ -1943,12 +2029,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         if let Some(player) = player_guard.as_mut() {
                                             let _ = player.load(&track, None).await;
                                         }
+                                        let _ = app_clone.emit("queue-track-changed", &track);
                                     }
                                 });
                             }
                             "prev" => {
                                 let state_handle = app_handle.state::<Arc<AppState>>();
                                 let state_clone = state_handle.inner().clone();
+                                let app_clone = app_handle.clone();
                                 tauri::async_runtime::spawn(async move {
                                     let prev_track = {
                                         let mut queue = state_clone.queue.lock();
@@ -1959,6 +2047,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         if let Some(player) = player_guard.as_mut() {
                                             let _ = player.load(&track, None).await;
                                         }
+                                        let _ = app_clone.emit("queue-track-changed", &track);
                                     }
                                 });
                             }
@@ -2100,15 +2189,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Resized(size) = event {
                 let is_max = window.is_maximized().unwrap_or(false);
-                let is_fs = window.is_fullscreen().unwrap_or(false);
-                let _ = window.emit("window-state-changed", serde_json::json!({
-                    "isMaximized": is_max,
-                    "isMinimized": false,
-                    "isFullscreen": is_fs,
-                    "width": size.width,
-                    "height": size.height
-                }));
-
                 if !is_max {
                     let is_monitor_size = if let Ok(Some(mon)) = window.current_monitor() {
                         let m_size = mon.size();
@@ -2136,10 +2216,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if minimize_to_tray {
                     api.prevent_close();
                     let _ = window.hide();
-                } else {
-                    kill_all_subprocesses(&state_handle);
-                    terminate_server_instances();
-                    app.exit(0);
                 }
             }
         })
@@ -2151,6 +2227,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             pick_file,
             pick_folder,
             play_track,
+            sync_queue,
             pause_playback,
             resume_playback,
             stop_playback,
@@ -2197,7 +2274,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             close_app_window,
             start_header_drag,
             open_external_url,
-            export_config_to_file
+            export_config_to_file,
+            show_desktop_notification
         ])
         .build(tauri::generate_context!())?;
 
@@ -2218,6 +2296,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         tauri::RunEvent::Exit => {
             if let Some(state) = app_handle.try_state::<Arc<AppState>>() {
                 kill_all_subprocesses(&state);
+                terminate_server_instances();
             }
         }
         #[cfg(target_os = "macos")]

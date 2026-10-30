@@ -94,7 +94,7 @@ const ArtistProfileInner: React.FC<ArtistProfileProps> = ({
   return (
     <div className="flex-1 flex flex-col overflow-y-auto bg-background">
       {/* Hero Banner */}
-      <div className="bg-gradient-to-b from-accent/[0.08] to-transparent p-4 sm:p-6 md:p-8 border-b border-white/[0.06] flex flex-col md:flex-row items-center md:items-end gap-5 sm:gap-7 flex-shrink-0">
+      <div className="bg-gradient-to-b from-accent/[0.08] to-transparent p-4 sm:p-6 md:p-8 border-b border-white/[0.06] flex flex-col md:flex-row items-center md:items-end gap-5 sm:gap-8 flex-shrink-0">
         {/* Large Avatar */}
         <div className="w-32 h-32 sm:w-36 sm:h-36 md:w-40 md:h-40 rounded-full bg-surface overflow-hidden shadow-2xl shadow-black/80 flex items-center justify-center flex-shrink-0 border-2 border-white/[0.12]">
           {avatarArtwork && !avatarError ? (
@@ -107,19 +107,19 @@ const ArtistProfileInner: React.FC<ArtistProfileProps> = ({
               onError={() => setAvatarError(true)}
             />
           ) : (
-            <Users className="w-16 h-16 text-[#71717A]" />
+            <Users className="w-16 h-16 text-textMuted" />
           )}
         </div>
 
         {/* Info */}
         <div className="flex-1 text-center md:text-left">
-          <div className="flex items-center justify-center md:justify-start gap-2 mb-1.5">
-            <p className="text-[11px] font-bold text-[#FA586A] tracking-wider uppercase">
+          <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
+            <p className="text-2xs font-bold text-accent tracking-wider uppercase">
               Artist Profile
             </p>
             {isArtistPlaying && (
-              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] bg-[#FA586A]/10 border border-[#FA586A]/25 text-[10px] font-semibold text-[#FA586A] uppercase tracking-wider animate-fade-in">
-                <EqualizerWave isPlaying={isPlaying} size="xs" color="bg-[#FA586A]" />
+              <span className="inline-flex items-center gap-2 px-2 py-1 rounded-[4px] bg-accent/10 border border-accent/25 text-2xs font-semibold text-accent uppercase tracking-wider animate-fade-in">
+                <EqualizerWave isPlaying={isPlaying} size="xs" color="bg-accent-fill" />
                 <span>Now Playing</span>
               </span>
             )}
@@ -128,28 +128,28 @@ const ArtistProfileInner: React.FC<ArtistProfileProps> = ({
             {artist.name}
           </h1>
 
-          <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 text-xs text-[#A1A1AA] mb-5">
-            <span className="flex items-center gap-1.5">
-              <Disc className="w-4 h-4 text-[#FA586A]" />
+          <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 text-xs text-textSecondary mb-5">
+            <span className="flex items-center gap-2">
+              <Disc className="w-4 h-4 text-accent" />
               <strong className="text-white">{fullAlbums.length}</strong> Albums
             </span>
             {singles.length > 0 && (
               <>
-                <span className="text-[#71717A]">•</span>
-                <span className="flex items-center gap-1.5">
-                  <Music className="w-4 h-4 text-[#FA586A]" />
+                <span className="text-textMuted">•</span>
+                <span className="flex items-center gap-2">
+                  <Music className="w-4 h-4 text-accent" />
                   <strong className="text-white">{singles.length}</strong> Singles & EPs
                 </span>
               </>
             )}
-            <span className="text-[#71717A]">•</span>
-            <span className="flex items-center gap-1.5">
-              <Music className="w-4 h-4 text-[#71717A]" />
+            <span className="text-textMuted">•</span>
+            <span className="flex items-center gap-2">
+              <Music className="w-4 h-4 text-textMuted" />
               <strong className="text-white">{artist.trackCount}</strong> Tracks
             </span>
-            <span className="text-[#71717A]">•</span>
-            <span className="flex items-center gap-1.5">
-              <Clock className="w-4 h-4 text-[#71717A]" />
+            <span className="text-textMuted">•</span>
+            <span className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-textMuted" />
               {formatTotalDuration(totalDuration)}
             </span>
           </div>
@@ -157,17 +157,17 @@ const ArtistProfileInner: React.FC<ArtistProfileProps> = ({
           <div className="flex flex-wrap items-center justify-center md:justify-start gap-3">
             <button
               onClick={handlePlayArtist}
-              className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#FA586A] hover:bg-[#E04859] active:scale-95 text-white rounded-xl text-xs font-bold shadow-lg shadow-[#FA586A]/20 transition"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-accent-fill hover:bg-accentHover active:scale-95 text-white rounded-xl text-xs font-bold shadow-lg shadow-accent/20 transition"
             >
               <Play className="w-4 h-4 fill-white" />
               <span>{isArtistPlaying && isPlaying ? "Restart Artist" : "Play Artist"}</span>
             </button>
             <button
               onClick={() => setIsEditingArtist(true)}
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-white/[0.06] hover:bg-white/[0.12] active:scale-95 text-white/90 hover:text-white rounded-xl text-xs font-semibold border border-white/[0.08] transition"
+              className="inline-flex items-center gap-2 px-4 py-3 bg-white/[0.06] hover:bg-white/[0.12] active:scale-95 text-white/90 hover:text-white rounded-xl text-xs font-semibold border border-white/[0.08] transition"
               title="Edit Artist Metadata"
             >
-              <FilePenLine className="w-3.5 h-3.5 text-[#A1A1AA]" />
+              <FilePenLine className="w-3.5 h-3.5 text-textSecondary" />
               <span>Edit Artist</span>
             </button>
           </div>
@@ -180,7 +180,7 @@ const ArtistProfileInner: React.FC<ArtistProfileProps> = ({
         {fullAlbums.length > 0 && (
           <div>
             <h3 className="text-xs font-bold text-white uppercase tracking-wider mb-4 flex items-center gap-2">
-              <Disc className="w-4 h-4 text-[#FA586A]" /> Albums ({fullAlbums.length})
+              <Disc className="w-4 h-4 text-accent" /> Albums ({fullAlbums.length})
             </h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
               {fullAlbums.map((album) => (
@@ -201,7 +201,7 @@ const ArtistProfileInner: React.FC<ArtistProfileProps> = ({
         {singles.length > 0 && (
           <div>
             <h3 className="text-xs font-bold text-white uppercase tracking-wider mb-4 flex items-center gap-2">
-              <Music className="w-4 h-4 text-[#FA586A]" /> Singles & EPs ({singles.length})
+              <Music className="w-4 h-4 text-accent" /> Singles & EPs ({singles.length})
             </h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
               {singles.map((album) => (
@@ -222,7 +222,7 @@ const ArtistProfileInner: React.FC<ArtistProfileProps> = ({
         {artist.appearsOn && artist.appearsOn.length > 0 && (
           <div>
             <h3 className="text-xs font-bold text-white uppercase tracking-wider mb-4 flex items-center gap-2">
-              <Users className="w-4 h-4 text-[#FA586A]" /> Appears On & Collaborations ({artist.appearsOn.length})
+              <Users className="w-4 h-4 text-accent" /> Appears On & Collaborations ({artist.appearsOn.length})
             </h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
               {artist.appearsOn.map((album) => (
@@ -242,9 +242,9 @@ const ArtistProfileInner: React.FC<ArtistProfileProps> = ({
         {/* All Songs by this Artist */}
         <div>
           <h3 className="text-xs font-bold text-white uppercase tracking-wider mb-4 flex items-center gap-2">
-            <Music className="w-4 h-4 text-[#FA586A]" /> All Tracks ({artist.tracks.length})
+            <Music className="w-4 h-4 text-accent" /> All Tracks ({artist.tracks.length})
           </h3>
-          <div className="bg-[#16161A]/60 rounded-2xl border border-white/[0.06] overflow-hidden shadow-md">
+          <div className="bg-surface/60 rounded-2xl border border-white/[0.06] overflow-hidden shadow-md">
             <TrackTable
               tracks={artist.tracks}
               playbackContext={artistContext}

@@ -60,8 +60,8 @@ export const LikedSongsView: React.FC<LikedSongsViewProps> = ({
         <div className="w-20 h-20 rounded-3xl bg-surfaceActive border border-white/[0.08] flex items-center justify-center mb-5 shadow-xl">
           <Heart className="w-10 h-10 text-accent" />
         </div>
-        <h2 className="text-lg font-bold text-white mb-1.5">No Liked Songs</h2>
-        <p className="text-xs text-[#A1A1AA] max-w-sm leading-relaxed mb-6">
+        <h2 className="text-lg font-bold text-white mb-2">No Liked Songs</h2>
+        <p className="text-xs text-textSecondary max-w-sm leading-relaxed mb-6">
           Click the heart icon on any song to save your favorites here.
         </p>
       </div>
@@ -71,20 +71,20 @@ export const LikedSongsView: React.FC<LikedSongsViewProps> = ({
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-background">
       {/* Hero Header */}
-      <div className="p-8 pb-6 flex items-end gap-6 bg-gradient-to-b from-accent/[0.14] via-accent/[0.03] to-transparent border-b border-white/[0.06] flex-shrink-0">
+      <div className="p-8 pb-6 flex items-end gap-6 bg-surface border-b border-border flex-shrink-0">
         {/* Large Heart Art Card */}
-        <div className="w-36 h-36 rounded-2xl bg-gradient-to-br from-[#FA586A] via-[#E84357] to-[#A8162E] text-white flex items-center justify-center shadow-2xl shadow-accent/25 border border-white/15 ring-1 ring-white/20 ring-inset flex-shrink-0 relative overflow-hidden group hover:brightness-105 transition-all">
-          <Heart className="w-16 h-16 text-white fill-white drop-shadow-md" />
+        <div className="w-36 h-36 rounded-2xl bg-accent-fill text-onAccent flex items-center justify-center shadow-lg border border-white/10 flex-shrink-0 relative overflow-hidden group hover:brightness-105 transition-all">
+          <Heart className="w-16 h-16 text-onAccent fill-current drop-shadow-md" />
         </div>
 
         {/* Info & Action Buttons */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <p className="text-[11px] font-bold text-accent uppercase tracking-widest">
+            <p className="text-2xs font-bold text-accent uppercase tracking-widest">
               Favorites
             </p>
             {isLikedPlaying && (
-              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] bg-accent/10 border border-accent/25 text-[10px] font-semibold text-accent uppercase tracking-wider animate-fade-in">
+              <span className="inline-flex items-center gap-2 px-2 py-1 rounded-[4px] bg-accent/10 border border-accent/25 text-2xs font-semibold text-accent uppercase tracking-wider animate-fade-in">
                 <EqualizerWave isPlaying={isPlaying} size="xs" color="bg-accent" />
                 <span>Now Playing</span>
               </span>
@@ -93,7 +93,7 @@ export const LikedSongsView: React.FC<LikedSongsViewProps> = ({
           <h1 className="text-3xl font-black text-white tracking-tight truncate mb-2">
             Liked Songs
           </h1>
-          <p className="text-xs text-[#A1A1AA] font-medium flex items-center gap-2 mb-4">
+          <p className="text-xs text-textSecondary font-medium flex items-center gap-2 mb-4">
             <span className="text-white font-semibold">{likedTracks.length} tracks</span>
             <span>•</span>
             <span>{formatTotalDuration(totalDurationSecs)}</span>

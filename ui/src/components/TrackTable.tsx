@@ -18,7 +18,6 @@ import {
   ArrowUpDown,
   Search,
   SlidersHorizontal,
-  Infinity,
 } from "lucide-react";
 
 interface TrackTableProps {
@@ -70,8 +69,6 @@ const TrackTableInner: React.FC<TrackTableProps> = ({
   // Fine-grained selector subscriptions — avoids 500ms polling re-renders
   const currentTrackId = usePlayerStore((s) => s.currentTrackId);
   const isPlaying = usePlayerStore((s) => s.status.state === "Playing");
-  const isAutoplay = usePlayerStore((s) => s.isAutoplay);
-  const toggleAutoplay = usePlayerStore((s) => s.toggleAutoplay);
   const pause = usePlayerStore((s) => s.pause);
   const resume = usePlayerStore((s) => s.resume);
   const setQueue = usePlayerStore((s) => s.setQueue);
@@ -128,26 +125,15 @@ const TrackTableInner: React.FC<TrackTableProps> = ({
         }
       } else {
         const effectiveContext =
-          playbackContext ||
-          (track.metadata.album
-            ? {
-                type: "album" as const,
-                name: track.metadata.album,
-                artist: track.metadata.artist,
-              }
-            : {
-                type: "tracks" as const,
-                name: "All Tracks",
-              });
+          playbackContext || {
+            type: "tracks" as const,
+            name: "All Tracks",
+          };
 
-        if (effectiveContext.type === "tracks" && !isAutoplay) {
-          setQueue([track], 0, effectiveContext);
-        } else {
-          setQueue(filteredAndSortedTracks, index, effectiveContext);
-        }
+        setQueue(filteredAndSortedTracks, index, effectiveContext);
       }
     },
-    [currentTrackId, isPlaying, isAutoplay, pause, resume, setQueue, filteredAndSortedTracks, playbackContext]
+    [currentTrackId, isPlaying, pause, resume, setQueue, filteredAndSortedTracks, playbackContext]
   );
 
   const handleOpenAddToPlaylist = useCallback(
@@ -192,14 +178,14 @@ const TrackTableInner: React.FC<TrackTableProps> = ({
 
   if (tracks.length === 0) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-[#0D0D10]">
-        <div className="w-16 h-16 rounded-2xl bg-[#16161A] border border-white/[0.07] flex items-center justify-center mb-4 shadow-lg">
-          <Music className="w-8 h-8 text-[#71717A]" />
+      <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-background">
+        <div className="w-16 h-16 rounded-2xl bg-surface border border-white/[0.07] flex items-center justify-center mb-4 shadow-lg">
+          <Music className="w-8 h-8 text-textMuted" />
         </div>
         <h3 className="text-sm font-bold text-white mb-1">
           No songs found
         </h3>
-        <p className="text-xs text-[#71717A] max-w-sm">
+        <p className="text-xs text-textMuted max-w-sm">
           Click Import to add music files from your computer.
         </p>
       </div>
@@ -209,13 +195,13 @@ const TrackTableInner: React.FC<TrackTableProps> = ({
   const renderSortIcon = (key: TrackSortKey) => {
     if (sortKey !== key) {
       return (
-        <ArrowUpDown className="w-3 h-3 text-[#71717A]/40 group-hover/col:text-[#71717A] inline ml-1 transition" />
+        <ArrowUpDown className="w-3 h-3 text-textMuted/40 group-hover/col:text-textMuted inline ml-1 transition" />
       );
     }
     return sortDir === "asc" ? (
-      <ArrowUp className="w-3 h-3 text-[#FA586A] inline ml-1" />
+      <ArrowUp className="w-3 h-3 text-accent inline ml-1" />
     ) : (
-      <ArrowDown className="w-3 h-3 text-[#FA586A] inline ml-1" />
+      <ArrowDown className="w-3 h-3 text-accent inline ml-1" />
     );
   };
 
@@ -223,45 +209,25 @@ const TrackTableInner: React.FC<TrackTableProps> = ({
     <div
       role="table"
       aria-label="Track list"
-      className="flex-1 flex flex-col overflow-hidden bg-[#0D0D10]"
+      className="flex-1 flex flex-col overflow-hidden bg-background"
     >
       {/* Search & Stats Bar */}
       {showSearchBar && (
-        <div className="flex flex-wrap items-center justify-between px-3 sm:px-6 py-2.5 sm:py-3 border-b border-white/[0.06] flex-shrink-0 gap-2 sm:gap-4 bg-[#0D0D10]">
+        <div className="flex flex-wrap items-center justify-between px-3 sm:px-6 py-3 sm:py-3 border-b border-white/[0.06] flex-shrink-0 gap-2 sm:gap-4 bg-background">
           <div className="relative flex-1 max-w-xs min-w-[140px] group">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-[#71717A] group-focus-within:text-[#FA586A] transition-colors" />
+            <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-textMuted group-focus-within:text-accent transition-colors" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Filter songs..."
-              className="w-full bg-[#18181D] border border-white/[0.08] hover:border-white/[0.15] focus:border-[#FA586A]/60 rounded-full pl-8 pr-4 py-1.5 text-xs text-white placeholder-[#71717A] focus:outline-none focus:ring-1 focus:ring-[#FA586A]/30 transition"
+              className="w-full bg-surface border border-white/[0.08] hover:border-white/[0.15] focus:border-accent/60 rounded-full pl-8 pr-4 py-2 text-xs text-white placeholder-textMuted focus:outline-none focus:ring-1 focus:ring-accent/30 transition"
             />
           </div>
 
-          <div className="flex items-center space-x-2 sm:space-x-3 text-xs text-[#71717A] flex-shrink-0">
-            {(!playbackContext || playbackContext.type === "tracks") && (
-              <button
-                type="button"
-                onClick={toggleAutoplay}
-                className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all ${
-                  isAutoplay
-                    ? "bg-[#FA586A]/15 text-[#FA586A] border-[#FA586A]/30 shadow-sm"
-                    : "bg-white/[0.04] text-[#71717A] hover:text-white border-white/[0.06]"
-                }`}
-                title={
-                  isAutoplay
-                    ? "Autoplay is on (continues playing after queue finishes)"
-                    : "Autoplay is off"
-                }
-              >
-                <Infinity className="w-3.5 h-3.5" />
-                <span className="text-[11px] hidden sm:inline">Autoplay</span>
-              </button>
-            )}
-
-            <span className="flex items-center gap-1.5 font-medium">
-              <SlidersHorizontal className="w-3.5 h-3.5 text-[#71717A]" />
+          <div className="flex items-center space-x-2 sm:space-x-3 text-xs text-textMuted flex-shrink-0">
+            <span className="flex items-center gap-2 font-medium">
+              <SlidersHorizontal className="w-3.5 h-3.5 text-textMuted" />
               <span>
                 {filteredAndSortedTracks.length} of {tracks.length} tracks
               </span>
@@ -273,11 +239,11 @@ const TrackTableInner: React.FC<TrackTableProps> = ({
       {/* Pinned Table Header with ARIA columnheader and responsive CSS grid layout */}
       <div
         role="rowgroup"
-        className="bg-[#0D0D10]/95 backdrop-blur-md flex-shrink-0 border-b border-white/[0.07] z-10"
+        className="bg-background/95 backdrop-blur-md flex-shrink-0 border-b border-white/[0.07] z-10"
       >
         <div
           role="row"
-          className="grid grid-cols-[36px_minmax(0,1fr)_auto] md:grid-cols-[40px_minmax(160px,1fr)_140px_80px] lg:grid-cols-[44px_minmax(180px,1fr)_150px_150px_90px] xl:grid-cols-[48px_minmax(180px,1fr)_160px_160px_80px_110px] gap-2 sm:gap-3 px-3 sm:px-6 items-center text-[11px] font-bold text-[#71717A] uppercase tracking-wider h-10 select-none"
+          className="grid grid-cols-[36px_minmax(0,1fr)_auto] md:grid-cols-[40px_minmax(160px,1fr)_140px_80px] lg:grid-cols-[44px_minmax(180px,1fr)_150px_150px_90px] xl:grid-cols-[48px_minmax(180px,1fr)_160px_160px_80px_110px] gap-2 sm:gap-3 px-3 sm:px-6 items-center text-2xs font-bold text-textMuted uppercase tracking-wider h-10 select-none"
         >
           <div
             role="columnheader"

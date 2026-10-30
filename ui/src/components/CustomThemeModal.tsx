@@ -175,25 +175,25 @@ export const CustomThemeModal: React.FC<CustomThemeModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
       <div
-        className="w-full max-w-4xl max-h-[90vh] flex flex-col bg-[#16161A] border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-scaleUp"
+        className="w-full max-w-4xl max-h-[90vh] flex flex-col bg-surface border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-scaleUp"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06] bg-[#0F0F13]/80">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06] bg-sidebar/80">
           <div className="flex items-center space-x-3">
             <div className="w-8 h-8 rounded-xl bg-white/[0.06] border border-white/[0.08] flex items-center justify-center text-white">
               <Palette className="w-4 h-4 text-white" />
             </div>
             <div>
               <h2 className="text-sm font-bold text-white tracking-tight">Custom Theme Maker</h2>
-              <p className="text-[11px] text-[#71717A]">
+              <p className="text-2xs text-textMuted">
                 Craft your bespoke color palette with live preview.
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-[#71717A] hover:text-white hover:bg-white/[0.06] transition-colors"
+            className="p-2 rounded-lg text-textMuted hover:text-white hover:bg-white/[0.06] transition-colors"
             title="Close (Esc)"
           >
             <X className="w-4 h-4" />
@@ -203,10 +203,10 @@ export const CustomThemeModal: React.FC<CustomThemeModalProps> = ({
         {/* Modal Body: Two Column Studio */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {/* Top Controls: Name, Mode & Starter Template */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-[#121216]/60 p-4 rounded-xl border border-white/[0.05]">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-deck/60 p-4 rounded-xl border border-white/[0.05]">
             {/* Theme Name */}
             <div>
-              <label className="block text-[11px] font-semibold text-[#A1A1AA] uppercase tracking-wider mb-1.5">
+              <label className="block text-2xs font-semibold text-textSecondary uppercase tracking-wider mb-2">
                 Theme Name
               </label>
               <input
@@ -214,23 +214,23 @@ export const CustomThemeModal: React.FC<CustomThemeModalProps> = ({
                 value={themeDraft.name}
                 onChange={(e) => updateColor("name", e.target.value)}
                 placeholder="e.g. Midnight Cyberpunk"
-                className="w-full px-3 py-2 text-xs bg-[#16161A] text-white border border-white/10 rounded-lg focus:outline-none focus:border-white/30 transition-colors"
+                className="w-full px-3 py-2 text-xs bg-surface text-white border border-white/10 rounded-lg focus:outline-none focus:border-white/30 transition-colors"
               />
             </div>
 
             {/* Base Contrast Mode */}
             <div>
-              <label className="block text-[11px] font-semibold text-[#A1A1AA] uppercase tracking-wider mb-1.5">
+              <label className="block text-2xs font-semibold text-textSecondary uppercase tracking-wider mb-2">
                 Base Contrast Mode
               </label>
-              <div className="flex items-center space-x-1.5 bg-[#16161A] p-1 rounded-lg border border-white/10">
+              <div className="flex items-center space-x-2 bg-surface p-1 rounded-lg border border-white/10">
                 <button
                   type="button"
                   onClick={() => updateColor("isLight", false)}
-                  className={`flex-1 flex items-center justify-center space-x-1.5 py-1 px-2.5 rounded-md text-xs font-medium transition-colors ${
+                  className={`flex-1 flex items-center justify-center space-x-2 py-1 px-3 rounded-md text-xs font-medium transition-colors ${
                     !themeDraft.isLight
                       ? "bg-white/[0.12] text-white shadow-sm"
-                      : "text-[#71717A] hover:text-white"
+                      : "text-textMuted hover:text-white"
                   }`}
                 >
                   <Moon className="w-3.5 h-3.5" />
@@ -239,10 +239,10 @@ export const CustomThemeModal: React.FC<CustomThemeModalProps> = ({
                 <button
                   type="button"
                   onClick={() => updateColor("isLight", true)}
-                  className={`flex-1 flex items-center justify-center space-x-1.5 py-1 px-2.5 rounded-md text-xs font-medium transition-colors ${
+                  className={`flex-1 flex items-center justify-center space-x-2 py-1 px-3 rounded-md text-xs font-medium transition-colors ${
                     themeDraft.isLight
                       ? "bg-white/[0.12] text-white shadow-sm"
-                      : "text-[#71717A] hover:text-white"
+                      : "text-textMuted hover:text-white"
                   }`}
                 >
                   <Sun className="w-3.5 h-3.5" />
@@ -253,7 +253,7 @@ export const CustomThemeModal: React.FC<CustomThemeModalProps> = ({
 
             {/* Duplicate from Preset */}
             <div>
-              <label className="block text-[11px] font-semibold text-[#A1A1AA] uppercase tracking-wider mb-1.5">
+              <label className="block text-2xs font-semibold text-textSecondary uppercase tracking-wider mb-2">
                 Clone from Preset
               </label>
               <select
@@ -264,7 +264,7 @@ export const CustomThemeModal: React.FC<CustomThemeModalProps> = ({
                   }
                 }}
                 defaultValue=""
-                className="w-full px-3 py-2 text-xs bg-[#16161A] text-white border border-white/10 rounded-lg focus:outline-none focus:border-white/30 transition-colors cursor-pointer"
+                className="w-full px-3 py-2 text-xs bg-surface text-white border border-white/10 rounded-lg focus:outline-none focus:border-white/30 transition-colors cursor-pointer"
               >
                 <option value="" disabled>
                   Select a starter preset...
@@ -280,7 +280,7 @@ export const CustomThemeModal: React.FC<CustomThemeModalProps> = ({
 
           {/* Color Channels Grid */}
           <div className="space-y-2">
-            <div className="text-[11px] font-semibold text-[#A1A1AA] uppercase tracking-wider">
+            <div className="text-2xs font-semibold text-textSecondary uppercase tracking-wider">
               Color Channels
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -345,10 +345,10 @@ export const CustomThemeModal: React.FC<CustomThemeModalProps> = ({
           {/* Interactive Live UI Preview */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold text-[#A1A1AA] uppercase tracking-wider">
+              <span className="text-2xs font-semibold text-textSecondary uppercase tracking-wider">
                 Live Interface Preview
               </span>
-              <span className="text-[11px] text-[#71717A]">
+              <span className="text-2xs text-textMuted">
                 Changes apply in real-time below
               </span>
             </div>
@@ -371,13 +371,13 @@ export const CustomThemeModal: React.FC<CustomThemeModalProps> = ({
                   }}
                 >
                   <div className="flex items-center space-x-2">
-                    <div className="flex space-x-1.5">
+                    <div className="flex space-x-2">
                       <div className="w-2.5 h-2.5 rounded-full bg-[#FF5F56]" />
                       <div className="w-2.5 h-2.5 rounded-full bg-[#FFBD2E]" />
                       <div className="w-2.5 h-2.5 rounded-full bg-[#27C93F]" />
                     </div>
                     <span
-                      className="text-[11px] font-semibold ml-2"
+                      className="text-2xs font-semibold ml-2"
                       style={{ color: themeDraft.textPrimary }}
                     >
                       Wavery
@@ -386,7 +386,7 @@ export const CustomThemeModal: React.FC<CustomThemeModalProps> = ({
 
                   {/* Mini Search input */}
                   <div
-                    className="flex items-center space-x-1.5 px-2 py-0.5 rounded border text-[10px]"
+                    className="flex items-center space-x-2 px-2 py-1 rounded border text-2xs"
                     style={{
                       backgroundColor: themeDraft.surface,
                       borderColor: themeDraft.border || "rgba(255, 255, 255, 0.08)",
@@ -402,15 +402,15 @@ export const CustomThemeModal: React.FC<CustomThemeModalProps> = ({
                 <div className="flex-1 flex overflow-hidden">
                   {/* Mini Sidebar */}
                   <div
-                    className="w-32 border-r p-2 space-y-1 text-[11px] flex flex-col justify-between"
+                    className="w-32 border-r p-2 space-y-1 text-2xs flex flex-col justify-between"
                     style={{
                       backgroundColor: themeDraft.sidebar,
                       borderColor: themeDraft.border || "rgba(255, 255, 255, 0.08)",
                     }}
                   >
-                    <div className="space-y-0.5">
+                    <div className="space-y-1">
                       <div
-                        className="flex items-center space-x-1.5 px-2 py-1 rounded font-medium"
+                        className="flex items-center space-x-2 px-2 py-1 rounded font-medium"
                         style={{
                           backgroundColor: `${themeDraft.accentColor}25`,
                           color: themeDraft.accentColor,
@@ -420,14 +420,14 @@ export const CustomThemeModal: React.FC<CustomThemeModalProps> = ({
                         <span>Home</span>
                       </div>
                       <div
-                        className="flex items-center space-x-1.5 px-2 py-1 rounded"
+                        className="flex items-center space-x-2 px-2 py-1 rounded"
                         style={{ color: themeDraft.textMuted }}
                       >
                         <Music className="w-3 h-3" />
                         <span>All Tracks</span>
                       </div>
                       <div
-                        className="flex items-center space-x-1.5 px-2 py-1 rounded"
+                        className="flex items-center space-x-2 px-2 py-1 rounded"
                         style={{ color: themeDraft.textMuted }}
                       >
                         <Heart className="w-3 h-3" />
@@ -436,7 +436,7 @@ export const CustomThemeModal: React.FC<CustomThemeModalProps> = ({
                     </div>
 
                     <div
-                      className="text-[9px] px-2 py-1 rounded border text-center font-medium"
+                      className="text-2xs px-2 py-1 rounded border text-center font-medium"
                       style={{
                         borderColor: themeDraft.border,
                         color: themeDraft.textMuted,
@@ -457,7 +457,7 @@ export const CustomThemeModal: React.FC<CustomThemeModalProps> = ({
                           Recently Played
                         </span>
                         <span
-                          className="text-[10px] font-medium"
+                          className="text-2xs font-medium"
                           style={{ color: themeDraft.accentColor }}
                         >
                           See All
@@ -467,7 +467,7 @@ export const CustomThemeModal: React.FC<CustomThemeModalProps> = ({
                       {/* Mock track rows */}
                       <div className="space-y-1">
                         <div
-                          className="flex items-center justify-between p-1.5 rounded-lg border text-xs"
+                          className="flex items-center justify-between p-2 rounded-lg border text-xs"
                           style={{
                             backgroundColor: themeDraft.surface,
                             borderColor: themeDraft.border,
@@ -482,13 +482,13 @@ export const CustomThemeModal: React.FC<CustomThemeModalProps> = ({
                             </div>
                             <div>
                               <div
-                                className="text-[11px] font-semibold leading-tight"
+                                className="text-2xs font-semibold leading-tight"
                                 style={{ color: themeDraft.textPrimary }}
                               >
                                 City of Delusion
                               </div>
                               <div
-                                className="text-[9px]"
+                                className="text-2xs"
                                 style={{ color: themeDraft.textMuted }}
                               >
                                 Muse • HAARP
@@ -496,7 +496,7 @@ export const CustomThemeModal: React.FC<CustomThemeModalProps> = ({
                             </div>
                           </div>
                           <span
-                            className="text-[10px]"
+                            className="text-2xs"
                             style={{ color: themeDraft.textMuted }}
                           >
                             4:48
@@ -504,7 +504,7 @@ export const CustomThemeModal: React.FC<CustomThemeModalProps> = ({
                         </div>
 
                         <div
-                          className="flex items-center justify-between p-1.5 rounded-lg text-xs"
+                          className="flex items-center justify-between p-2 rounded-lg text-xs"
                           style={{
                             backgroundColor: "transparent",
                           }}
@@ -521,13 +521,13 @@ export const CustomThemeModal: React.FC<CustomThemeModalProps> = ({
                             </div>
                             <div>
                               <div
-                                className="text-[11px] font-semibold leading-tight"
+                                className="text-2xs font-semibold leading-tight"
                                 style={{ color: themeDraft.textPrimary }}
                               >
                                 Starlight
                               </div>
                               <div
-                                className="text-[9px]"
+                                className="text-2xs"
                                 style={{ color: themeDraft.textMuted }}
                               >
                                 Muse • Black Holes
@@ -535,7 +535,7 @@ export const CustomThemeModal: React.FC<CustomThemeModalProps> = ({
                             </div>
                           </div>
                           <span
-                            className="text-[10px]"
+                            className="text-2xs"
                             style={{ color: themeDraft.textMuted }}
                           >
                             3:59
@@ -559,17 +559,17 @@ export const CustomThemeModal: React.FC<CustomThemeModalProps> = ({
                       className="w-6 h-6 rounded shadow-sm flex items-center justify-center text-white"
                       style={{ backgroundColor: themeDraft.accentColor }}
                     >
-                      <Play className="w-2.5 h-2.5 fill-current ml-0.5" />
+                      <Play className="w-2.5 h-2.5 fill-current ml-1" />
                     </div>
                     <div className="truncate">
                       <div
-                        className="text-[10px] font-semibold truncate leading-tight"
+                        className="text-2xs font-semibold truncate leading-tight"
                         style={{ color: themeDraft.textPrimary }}
                       >
                         City of Delusion
                       </div>
                       <div
-                        className="text-[8px] truncate"
+                        className="text-2xs truncate"
                         style={{ color: themeDraft.textMuted }}
                       >
                         Muse
@@ -589,7 +589,7 @@ export const CustomThemeModal: React.FC<CustomThemeModalProps> = ({
                       />
                     </div>
                     <div
-                      className="flex justify-between w-full text-[8px]"
+                      className="flex justify-between w-full text-2xs"
                       style={{ color: themeDraft.textMuted }}
                     >
                       <span>1:42</span>
@@ -598,7 +598,7 @@ export const CustomThemeModal: React.FC<CustomThemeModalProps> = ({
                   </div>
 
                   {/* Volume Slider Mock */}
-                  <div className="flex items-center justify-end space-x-1.5 w-1/3">
+                  <div className="flex items-center justify-end space-x-2 w-1/3">
                     <Volume2
                       className="w-3 h-3"
                       style={{ color: themeDraft.textMuted }}
@@ -620,31 +620,31 @@ export const CustomThemeModal: React.FC<CustomThemeModalProps> = ({
 
           {/* Feedback / Notifications */}
           {copiedNotification && (
-            <div className="p-2.5 rounded-lg bg-white/[0.06] border border-white/10 text-xs text-[#10B981] flex items-center space-x-2">
+            <div className="p-3 rounded-lg bg-white/[0.06] border border-white/10 text-xs text-success flex items-center space-x-2">
               <Check className="w-4 h-4" />
               <span>{copiedNotification}</span>
             </div>
           )}
           {importError && (
-            <div className="p-2.5 rounded-lg bg-[#FF453A]/10 border border-[#FF453A]/30 text-xs text-[#FF453A]">
+            <div className="p-3 rounded-lg bg-danger/10 border border-danger/30 text-xs text-danger">
               {importError}
             </div>
           )}
         </div>
 
         {/* Modal Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-white/[0.06] bg-[#0F0F13]/80">
+        <div className="flex items-center justify-between px-6 py-4 border-t border-white/[0.06] bg-sidebar/80">
           <div className="flex items-center space-x-2">
             <button
               type="button"
               onClick={handleExportJson}
-              className="flex items-center space-x-1.5 px-3 py-1.5 text-xs text-[#A1A1AA] hover:text-white bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 rounded-lg transition-colors"
+              className="flex items-center space-x-2 px-3 py-2 text-xs text-textSecondary hover:text-white bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 rounded-lg transition-colors"
             >
               <Download className="w-3.5 h-3.5" />
               <span>Export JSON</span>
             </button>
 
-            <label className="flex items-center space-x-1.5 px-3 py-1.5 text-xs text-[#A1A1AA] hover:text-white bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 rounded-lg transition-colors cursor-pointer">
+            <label className="flex items-center space-x-2 px-3 py-2 text-xs text-textSecondary hover:text-white bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 rounded-lg transition-colors cursor-pointer">
               <Upload className="w-3.5 h-3.5" />
               <span>Import JSON</span>
               <input
@@ -658,7 +658,7 @@ export const CustomThemeModal: React.FC<CustomThemeModalProps> = ({
             <button
               type="button"
               onClick={() => setThemeDraft({ ...DEFAULT_STARTER_THEME, id: "custom-" + Date.now() })}
-              className="flex items-center space-x-1.5 px-3 py-1.5 text-xs text-[#71717A] hover:text-white transition-colors"
+              className="flex items-center space-x-2 px-3 py-2 text-xs text-textMuted hover:text-white transition-colors"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span>Reset</span>
@@ -669,7 +669,7 @@ export const CustomThemeModal: React.FC<CustomThemeModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-1.5 text-xs text-[#A1A1AA] hover:text-white transition-colors"
+              className="px-4 py-2 text-xs text-textSecondary hover:text-white transition-colors"
             >
               Cancel
             </button>
@@ -677,7 +677,7 @@ export const CustomThemeModal: React.FC<CustomThemeModalProps> = ({
               type="button"
               onClick={handleSaveAndApply}
               style={{ backgroundColor: themeDraft.accentColor }}
-              className="flex items-center space-x-1.5 px-4 py-1.5 text-xs font-semibold text-white rounded-lg shadow-sm hover:brightness-110 active:scale-[0.98] transition-all"
+              className="flex items-center space-x-2 px-4 py-2 text-xs font-semibold text-white rounded-lg shadow-sm hover:brightness-110 active:scale-[0.98] transition-all"
             >
               <Check className="w-3.5 h-3.5 stroke-[2.5]" />
               <span>Save & Apply Theme</span>
@@ -699,8 +699,8 @@ const ColorInput: React.FC<ColorInputProps> = ({ label, value, onChange }) => {
   const hexForPicker = value.startsWith("#") && value.length === 7 ? value : "#16161A";
 
   return (
-    <div className="bg-[#121216]/50 p-2.5 rounded-xl border border-white/[0.05] space-y-1.5">
-      <span className="block text-[10px] font-semibold text-[#71717A] truncate">
+    <div className="bg-deck/50 p-3 rounded-xl border border-white/[0.05] space-y-2">
+      <span className="block text-2xs font-semibold text-textMuted truncate">
         {label}
       </span>
       <div className="flex items-center space-x-2">

@@ -143,7 +143,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
       picks.push({
         id: `pick-album-${newestAlbum.title}`,
         badge: "RECENT ADDITION",
-        badgeColor: "bg-red-500/20 text-red-400 border-red-500/30",
+        badgeColor: "bg-danger/20 text-danger border-danger/30",
         title: newestAlbum.title,
         subtitle: `${newestAlbum.artist} • ${newestAlbum.tracks.length} ${newestAlbum.tracks.length === 1 ? "track" : "tracks"}`,
         artworkTrackId: newestAlbum.artworkTrackId,
@@ -200,7 +200,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
       picks.push({
         id: `pick-artist-${topArtist.name}`,
         badge: "ARTIST SPOTLIGHT",
-        badgeColor: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+        badgeColor: "bg-surfaceActive text-textPrimary border-border",
         title: `${topArtist.name} Essentials`,
         subtitle: `${topArtist.trackCount} ${topArtist.trackCount === 1 ? "track" : "tracks"} • ${topArtist.albumCount} ${topArtist.albumCount === 1 ? "album" : "albums"}`,
         artworkTrackId: topArtist.artworkTrackId,
@@ -216,7 +216,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
       picks.push({
         id: `pick-genre-${genre1.name}`,
         badge: "GENRE SPOTLIGHT",
-        badgeColor: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+        badgeColor: "bg-success/20 text-success border-success/30",
         title: `${genre1.name} Essentials`,
         subtitle: `${genre1.tracks.length} ${genre1.tracks.length === 1 ? "track" : "tracks"}`,
         artworkTrackId: genre1.tracks[0]?.id,
@@ -229,7 +229,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
       picks.push({
         id: `pick-album-${secondAlbum.title}`,
         badge: "DISCOVER ALBUM",
-        badgeColor: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+        badgeColor: "bg-success/20 text-success border-success/30",
         title: secondAlbum.title,
         subtitle: `${secondAlbum.artist} • ${secondAlbum.tracks.length} ${secondAlbum.tracks.length === 1 ? "track" : "tracks"}`,
         artworkTrackId: secondAlbum.artworkTrackId,
@@ -245,7 +245,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
       picks.push({
         id: `pick-genre-${genre2.name}`,
         badge: "GENRE MIX",
-        badgeColor: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30",
+        badgeColor: "bg-warning/20 text-warning border-warning/30",
         title: `${genre2.name} Mix`,
         subtitle: `${genre2.tracks.length} ${genre2.tracks.length === 1 ? "track" : "tracks"}`,
         artworkTrackId: genre2.tracks[0]?.id,
@@ -257,7 +257,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
       picks.push({
         id: `pick-artist-${secondArtist.name}`,
         badge: "FEATURING",
-        badgeColor: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30",
+        badgeColor: "bg-warning/20 text-warning border-warning/30",
         title: secondArtist.name,
         subtitle: `${secondArtist.trackCount} ${secondArtist.trackCount === 1 ? "track" : "tracks"}`,
         artworkTrackId: secondArtist.artworkTrackId,
@@ -375,14 +375,14 @@ export const HomeView: React.FC<HomeViewProps> = ({
         <h1 className="text-3xl font-extrabold text-white tracking-tight mb-2">
           Welcome to Wavery
         </h1>
-        <p className="text-sm text-[#A1A1AA] max-w-md mb-8 leading-relaxed">
+        <p className="text-sm text-textSecondary max-w-md mb-8 leading-relaxed">
           Your personal high-fidelity music sanctuary. Import your local audio library or connect your music folder to get started with instant playback.
         </p>
 
         {onOpenImport && (
           <button
             onClick={onOpenImport}
-            className="px-6 py-3 bg-[#FA586A] hover:bg-[#E04859] active:scale-95 text-white font-bold text-sm rounded-full shadow-lg shadow-[#FA586A]/25 transition flex items-center space-x-2"
+            className="px-6 py-3 bg-accent-fill hover:bg-accentHover active:scale-95 text-white font-bold text-sm rounded-full shadow-lg shadow-accent/25 transition flex items-center space-x-2"
           >
             <FolderPlus className="w-4 h-4" />
             <span>Import Your Music Collection</span>
@@ -393,44 +393,44 @@ export const HomeView: React.FC<HomeViewProps> = ({
   }
 
   return (
-    <div className="flex-1 overflow-y-auto px-4 sm:px-6 md:px-8 py-4 sm:py-6 space-y-7 sm:space-y-9 select-none pb-28 sm:pb-24">
+    <div className="flex-1 overflow-y-auto px-4 sm:px-6 md:px-8 py-4 sm:py-6 space-y-8 sm:space-y-8 select-none pb-28 sm:pb-24">
       {/* 1. Apple Music Style Hero Title & Greeting */}
       <div className="flex items-end justify-between border-b border-white/[0.06] pb-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">Home</h1>
-          <p className="text-xs text-[#A1A1AA] mt-1 flex flex-wrap items-center gap-2">
+          <p className="text-xs text-textSecondary mt-1 flex flex-wrap items-center gap-2">
             <span>Dynamic recommendations derived from your listening history</span>
             <span className="hidden sm:inline-block w-1 h-1 rounded-full bg-white/30" />
-            <span className="font-mono text-[#71717A]">{tracks.length} Songs</span>
+            <span className="font-mono text-textMuted">{tracks.length} Songs</span>
           </p>
         </div>
 
         <div className="hidden sm:flex items-center space-x-2 text-xs font-semibold">
           <button
             onClick={() => onNavigate("tracks")}
-            className="px-3 py-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] text-white transition flex items-center gap-1.5"
+            className="px-3 py-2 rounded-full bg-white/[0.06] hover:bg-white/[0.12] text-white transition flex items-center gap-2"
           >
-            <Music className="w-3.5 h-3.5 text-[#FA586A]" />
+            <Music className="w-3.5 h-3.5 text-accent" />
             <span>All Songs</span>
           </button>
           <button
             onClick={() => onNavigate("albums")}
-            className="px-3 py-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] text-white transition flex items-center gap-1.5"
+            className="px-3 py-2 rounded-full bg-white/[0.06] hover:bg-white/[0.12] text-white transition flex items-center gap-2"
           >
-            <Disc className="w-3.5 h-3.5 text-[#FA586A]" />
+            <Disc className="w-3.5 h-3.5 text-accent" />
             <span>Albums</span>
           </button>
         </div>
       </div>
 
       {/* 2. Top Picks For You (Tall Editorial Poster Cards - Driven by user data) */}
-      <section className="space-y-3.5">
+      <section className="space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <Compass className="w-4 h-4 text-[#FA586A]" />
+            <Compass className="w-4 h-4 text-accent" />
             <h2 className="text-lg font-bold text-white tracking-tight">Top Picks for You</h2>
           </div>
-          <span className="text-xs text-[#71717A] font-medium">Curated</span>
+          <span className="text-xs text-textMuted font-medium">Curated</span>
         </div>
 
         {/* Horizontal Carousel on Mobile/Tablet, 5-col Grid on Wide Desktop */}
@@ -471,7 +471,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 {/* Top Card Bar: Badge */}
                 <div className="relative z-10 flex items-center">
                   <span
-                    className={`text-[10px] font-semibold tracking-wider uppercase px-2 py-0.5 rounded-[4px] border backdrop-blur-md ${pick.badgeColor}`}
+                    className={`text-2xs font-semibold tracking-wider uppercase px-2 py-1 rounded-[4px] border backdrop-blur-md ${pick.badgeColor}`}
                   >
                     {pick.badge}
                   </span>
@@ -527,23 +527,23 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
       {/* 3. Dynamic Recently Played / Recently Added Shelf */}
       {recentShelf.albums.length > 0 && (
-        <section className="space-y-3.5">
+        <section className="space-y-4">
           <div className="flex items-center justify-between">
             <button
               onClick={() => onNavigate(recentShelf.isHistory ? "history" : "albums")}
-              className="group flex items-center space-x-2 text-lg font-bold text-white hover:text-[#FA586A] transition-colors"
+              className="group flex items-center space-x-2 text-lg font-bold text-white hover:text-accent transition-colors"
             >
               {recentShelf.isHistory ? (
-                <Clock className="w-4 h-4 text-[#FA586A]" />
+                <Clock className="w-4 h-4 text-accent" />
               ) : (
-                <Calendar className="w-4 h-4 text-[#FA586A]" />
+                <Calendar className="w-4 h-4 text-accent" />
               )}
               <span>{recentShelf.title}</span>
-              <ChevronRight className="w-4 h-4 text-[#71717A] group-hover:text-[#FA586A] group-hover:translate-x-0.5 transition" />
+              <ChevronRight className="w-4 h-4 text-textMuted group-hover:text-accent group-hover:translate-x-0.5 transition" />
             </button>
             <button
               onClick={() => onNavigate(recentShelf.isHistory ? "history" : "albums")}
-              className="text-xs text-[#71717A] hover:text-white transition font-medium"
+              className="text-xs text-textMuted hover:text-white transition font-medium"
             >
               See All
             </button>
@@ -567,7 +567,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   className="group relative flex flex-col cursor-pointer"
                 >
                   {/* Square Album Cover with Smooth Radius */}
-                  <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-[#16161A] border border-white/[0.08] group-hover:border-white/[0.18] transition-all duration-200 shadow-md group-hover:shadow-xl group-hover:shadow-black/40">
+                  <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-surface border border-white/[0.08] group-hover:border-white/[0.18] transition-all duration-200 shadow-md group-hover:shadow-xl group-hover:shadow-black/40">
                     {artworkUrl ? (
                       <img
                         src={artworkUrl}
@@ -578,7 +578,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                         }}
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-[#1A1A22] text-[#71717A]">
+                      <div className="w-full h-full flex items-center justify-center bg-surfaceHover text-textMuted">
                         <Disc className="w-12 h-12" />
                       </div>
                     )}
@@ -587,7 +587,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                     <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center">
                       <button
                         onClick={(e) => handlePlayAlbum(album, e)}
-                        className="w-11 h-11 rounded-full bg-[#FA586A] hover:bg-[#E04859] active:scale-95 text-white shadow-xl flex items-center justify-center transition-transform hover:scale-110"
+                        className="w-11 h-11 rounded-full bg-accent-fill hover:bg-accentHover active:scale-95 text-white shadow-xl flex items-center justify-center transition-transform hover:scale-110"
                         title={`Play ${album.title}`}
                       >
                         <Play className="w-5 h-5 fill-white translate-x-0.5" />
@@ -596,15 +596,15 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
                     {/* Playing indicator */}
                     {isCurrentlyPlayingThisAlbum && (
-                      <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-[#FA586A] text-white text-[10px] font-bold shadow-md">
+                      <div className="absolute top-2 right-2 px-2 py-1 rounded-full bg-accent-fill text-white text-2xs font-bold shadow-md">
                         Playing
                       </div>
                     )}
                   </div>
 
                   {/* Album Metadata */}
-                  <div className="mt-2.5 space-y-0.5">
-                    <p className="text-xs font-semibold text-white truncate group-hover:text-[#FA586A] transition-colors">
+                  <div className="mt-3 space-y-1">
+                    <p className="text-xs font-semibold text-white truncate group-hover:text-accent transition-colors">
                       {album.title}
                     </p>
                     <p
@@ -612,7 +612,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                         e.stopPropagation();
                         onSelectArtist(album.artist);
                       }}
-                      className="text-[11px] text-[#A1A1AA] truncate hover:text-white transition-colors"
+                      className="text-2xs text-textSecondary truncate hover:text-white transition-colors"
                     >
                       {album.artist}
                     </p>
@@ -626,18 +626,18 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
       {/* 4. Favorite Artists / Heavy Rotation (Circular Avatars) */}
       {topArtists.length > 0 && (
-        <section className="space-y-3.5">
+        <section className="space-y-4">
           <div className="flex items-center justify-between">
             <button
               onClick={() => onNavigate("artists")}
-              className="group flex items-center space-x-1.5 text-lg font-bold text-white hover:text-[#FA586A] transition-colors"
+              className="group flex items-center space-x-2 text-lg font-bold text-white hover:text-accent transition-colors"
             >
               <span>Favorite Artists</span>
-              <ChevronRight className="w-4 h-4 text-[#71717A] group-hover:text-[#FA586A] group-hover:translate-x-0.5 transition" />
+              <ChevronRight className="w-4 h-4 text-textMuted group-hover:text-accent group-hover:translate-x-0.5 transition" />
             </button>
             <button
               onClick={() => onNavigate("artists")}
-              className="text-xs text-[#71717A] hover:text-white transition font-medium"
+              className="text-xs text-textMuted hover:text-white transition font-medium"
             >
               See All
             </button>
@@ -656,7 +656,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   className="group flex flex-col items-center text-center cursor-pointer"
                 >
                   {/* Circular Portrait with Glow on Hover */}
-                  <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-full overflow-hidden bg-[#1A1A22] border border-white/[0.08] group-hover:border-[#FA586A]/50 transition-all duration-300 shadow-md group-hover:shadow-lg group-hover:shadow-[#FA586A]/20">
+                  <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-full overflow-hidden bg-surfaceHover border border-white/[0.08] group-hover:border-accent/50 transition-all duration-300 shadow-md group-hover:shadow-lg group-hover:shadow-accent/20">
                     {artworkUrl ? (
                       <img
                         src={artworkUrl}
@@ -667,7 +667,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                         }}
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-[#71717A]">
+                      <div className="w-full h-full flex items-center justify-center text-textMuted">
                         <Users className="w-10 h-10" />
                       </div>
                     )}
@@ -676,7 +676,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center">
                       <button
                         onClick={(e) => handlePlayArtist(artist, e)}
-                        className="w-9 h-9 rounded-full bg-[#FA586A] text-white flex items-center justify-center shadow-lg hover:scale-110 active:scale-95 transition"
+                        className="w-9 h-9 rounded-full bg-accent-fill text-white flex items-center justify-center shadow-lg hover:scale-110 active:scale-95 transition"
                         title={`Play ${artist.name}`}
                       >
                         <Play className="w-4 h-4 fill-white translate-x-0.5" />
@@ -684,10 +684,10 @@ export const HomeView: React.FC<HomeViewProps> = ({
                     </div>
                   </div>
 
-                  <p className="mt-2 text-xs font-semibold text-white truncate max-w-full group-hover:text-[#FA586A] transition-colors">
+                  <p className="mt-2 text-xs font-semibold text-white truncate max-w-full group-hover:text-accent transition-colors">
                     {artist.name}
                   </p>
-                  <p className="text-[10px] text-[#71717A] mt-0.5 font-medium">
+                  <p className="text-2xs text-textMuted mt-1 font-medium">
                     {artist.trackCount} {artist.trackCount === 1 ? "song" : "songs"}
                   </p>
                 </div>
@@ -698,15 +698,15 @@ export const HomeView: React.FC<HomeViewProps> = ({
       )}
 
       {/* 5. Playlists Shelf */}
-      <section className="space-y-3.5">
+      <section className="space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <Compass className="w-4 h-4 text-[#FA586A]" />
+            <Compass className="w-4 h-4 text-accent" />
             <h2 className="text-lg font-bold text-white tracking-tight">Playlists & Library</h2>
           </div>
           <button
             onClick={() => onNavigate("playlists")}
-            className="text-xs text-[#71717A] hover:text-white transition font-medium"
+            className="text-xs text-textMuted hover:text-white transition font-medium"
           >
             All Playlists
           </button>
@@ -719,7 +719,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
             className="group relative h-36 rounded-2xl overflow-hidden cursor-pointer border border-white/[0.08] bg-surface hover:bg-surfaceHover hover:border-accent/40 hover:bg-gradient-to-br hover:from-accent/15 hover:to-transparent p-4 flex flex-col justify-between transition-all hover:shadow-xl"
           >
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold tracking-wider uppercase px-2 py-0.5 rounded-full bg-accent/20 text-accent border border-accent/30">
+              <span className="text-2xs font-bold tracking-wider uppercase px-2 py-1 rounded-full bg-accent/20 text-accent border border-accent/30">
                 FAVORITES
               </span>
               <Heart className="w-6 h-6 text-accent fill-accent drop-shadow-md" />
@@ -728,7 +728,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               <h3 className="text-base font-bold text-white group-hover:text-accent transition-colors">
                 Liked Songs
               </h3>
-              <p className="text-xs text-[#A1A1AA] mt-0.5">
+              <p className="text-xs text-textSecondary mt-1">
                 {likedTracks.length} favorite {likedTracks.length === 1 ? "track" : "tracks"}
               </p>
             </div>
@@ -739,19 +739,19 @@ export const HomeView: React.FC<HomeViewProps> = ({
             <div
               key={pl.id}
               onClick={() => onSelectPlaylist(pl.id)}
-              className="group relative h-36 rounded-2xl overflow-hidden cursor-pointer border border-white/[0.08] bg-[#16161A] hover:bg-[#1A1A22] p-4 flex flex-col justify-between hover:border-white/[0.18] transition-all hover:shadow-lg"
+              className="group relative h-36 rounded-2xl overflow-hidden cursor-pointer border border-white/[0.08] bg-surface hover:bg-surfaceHover p-4 flex flex-col justify-between hover:border-white/[0.18] transition-all hover:shadow-lg"
             >
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold tracking-wider uppercase px-2 py-0.5 rounded-full bg-white/[0.08] text-[#A1A1AA]">
+                <span className="text-2xs font-bold tracking-wider uppercase px-2 py-1 rounded-full bg-white/[0.08] text-textSecondary">
                   PLAYLIST
                 </span>
-                <Music className="w-5 h-5 text-[#71717A] group-hover:text-white transition-colors" />
+                <Music className="w-5 h-5 text-textMuted group-hover:text-white transition-colors" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white truncate group-hover:text-[#FA586A] transition-colors">
+                <h3 className="text-base font-bold text-white truncate group-hover:text-accent transition-colors">
                   {pl.name}
                 </h3>
-                <p className="text-xs text-[#71717A] mt-0.5">
+                <p className="text-xs text-textMuted mt-1">
                   {pl.track_ids.length} songs
                 </p>
               </div>

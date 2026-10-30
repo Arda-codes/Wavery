@@ -94,6 +94,7 @@ async function main() {
   const { runM3Challenger1Tests } = jiti("./test_m3_challenger1_stress.ts");
   const { runM4Challenger2AdversarialTests } = jiti("./test_m4_challenger2_adversarial.ts");
   const { runCrossfadeTests } = jiti("./test_crossfade.ts");
+  const { runDesignTokenGuardTests } = jiti("./test_design_tokens.ts");
 
   const startTime = performance.now();
 
@@ -134,6 +135,9 @@ async function main() {
     // 12. Run M4 Challenger 2 Final Adversarial Hardening & Boundary Audit Tests
     const m4Challenger2Results = await runM4Challenger2AdversarialTests(jiti);
 
+    // 13. Design token guard (spacing grid, type scale, colour tokens)
+    runDesignTokenGuardTests();
+
 
     const totalDuration = performance.now() - startTime;
 
@@ -150,6 +154,7 @@ async function main() {
     console.log("  [7] Crossfade Equal-Power:   PASSED (dual element, equal-power curve & auto-crossfade)");
     console.log("  [8] M3 State & String Fuzz:  PASSED (5,000 randomized state actions & ReDoS fuzzing)");
     console.log("  [9] M4 Adversarial & Audit:  PASSED (100k scale, 10k queue ops, ReDoS & zero unwrap)");
+    console.log("  [10] Design Token Guard:     PASSED (8px grid, type scale, colour tokens)");
     console.log("================================================================================");
     console.log("  FINAL VERDICT: >>> APPROVE <<<");
     console.log("================================================================================\n");

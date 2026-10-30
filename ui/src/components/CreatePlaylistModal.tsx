@@ -46,7 +46,7 @@ export const CreatePlaylistModal: React.FC<CreatePlaylistModalProps> = ({
       <div className="bg-surface border border-white/[0.12] rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl animate-scaleUp">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.08]">
-          <div className="flex items-center space-x-2.5">
+          <div className="flex items-center space-x-3">
             <div className="w-8 h-8 rounded-xl bg-accent flex items-center justify-center text-white shadow-md shadow-accent/20">
               <ListMusic className="w-4 h-4" />
             </div>
@@ -57,7 +57,7 @@ export const CreatePlaylistModal: React.FC<CreatePlaylistModalProps> = ({
               setError(null);
               onClose();
             }}
-            className="text-[#71717A] hover:text-white p-1 rounded-lg hover:bg-white/[0.06] transition"
+            className="text-textMuted hover:text-white p-1 rounded-lg hover:bg-white/[0.06] transition"
           >
             <X className="w-4 h-4" />
           </button>
@@ -66,7 +66,7 @@ export const CreatePlaylistModal: React.FC<CreatePlaylistModalProps> = ({
         {/* Body */}
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           <div>
-            <label className="block text-[11px] font-semibold text-[#A1A1AA] uppercase tracking-wider mb-2">
+            <label className="block text-2xs font-semibold text-textSecondary uppercase tracking-wider mb-2">
               Playlist Name
             </label>
             <input
@@ -78,30 +78,30 @@ export const CreatePlaylistModal: React.FC<CreatePlaylistModalProps> = ({
               }}
               placeholder="e.g. Chill Synthwave, Road Trip..."
               autoFocus
-              className="w-full bg-[#202028] border border-white/[0.10] focus:border-accent rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-[#71717A] focus:outline-none focus:ring-2 focus:ring-accent/30 transition"
+              className="w-full bg-surfaceHover border border-white/[0.10] focus:border-accent rounded-xl px-4 py-3 text-xs text-white placeholder-textMuted focus:outline-none focus:ring-2 focus:ring-accent/30 transition"
             />
             {error && (
-              <p className="text-[11px] text-[#FF453A] mt-1.5 font-medium animate-fadeIn">
+              <p className="text-2xs text-danger mt-2 font-medium animate-fadeIn">
                 {error}
               </p>
             )}
           </div>
 
-          <div className="flex items-center justify-end space-x-2.5 pt-2">
+          <div className="flex items-center justify-end space-x-3 pt-2">
             <button
               type="button"
               onClick={() => {
                 setError(null);
                 onClose();
               }}
-              className="px-4 py-2 bg-white/[0.06] hover:bg-white/[0.10] text-[#A1A1AA] hover:text-white rounded-xl text-xs font-semibold transition"
+              className="px-4 py-2 bg-white/[0.06] hover:bg-white/[0.10] text-textSecondary hover:text-white rounded-xl text-xs font-semibold transition"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="flex items-center space-x-1.5 px-4 py-2 bg-accent hover:brightness-110 disabled:opacity-40 text-white rounded-xl text-xs font-bold shadow-md shadow-accent/20 transition"
+              className="flex items-center space-x-2 px-4 py-2 bg-accent hover:brightness-110 disabled:opacity-40 text-white rounded-xl text-xs font-bold shadow-md shadow-accent/20 transition"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Create</span>

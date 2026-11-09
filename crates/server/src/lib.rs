@@ -549,18 +549,68 @@ fn is_request_from_loopback(req: &axum::extract::Request) -> bool {
     ext_ip.is_none_or(is_loopback_ip)
 }
 
+/// Validates whether an incoming HTTP Origin header is trusted.
+/// Allows localhost/loopback origins, Tauri internal origins, or same-origin matching the Host header.
+#[must_use]
+pub fn is_trusted_origin(origin: &str, host: Option<&str>) -> bool {
+    let lower = origin.trim().to_ascii_lowercase();
+    if lower.is_empty() || lower == "null" {
+        return false;
+    }
+
+    // Check same-origin matching Host header (e.g., in LAN mode http://192.168.1.50:4242)
+    if let Some(h) = host {
+        let trimmed_host = h.trim().to_ascii_lowercase();
+        if !trimmed_host.is_empty() {
+            let expected_http = format!("http://{}", trimmed_host);
+            let expected_https = format!("https://{}", trimmed_host);
+            if lower == expected_http || lower == expected_https {
+                return true;
+            }
+        }
+    }
+
+    // Check loopback / localhost origins
+    lower.starts_with("http://localhost")
+        || lower.starts_with("https://localhost")
+        || lower.starts_with("http://127.0.0.1")
+        || lower.starts_with("https://127.0.0.1")
+        || lower.starts_with("http://[::1]")
+        || lower.starts_with("https://[::1]")
+        || lower.starts_with("tauri://")
+        || lower.starts_with("http://tauri.localhost")
+        || lower.starts_with("https://tauri.localhost")
+}
+
 /// Axum middleware that enforces the localhost security boundary by rejecting
-/// destructive endpoints with `403 Forbidden` when requested from a non-loopback address.
+/// destructive endpoints with `403 Forbidden` when requested from a non-loopback address
+/// or from an untrusted cross-origin origin (preventing CSRF from local browsers).
 pub async fn security_boundary_middleware(
     req: axum::extract::Request,
     next: axum::middleware::Next,
 ) -> Response {
-    if is_destructive_endpoint(req.method(), req.uri().path()) && !is_request_from_loopback(&req) {
-        let body = Json(serde_json::json!({
-            "error": "Forbidden: destructive operations are restricted to localhost",
-            "status": StatusCode::FORBIDDEN.as_u16(),
-        }));
-        return (StatusCode::FORBIDDEN, body).into_response();
+    if is_destructive_endpoint(req.method(), req.uri().path()) {
+        if !is_request_from_loopback(&req) {
+            let body = Json(serde_json::json!({
+                "error": "Forbidden: destructive operations are restricted to localhost",
+                "status": StatusCode::FORBIDDEN.as_u16(),
+            }));
+            return (StatusCode::FORBIDDEN, body).into_response();
+        }
+
+        // Cross-Origin / CSRF Protection:
+        // When an Origin header is sent by a browser, verify that it originates from a trusted local origin
+        // or matches the current Host header (same-origin).
+        if let Some(origin) = req.headers().get(header::ORIGIN).and_then(|v| v.to_str().ok()) {
+            let host = req.headers().get(header::HOST).and_then(|v| v.to_str().ok());
+            if !is_trusted_origin(origin, host) {
+                let body = Json(serde_json::json!({
+                    "error": "Forbidden: cross-origin destructive operations are rejected",
+                    "status": StatusCode::FORBIDDEN.as_u16(),
+                }));
+                return (StatusCode::FORBIDDEN, body).into_response();
+            }
+        }
     }
     next.run(req).await
 }
@@ -648,7 +698,30 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             axum::routing::any(|| async { (StatusCode::NOT_FOUND, "API endpoint not found") }),
         )
         .layer(axum::middleware::from_fn(security_boundary_middleware))
-        .layer(CorsLayer::permissive())
+        .layer(
+            CorsLayer::new()
+                .allow_methods([
+                    axum::http::Method::GET,
+                    axum::http::Method::POST,
+                    axum::http::Method::PUT,
+                    axum::http::Method::DELETE,
+                    axum::http::Method::OPTIONS,
+                ])
+                .allow_headers(tower_http::cors::Any)
+                .allow_origin(tower_http::cors::AllowOrigin::predicate(
+                    |origin: &header::HeaderValue, req_parts: &axum::http::request::Parts| {
+                        if let Ok(orig_str) = origin.to_str() {
+                            let host = req_parts
+                                .headers
+                                .get(header::HOST)
+                                .and_then(|v| v.to_str().ok());
+                            is_trusted_origin(orig_str, host)
+                        } else {
+                            false
+                        }
+                    },
+                )),
+        )
         .with_state(state.clone());
 
     if let Some(static_dir) = &state.static_dir {

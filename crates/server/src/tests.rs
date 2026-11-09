@@ -1024,6 +1024,21 @@ async fn test_security_boundary_middleware_loopback_and_remote_enforcement() {
     assert!(!crate::is_loopback_ip("10.0.0.5".parse::<IpAddr>().unwrap()));
     assert!(!crate::is_loopback_ip("0.0.0.0".parse::<IpAddr>().unwrap()));
 
+    // Verify trusted origin checking
+    assert!(crate::is_trusted_origin("http://localhost:4242", None));
+    assert!(crate::is_trusted_origin("http://127.0.0.1:4242", None));
+    assert!(crate::is_trusted_origin("http://localhost:5173", None));
+    assert!(crate::is_trusted_origin("tauri://localhost", None));
+    assert!(crate::is_trusted_origin("http://tauri.localhost", None));
+    assert!(crate::is_trusted_origin(
+        "http://192.168.1.50:4242",
+        Some("192.168.1.50:4242")
+    ));
+    assert!(!crate::is_trusted_origin("https://evil.com", None));
+    assert!(!crate::is_trusted_origin("https://evil.com", Some("127.0.0.1:4242")));
+    assert!(!crate::is_trusted_origin("null", None));
+    assert!(!crate::is_trusted_origin("", None));
+
     assert!(crate::is_destructive_endpoint(
         &Method::POST,
         "/api/library/rebuild"
@@ -1165,6 +1180,19 @@ async fn test_security_boundary_middleware_loopback_and_remote_enforcement() {
         .insert(ConnectInfo(remote_addr));
     let remote_wf_res = app.clone().oneshot(remote_wf_req).await.unwrap();
     assert_eq!(remote_wf_res.status(), StatusCode::OK);
+
+    // Localhost with untrusted cross-origin Origin MUST be rejected with 403 Forbidden
+    let mut evil_origin_req = Request::builder()
+        .method("POST")
+        .uri("/api/library/vacuum")
+        .header(header::ORIGIN, "https://evil.com")
+        .body(Body::empty())
+        .unwrap();
+    evil_origin_req
+        .extensions_mut()
+        .insert(ConnectInfo(loopback_addr));
+    let evil_origin_res = app.clone().oneshot(evil_origin_req).await.unwrap();
+    assert_eq!(evil_origin_res.status(), StatusCode::FORBIDDEN);
 
     // Localhost (127.0.0.1) MUST be allowed to invoke destructive endpoints
     let mut local_vacuum_req = Request::builder()

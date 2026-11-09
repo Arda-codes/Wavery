@@ -22,10 +22,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cfg_path = default_config_path().unwrap_or_else(|_| PathBuf::from("config.toml"));
     let config = load_or_create(&cfg_path).unwrap_or_default();
 
-    let library = SqliteLibraryManager::new(
+    let library = match SqliteLibraryManager::new(
         config.library.managed_directory.clone(),
         config.library.database_path.clone(),
-    )?;
+    ) {
+        Ok(lib) => lib,
+        Err(e) => {
+            eprintln!("[Wavery-Server] Primary database corrupted or unreadable: {e}");
+            let db_path = &config.library.database_path;
+            if db_path.exists() {
+                let timestamp = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+                let quarantine = db_path.with_extension(format!("corrupt.{timestamp}.bak"));
+                eprintln!(
+                    "[Wavery-Server] Quarantining corrupted database to {}",
+                    quarantine.display()
+                );
+                let _ = std::fs::rename(db_path, quarantine);
+                SqliteLibraryManager::new(
+                    config.library.managed_directory.clone(),
+                    config.library.database_path.clone(),
+                )?
+            } else {
+                return Err(e.into());
+            }
+        }
+    };
 
     // Resolve static UI dist directory — check standard locations in priority order
     let exe_dir = std::env::current_exe()

@@ -2937,8 +2937,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Some(Arc::new(AsyncMutex::new(lib)))
         }
         Err(e) => {
-            eprintln!("Failed to initialize SQLite library: {e}");
-            None
+            eprintln!("[Wavery] Primary SQLite database corrupted or unreadable: {e}");
+            let db_path = &config.library.database_path;
+            if db_path.exists() {
+                let timestamp = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+                let quarantine_path = db_path.with_extension(format!("corrupt.{timestamp}.bak"));
+                eprintln!(
+                    "[Wavery] Quarantining corrupted database to {}",
+                    quarantine_path.display()
+                );
+                let _ = std::fs::rename(db_path, &quarantine_path);
+
+                match SqliteLibraryManager::new(
+                    config.library.managed_directory.clone(),
+                    config.library.database_path.clone(),
+                ) {
+                    Ok(mut recovered) => {
+                        eprintln!("[Wavery] Fresh library database re-initialized successfully after quarantine");
+                        recovered.set_protected_artists(config.library.protected_artists.clone());
+                        recovered.set_genre_mappings(config.library.genre_mappings.clone());
+                        Some(Arc::new(AsyncMutex::new(recovered)))
+                    }
+                    Err(rec_err) => {
+                        eprintln!("[Wavery] Critical: failed to initialize fresh database: {rec_err}");
+                        None
+                    }
+                }
+            } else {
+                None
+            }
         }
     };
 
@@ -4857,6 +4887,39 @@ mod tests {
                 .unwrap(),
             None
         );
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[tokio::test]
+    async fn test_corrupt_database_quarantine_and_recovery() {
+        let unique_id = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp_dir = std::env::temp_dir().join(format!("wavery_corrupt_db_test_{}", unique_id));
+        let db_path = temp_dir.join("library.db");
+        let music_dir = temp_dir.join("music");
+        std::fs::create_dir_all(&music_dir).unwrap();
+
+        // Write corrupt, non-sqlite garbage to db_path
+        std::fs::write(&db_path, b"CORRUPTED_GARBAGE_NOT_A_SQLITE_HEADER").unwrap();
+        assert!(db_path.exists());
+
+        // Primary initialization fails
+        let init_res = SqliteLibraryManager::new(music_dir.clone(), db_path.clone());
+        assert!(init_res.is_err());
+
+        // Quarantine corrupted database
+        let quarantine_path = db_path.with_extension("corrupt.bak");
+        std::fs::rename(&db_path, &quarantine_path).unwrap();
+        assert!(quarantine_path.exists());
+        assert!(!db_path.exists());
+
+        // Re-initialization succeeds with fresh database
+        let recovered_res = SqliteLibraryManager::new(music_dir, db_path.clone());
+        assert!(recovered_res.is_ok());
+        assert!(db_path.exists());
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }

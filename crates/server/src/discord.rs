@@ -118,7 +118,10 @@ impl DiscordRpcState {
                 self.client = Some(client);
                 self.connected = true;
                 self.discord_running = true;
-                tracing::info!("Discord RPC: connected to Discord IPC socket with app_id={}", self.app_id);
+                tracing::info!(
+                    "Discord RPC: connected to Discord IPC socket with app_id={}",
+                    self.app_id
+                );
                 true
             }
             Err(e) => {
@@ -135,6 +138,14 @@ impl DiscordRpcState {
     /// Sets the Rich Presence activity.
     /// Automatically attempts reconnect if the client is not yet connected.
     pub fn set_activity(&mut self, payload: &PresencePayload) {
+        // Discord Rich Presence has no paused state: without timestamps Discord ticks
+        // up an elapsed timer indefinitely. Clear presence when paused so a ghost
+        // timer is not displayed.
+        if !payload.is_playing {
+            self.clear_activity();
+            return;
+        }
+
         if let Some(ref custom_id) = payload.app_id {
             self.set_app_id(Some(custom_id));
         }

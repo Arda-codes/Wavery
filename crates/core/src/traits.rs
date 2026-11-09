@@ -3,7 +3,10 @@
 //! Subsystems (audio, library, mpris) conform strictly to these trait definitions.
 
 use crate::error::{AudioError, LibraryError, MprisError};
-use crate::models::{ImportStrategy, LoopMode, PlaybackState, Track, TrackMetadata};
+use crate::models::{
+    ImportStrategy, LoopMode, PlaybackState, QueueStateSnapshot, Track, TrackMetadata,
+    WaveformData,
+};
 use async_trait::async_trait;
 use std::path::Path;
 use std::time::Duration;
@@ -14,7 +17,11 @@ use std::time::Duration;
 #[async_trait]
 pub trait PlayerEngine: Send + Sync {
     /// Load a track into the playback buffer and begin streaming.
-    async fn load(&mut self, track: &Track, start_position: Option<Duration>) -> Result<(), AudioError>;
+    async fn load(
+        &mut self,
+        track: &Track,
+        start_position: Option<Duration>,
+    ) -> Result<(), AudioError>;
 
     /// Resume playback.
     fn play(&mut self) -> Result<(), AudioError>;
@@ -45,6 +52,9 @@ pub trait PlayerEngine: Send + Sync {
 
     /// Set crossfade transition duration.
     fn set_crossfade(&mut self, _duration: Duration) {}
+
+    /// Set perceptual loudness normalization mode ("off", "track", "album").
+    fn set_replay_gain_mode(&mut self, _mode: &str) {}
 }
 
 /// Library & Storage Trait (LibraryManager)
@@ -81,7 +91,8 @@ pub trait LibraryManager: Send + Sync {
     }
 
     /// Remove a track from the library index and optionally wipe from disk.
-    async fn delete_track(&mut self, track_id: &str, remove_file: bool) -> Result<(), LibraryError>;
+    async fn delete_track(&mut self, track_id: &str, remove_file: bool)
+        -> Result<(), LibraryError>;
 
     /// Query track by ID.
     fn get_track(&self, track_id: &str) -> Option<&Track>;
@@ -99,6 +110,37 @@ pub trait LibraryManager: Send + Sync {
         metadata: &TrackMetadata,
         write_tags: bool,
     ) -> Result<Track, LibraryError>;
+
+    /// Returns pre-aggregated album list with compilation detection and track lists.
+    fn list_albums(&self) -> Result<Vec<crate::models::Album>, LibraryError> {
+        Ok(Vec::new())
+    }
+
+    /// Returns pre-aggregated artist profiles with albums, appearances, and track lists.
+    fn list_artists(&self) -> Result<Vec<crate::models::Artist>, LibraryError> {
+        Ok(Vec::new())
+    }
+
+    /// Returns pre-aggregated genres with track lists sorted descending by popularity.
+    fn list_genres(&self) -> Result<Vec<crate::models::GenreInfo>, LibraryError> {
+        Ok(Vec::new())
+    }
+
+    /// Query cached waveform peak envelope by track ID.
+    async fn get_waveform(
+        &self,
+        _track_id: &str,
+    ) -> Result<Option<WaveformData>, LibraryError> {
+        Ok(None)
+    }
+
+    /// Save or update a track's waveform peak envelope.
+    async fn save_waveform(
+        &mut self,
+        _waveform: &WaveformData,
+    ) -> Result<(), LibraryError> {
+        Ok(())
+    }
 }
 
 /// Extracted artwork payload.
@@ -121,7 +163,8 @@ pub trait MetadataReader: Send + Sync {
 
 /// Queue & Playback Order Trait (QueueManager)
 ///
-/// Manages active linear queue, two-tier user priority queue, shuffle ordering, and repeat policies.
+/// Manages active linear queue, two-tier user priority queue, shuffle ordering, repeat policies,
+/// and autoplay candidate recommendations.
 pub trait QueueManager: Send + Sync {
     /// Replace queue items.
     fn set_queue(&mut self, tracks: Vec<Track>, start_index: usize);
@@ -137,17 +180,50 @@ pub trait QueueManager: Send + Sync {
         self.set_queue(tracks, start_index);
     }
 
+    /// View active context tracks (album, playlist, or filtered tracks).
+    fn context_queue(&self) -> &[Track] {
+        self.queue()
+    }
+
+    /// Current 0-based index within the context tracks.
+    fn context_index(&self) -> Option<usize> {
+        self.current_index()
+    }
+
     /// Advance to next track, returning next Track if available.
     fn next(&mut self) -> Option<&Track>;
 
     /// Revert to previous track or restart current track based on threshold.
     fn previous(&mut self, current_pos: Duration) -> Option<&Track>;
 
+    /// Jump directly to index in flattened queue view.
+    fn jump_to_index(&mut self, _index: usize) -> Option<&Track> {
+        None
+    }
+
+    /// Jump directly to index in context queue.
+    fn jump_to_context_track(&mut self, _context_index: usize) -> Option<&Track> {
+        None
+    }
+
+    /// Jump directly to index in user priority queue.
+    fn jump_to_user_track(&mut self, _user_index: usize) -> Option<&Track> {
+        None
+    }
+
     /// Toggle or set shuffle state.
     fn set_shuffle(&mut self, enabled: bool);
 
     /// Set loop behavior (Off, Track, Queue).
     fn set_loop_mode(&mut self, mode: LoopMode);
+
+    /// Set continuous autoplay recommendations.
+    fn set_autoplay(&mut self, _enabled: bool) {}
+
+    /// Whether continuous autoplay recommendations are enabled.
+    fn is_autoplay(&self) -> bool {
+        false
+    }
 
     /// Currently active track.
     fn current_track(&self) -> Option<&Track>;
@@ -188,6 +264,39 @@ pub trait QueueManager: Send + Sync {
     fn loop_mode(&self) -> LoopMode {
         LoopMode::Off
     }
+
+    /// Clear both context and user queues, stopping active playback queue.
+    fn clear(&mut self) {
+        self.set_queue(Vec::new(), 0);
+    }
+
+    /// Return a comprehensive, serializable snapshot of the current queue state.
+    fn get_state(&self) -> QueueStateSnapshot {
+        QueueStateSnapshot {
+            current_track: self.current_track().cloned(),
+            current_index: self.current_index(),
+            user_queue: self.user_queue().to_vec(),
+            context_queue: self.context_queue().to_vec(),
+            context_index: self.context_index(),
+            queue: self.queue().to_vec(),
+            is_shuffle: self.is_shuffle(),
+            loop_mode: self.loop_mode(),
+            is_autoplay: self.is_autoplay(),
+            history: self.history().to_vec(),
+            shuffle_indices: Vec::new(),
+            shuffle_pos: 0,
+        }
+    }
+
+    /// Select the highest-scoring unplayed candidate track from candidate pool based on artist, album, and genre heuristics.
+    fn select_autoplay_candidate(&self, _candidate_pool: &[Track]) -> Option<Track> {
+        None
+    }
+
+    /// Append an autoplay recommendation track to the queue.
+    fn append_autoplay_track(&mut self, track: Track) {
+        self.push_back(track);
+    }
 }
 
 /// Linux Integration Trait (MprisBridge)
@@ -199,7 +308,11 @@ pub trait MprisBridge: Send + Sync {
     async fn update_status(&mut self, state: PlaybackState) -> Result<(), MprisError>;
 
     /// Broadcast track metadata and album art URI to MPRIS clients.
-    async fn update_metadata(&mut self, track: &Track, art_url: Option<&str>) -> Result<(), MprisError>;
+    async fn update_metadata(
+        &mut self,
+        track: &Track,
+        art_url: Option<&str>,
+    ) -> Result<(), MprisError>;
 
     /// Broadcast seek / position offset.
     async fn update_position(&mut self, position: Duration) -> Result<(), MprisError>;

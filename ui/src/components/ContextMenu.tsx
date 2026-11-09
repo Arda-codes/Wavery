@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useCallback, useLayoutEffect } from
 import { useContextMenuStore, ContextMenuItem } from "../stores/contextMenuStore";
 import { windowService } from "../services/windowService";
 import { ChevronRight } from "lucide-react";
+import { useTransitionMount } from "../utils/useTransitionMount";
 
 interface SubmenuProps {
   items: ContextMenuItem[];
@@ -105,18 +106,18 @@ export const ContextMenu: React.FC = () => {
   const closeContextMenu = useContextMenuStore((s) => s.closeContextMenu);
 
   const menuRef = useRef<HTMLDivElement>(null);
-  const [adjustedPos, setAdjustedPos] = useState({ x: 0, y: 0 });
+  const [adjustedPos, setAdjustedPos] = useState(rawPosition);
   const [activeSubmenuId, setActiveSubmenuId] = useState<string | null>(null);
   const [activeSubmenuRect, setActiveSubmenuRect] = useState<DOMRect | null>(null);
   const itemRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
 
   // Dynamic viewport boundary calculation & clamping
   useLayoutEffect(() => {
-    if (!isOpen || !menuRef.current) return;
+    if (!isOpen) return;
 
     const el = menuRef.current;
-    const width = el.offsetWidth || 220;
-    const height = el.offsetHeight || 200;
+    const width = el?.offsetWidth || 220;
+    const height = el?.offsetHeight || 200;
     const padding = 10;
 
     let x = rawPosition.x;
@@ -197,9 +198,16 @@ export const ContextMenu: React.FC = () => {
     }
   }, []);
 
-  if (!isOpen || items.length === 0) return null;
+  const { isRendered, isExiting } = useTransitionMount(isOpen && items.length > 0, 110);
+  const lastItemsRef = useRef(items);
+  if (items.length > 0) {
+    lastItemsRef.current = items;
+  }
+  const displayItems = items.length > 0 ? items : lastItemsRef.current;
 
-  const activeSubmenuItem = items.find((i) => i.id === activeSubmenuId && i.items);
+  if (!isRendered || displayItems.length === 0) return null;
+
+  const activeSubmenuItem = !isExiting ? displayItems.find((i) => i.id === activeSubmenuId && i.items) : undefined;
 
   return (
     <>
@@ -213,9 +221,11 @@ export const ContextMenu: React.FC = () => {
           top: `${adjustedPos.y}px`,
           zIndex: 9999,
         }}
-        className="bg-surface/95 backdrop-blur-2xl border border-white/[0.12] rounded-2xl p-2 shadow-2xl shadow-black/90 min-w-[210px] max-w-[300px] select-none animate-menu-in text-xs"
+        className={`bg-surface/95 backdrop-blur-2xl border border-white/[0.12] rounded-2xl p-2 shadow-2xl shadow-black/90 min-w-[210px] max-w-[300px] select-none text-xs ${
+          isExiting ? "animate-menu-out pointer-events-none" : "animate-menu-in"
+        }`}
       >
-        {items.map((item) => {
+        {displayItems.map((item) => {
           if (item.divider) {
             return <div key={item.id} className="my-1 border-t border-white/[0.08]" />;
           }

@@ -1,6 +1,5 @@
 import { Track } from "../types";
 import { getFullTrackArtistString } from "./library";
-import { invoke } from "@tauri-apps/api/core";
 
 function isTauriEnv(): boolean {
   return (
@@ -55,12 +54,16 @@ export function showTrackNotification(track: Track, artworkUrl?: string) {
 
   // Tauri Desktop: routes via thread-isolated show_desktop_notification
   if (isTauriEnv()) {
-    invoke("show_desktop_notification", {
-      title,
-      body,
-    }).catch((err) => {
-      console.debug("Tauri notification dispatch failed:", err);
-    });
+    import("@tauri-apps/api/core")
+      .then(({ invoke }) =>
+        invoke("show_desktop_notification", {
+          title,
+          body,
+        })
+      )
+      .catch((err) => {
+        console.debug("Tauri notification dispatch failed:", err);
+      });
     return;
   }
 

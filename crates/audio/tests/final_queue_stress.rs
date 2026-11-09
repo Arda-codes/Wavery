@@ -27,6 +27,7 @@ fn make_test_track(id: &str, title: &str) -> Track {
             channels: None,
             format: "FLAC".into(),
             lyrics: None,
+            ..Default::default()
         },
         date_added: 0,
     }
@@ -43,7 +44,11 @@ fn test_m4_queue_state_machine_fuzz_invariants() {
             .map(|i| make_test_track(&format!("q_{queue_size}_{i}"), &format!("Song {i}")))
             .collect();
 
-        let start_idx = if queue_size > 0 { rng.gen_range(0..queue_size) } else { 0 };
+        let start_idx = if queue_size > 0 {
+            rng.gen_range(0..queue_size)
+        } else {
+            0
+        };
         q.set_queue(initial_tracks.clone(), start_idx);
 
         for step in 0..10_000 {
@@ -89,9 +94,15 @@ fn test_m4_queue_state_machine_fuzz_invariants() {
                     if rng.gen_bool(0.05) {
                         let new_sz = rng.gen_range(0..30);
                         let trks: Vec<Track> = (0..new_sz)
-                            .map(|i| make_test_track(&format!("reset_{i}"), &format!("Reset Song {i}")))
+                            .map(|i| {
+                                make_test_track(&format!("reset_{i}"), &format!("Reset Song {i}"))
+                            })
                             .collect();
-                        let s_idx = if new_sz > 0 { rng.gen_range(0..new_sz) } else { 0 };
+                        let s_idx = if new_sz > 0 {
+                            rng.gen_range(0..new_sz)
+                        } else {
+                            0
+                        };
                         q.set_queue(trks, s_idx);
                     }
                 }
@@ -110,14 +121,33 @@ fn test_m4_queue_state_machine_fuzz_invariants() {
             let queue_len = q.queue().len();
 
             if queue_len == 0 {
-                assert_eq!(curr_idx, None, "Step {step}: Empty queue must have current_index == None");
-                assert_eq!(curr_trk, None, "Step {step}: Empty queue must have current_track == None");
+                assert_eq!(
+                    curr_idx, None,
+                    "Step {step}: Empty queue must have current_index == None"
+                );
+                assert_eq!(
+                    curr_trk, None,
+                    "Step {step}: Empty queue must have current_track == None"
+                );
             } else {
-                assert!(curr_idx.is_some(), "Step {step}: Non-empty queue must have current_index");
+                assert!(
+                    curr_idx.is_some(),
+                    "Step {step}: Non-empty queue must have current_index"
+                );
                 let idx = curr_idx.unwrap();
-                assert!(idx < queue_len, "Step {step}: current_index {idx} out of bounds for queue len {queue_len}");
-                assert!(curr_trk.is_some(), "Step {step}: Non-empty queue must have current_track");
-                assert_eq!(curr_trk.unwrap().id, q.queue()[idx].id, "Step {step}: current_track must match queue[current_index]");
+                assert!(
+                    idx < queue_len,
+                    "Step {step}: current_index {idx} out of bounds for queue len {queue_len}"
+                );
+                assert!(
+                    curr_trk.is_some(),
+                    "Step {step}: Non-empty queue must have current_track"
+                );
+                assert_eq!(
+                    curr_trk.unwrap().id,
+                    q.queue()[idx].id,
+                    "Step {step}: current_track must match queue[current_index]"
+                );
             }
         }
     }
@@ -143,20 +173,29 @@ fn test_m4_shuffle_permutation_rigorous_uniqueness() {
             q.set_loop_mode(LoopMode::Off);
 
             let initial_id = format!("perm_{size}_{start_idx}");
-            assert_eq!(q.current_track().map(|t| t.id.as_str()), Some(initial_id.as_str()));
+            assert_eq!(
+                q.current_track().map(|t| t.id.as_str()),
+                Some(initial_id.as_str())
+            );
 
             let mut visited = Vec::with_capacity(size);
             visited.push(initial_id);
 
             for _ in 1..size {
-                let nxt = q.next().unwrap_or_else(|| panic!("Size {size} Cycle {cycle}: premature None in shuffle"));
+                let nxt = q.next().unwrap_or_else(|| {
+                    panic!("Size {size} Cycle {cycle}: premature None in shuffle")
+                });
                 visited.push(nxt.id.clone());
             }
 
             // Must visit all `size` elements exactly once
             assert_eq!(visited.len(), size);
             let set: HashSet<String> = visited.into_iter().collect();
-            assert_eq!(set.len(), size, "Size {size} Cycle {cycle}: Duplicate tracks encountered during shuffle traversal");
+            assert_eq!(
+                set.len(),
+                size,
+                "Size {size} Cycle {cycle}: Duplicate tracks encountered during shuffle traversal"
+            );
 
             // LoopMode::Off -> next() returns None
             assert_eq!(q.next(), None);

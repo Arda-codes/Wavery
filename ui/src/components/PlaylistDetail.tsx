@@ -30,7 +30,6 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
   const setQueue = usePlayerStore((s) => s.setQueue);
   const playbackContext = usePlayerStore((s) => s.playbackContext);
   const isPlaying = usePlayerStore((s) => s.status.state === "Playing");
-  const isShuffle = usePlayerStore((s) => s.isShuffle);
   const toggleShuffle = usePlayerStore((s) => s.toggleShuffle);
 
   const [isEditingName, setIsEditingName] = useState(false);
@@ -60,12 +59,14 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
     setQueue(tracks, 0, playlistContext);
   }, [tracks, setQueue, playlistContext]);
 
-  const handleShuffle = useCallback(() => {
+  const handleShuffle = useCallback(async () => {
     if (tracks.length === 0) return;
-    if (!isShuffle) toggleShuffle();
     const shuffled = [...tracks].sort(() => Math.random() - 0.5);
-    setQueue(shuffled, 0, playlistContext);
-  }, [tracks, isShuffle, toggleShuffle, setQueue, playlistContext]);
+    await setQueue(shuffled, 0, playlistContext);
+    if (!usePlayerStore.getState().isShuffle) {
+      toggleShuffle();
+    }
+  }, [tracks, toggleShuffle, setQueue, playlistContext]);
 
   const handleSaveName = async () => {
     if (!editedName.trim() || editedName === playlist.name) {
@@ -88,17 +89,14 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
 
         {/* Info & Action Controls */}
         <div className="flex-1 min-w-0 w-full">
-          <div className="flex items-center justify-center sm:justify-start gap-2 mb-1">
-            <p className="text-2xs font-bold text-textMuted uppercase tracking-widest">
-              Playlist
-            </p>
-            {isThisPlaylistPlaying && (
-              <span className="inline-flex items-center gap-2 px-2 py-1 rounded-[4px] bg-accent/10 border border-accent/25 text-2xs font-semibold text-accent uppercase tracking-wider animate-fade-in">
+          {isThisPlaylistPlaying && (
+            <div className="flex items-center justify-center sm:justify-start gap-2 mb-2">
+              <span className="inline-flex items-center gap-2 px-2 py-1 rounded-[4px] bg-accent/10 border border-accent/25 text-2xs font-medium text-accent animate-fade-in">
                 <EqualizerWave isPlaying={isPlaying} size="xs" color="bg-accent" />
                 <span>Now Playing</span>
               </span>
-            )}
-          </div>
+            </div>
+          )}
 
           {isEditingName ? (
             <div className="flex items-center justify-center sm:justify-start space-x-2 mb-2">
@@ -114,7 +112,7 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
                   }
                 }}
                 autoFocus
-                className="bg-surfaceHover border border-accent rounded-lg px-3 py-1 text-xl sm:text-2xl font-black text-white focus:outline-none focus:ring-2 focus:ring-accent/40"
+                className="bg-surfaceHover border border-accent rounded-lg px-3 py-1 text-xl sm:text-2xl font-bold text-white focus:outline-none focus:ring-2 focus:ring-accent/40"
               />
               <button
                 onClick={handleSaveName}
@@ -136,7 +134,7 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
             </div>
           ) : (
             <div className="flex items-center justify-center sm:justify-start space-x-3 mb-2 group/title">
-              <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight truncate">
+              <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight truncate">
                 {playlist.name}
               </h1>
               <button
@@ -178,7 +176,7 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
             </button>
             <button
               onClick={() => {
-                if (confirm(`Are you sure you want to delete "${playlist.name}"?`)) {
+                if (confirm(`Are you sure you want to delete the playlist "${playlist.name}"? Tracks inside your library will not be removed.`)) {
                   onDeletePlaylist();
                 }
               }}
@@ -193,6 +191,10 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
 
       {/* Tracks Table */}
       <TrackTable
+        pageKey={`playlist_${playlist.id}`}
+        fallbackPageKey="playlist_detail"
+        defaultSortKey="date_added"
+        defaultSortDir="asc"
         tracks={tracks}
         playbackContext={playlistContext}
         onSelectArtist={onSelectArtist}

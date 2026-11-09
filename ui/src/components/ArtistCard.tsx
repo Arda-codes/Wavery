@@ -1,8 +1,9 @@
 import React, { useState, useCallback } from "react";
 import { ArtistInfo } from "../types";
-import { Users, Disc, Music, Play, ListPlus, CornerDownRight, User, Copy, FilePenLine } from "lucide-react";
+import { Users, Disc, Music, Play, ListPlus, CornerDownRight, User, Copy, FilePenLine, EyeOff, Eye } from "lucide-react";
 import { useArtwork } from "../utils/useArtwork";
 import { usePlayerStore } from "../stores/playerStore";
+import { useSettingsStore } from "../stores/settingsStore";
 import { useContextMenuStore, ContextMenuItem } from "../stores/contextMenuStore";
 
 interface ArtistCardProps {
@@ -22,15 +23,16 @@ const ArtistCardInner: React.FC<ArtistCardProps> = ({
   const artworkUrl = propArtworkUrl || fetchedArtwork;
   const [imgError, setImgError] = useState(false);
 
-  const setQueue = usePlayerStore((s) => s.setQueue);
-  const insertAfterCurrent = usePlayerStore((s) => s.insertAfterCurrent);
-  const addToQueue = usePlayerStore((s) => s.addToQueue);
-  const openContextMenu = useContextMenuStore((s) => s.openContextMenu);
+  const isHidden = useSettingsStore((s) => s.isArtistHidden(artist.name));
 
   const handleContextMenu = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
+
+      const { setQueue, insertAfterCurrent, addToQueue } = usePlayerStore.getState();
+      const toggleHideArtist = useSettingsStore.getState().toggleHideArtist;
+      const openContextMenu = useContextMenuStore.getState().openContextMenu;
 
       const menuItems: ContextMenuItem[] = [
         {
@@ -78,6 +80,14 @@ const ArtistCardInner: React.FC<ArtistCardProps> = ({
           onClick: () => onSelectArtist(artist.name),
         },
         {
+          id: "toggle-hide-artist",
+          label: isHidden ? "Unhide Artist" : "Hide Artist",
+          icon: isHidden ? Eye : EyeOff,
+          onClick: () => {
+            toggleHideArtist(artist.name);
+          },
+        },
+        {
           id: "divider-copy",
           label: "",
           divider: true,
@@ -110,15 +120,16 @@ const ArtistCardInner: React.FC<ArtistCardProps> = ({
 
       openContextMenu(e, menuItems);
     },
-    [artist, onSelectArtist, onEditArtist, setQueue, insertAfterCurrent, addToQueue, openContextMenu]
+    [artist, isHidden, onSelectArtist, onEditArtist]
   );
 
   return (
     <div
       onClick={() => onSelectArtist(artist.name)}
       onContextMenu={handleContextMenu}
-      style={{ contain: "content" }}
-      className="group cursor-pointer bg-surface hover:bg-surfaceHover border border-white/[0.06] hover:border-white/[0.12] rounded-2xl p-4 flex flex-col items-center text-center transition-[background-color,border-color,box-shadow,transform] duration-250 ease-[cubic-bezier(0.16,1,0.3,1)] shadow-sm hover:shadow-xl hover:-translate-y-0.5 select-none"
+      className={`group cursor-pointer bg-surface hover:bg-surfaceHover border rounded-2xl p-4 flex flex-col items-center text-center transition-[background-color,border-color,box-shadow,transform] duration-250 ease-[cubic-bezier(0.16,1,0.3,1)] shadow-sm hover:shadow-xl hover:-translate-y-0.5 select-none ${
+        isHidden ? "border-warning/30 opacity-75 hover:opacity-100" : "border-white/[0.06] hover:border-white/[0.12]"
+      }`}
     >
       {/* Artist Avatar Circle */}
       <div className="w-28 h-28 rounded-full bg-surfaceHover overflow-hidden flex items-center justify-center mb-4 relative border border-white/[0.08] shadow-lg group-hover:scale-105 transition-transform duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform">
@@ -133,6 +144,15 @@ const ArtistCardInner: React.FC<ArtistCardProps> = ({
           />
         ) : (
           <Users className="w-10 h-10 text-textMuted" />
+        )}
+
+        {isHidden && (
+          <div
+            className="absolute top-1 right-1 bg-black/80 backdrop-blur-md text-warning p-1 rounded-full border border-warning/30 shadow-md"
+            title="Artist is hidden from playback and recommendations"
+          >
+            <EyeOff className="w-3 h-3" />
+          </div>
         )}
       </div>
 

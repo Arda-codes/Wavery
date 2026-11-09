@@ -21,13 +21,19 @@ import {
   Search,
   History,
   X,
+  Maximize2,
+  Minimize2,
+  Download,
 } from "lucide-react";
 import { useNavigationStore } from "../stores/navigationStore";
+import { isTauri } from "../services/adapter";
+import { windowService, useWindowState } from "../services/windowService";
 
 interface SidebarProps {
   currentView: ViewMode;
   onNavigate: (view: ViewMode) => void;
   onOpenImport?: () => void;
+  onOpenInstall?: () => void;
   trackCount: number;
   artistCount: number;
   albumCount: number;
@@ -43,6 +49,7 @@ const SidebarInner: React.FC<SidebarProps> = ({
   currentView,
   onNavigate,
   onOpenImport,
+  onOpenInstall,
   trackCount,
   artistCount,
   albumCount,
@@ -54,6 +61,7 @@ const SidebarInner: React.FC<SidebarProps> = ({
   onDeletePlaylist,
 }) => {
   const [hoveredPlaylistId, setHoveredPlaylistId] = useState<string | null>(null);
+  const { isFullscreen } = useWindowState();
 
   const playbackContext = usePlayerStore((s) => s.playbackContext);
   const isPlaying = usePlayerStore((s) => s.status.state === "Playing");
@@ -158,7 +166,7 @@ const SidebarInner: React.FC<SidebarProps> = ({
             icon: Trash2,
             danger: true,
             onClick: () => {
-              if (confirm(`Delete playlist "${pl.name}"?`)) {
+              if (confirm(`Are you sure you want to delete the playlist "${pl.name}"? Tracks inside your library will not be removed.`)) {
                 onDeletePlaylist(pl.id);
               }
             },
@@ -318,7 +326,7 @@ const SidebarInner: React.FC<SidebarProps> = ({
 
         {/* Library Section */}
         <div>
-          <p className="text-2xs font-bold text-textMuted tracking-wider uppercase mb-2 px-3">
+          <p className="text-xs font-semibold text-textMuted mb-2 px-3">
             Library
           </p>
           <nav className="space-y-1">
@@ -342,15 +350,17 @@ const SidebarInner: React.FC<SidebarProps> = ({
                   <EqualizerWave isPlaying={isPlaying} size="xs" color="bg-accent" />
                 </span>
               )}
-              <span
-                className={`ml-auto text-2xs px-2 py-1 rounded-full font-mono transition-colors ${
-                  isTracksActive
-                    ? "bg-accent text-white font-bold shadow-sm shadow-accent/30"
-                    : "bg-surfaceHover text-textMuted group-hover:text-textSecondary"
-                }`}
-              >
-                {trackCount}
-              </span>
+              {trackCount > 0 && (
+                <span
+                  className={`ml-auto text-2xs font-mono tabular-nums transition-colors ${
+                    isTracksActive
+                      ? "text-accent font-semibold"
+                      : "text-textMuted group-hover:text-textSecondary"
+                  }`}
+                >
+                  {trackCount}
+                </span>
+              )}
             </button>
 
             {/* Liked Songs */}
@@ -375,15 +385,17 @@ const SidebarInner: React.FC<SidebarProps> = ({
                   <EqualizerWave isPlaying={isPlaying} size="xs" color="bg-accent" />
                 </span>
               )}
-              <span
-                className={`ml-auto text-2xs px-2 py-1 rounded-full font-mono transition-colors ${
-                  isLikedActive
-                    ? "bg-accent text-white font-bold shadow-sm"
-                    : "bg-surfaceHover text-textMuted group-hover:text-textSecondary"
-                }`}
-              >
-                {likedCount}
-              </span>
+              {likedCount > 0 && (
+                <span
+                  className={`ml-auto text-2xs font-mono tabular-nums transition-colors ${
+                    isLikedActive
+                      ? "text-accent font-semibold"
+                      : "text-textMuted group-hover:text-textSecondary"
+                  }`}
+                >
+                  {likedCount}
+                </span>
+              )}
             </button>
 
             {/* Listening History */}
@@ -408,10 +420,10 @@ const SidebarInner: React.FC<SidebarProps> = ({
               )}
               {playHistory.length > 0 && (
                 <span
-                  className={`ml-auto text-2xs px-2 py-1 rounded-full font-mono transition-colors ${
+                  className={`ml-auto text-2xs font-mono tabular-nums transition-colors ${
                     isHistoryActive
-                      ? "bg-accent text-white font-bold shadow-sm shadow-accent/30"
-                      : "bg-surfaceHover text-textMuted group-hover:text-textSecondary"
+                      ? "text-accent font-semibold"
+                      : "text-textMuted group-hover:text-textSecondary"
                   }`}
                 >
                   {playHistory.length}
@@ -434,15 +446,17 @@ const SidebarInner: React.FC<SidebarProps> = ({
                 }`}
               />
               <span>Artists</span>
-              <span
-                className={`ml-auto text-2xs px-2 py-1 rounded-full font-mono transition-colors ${
-                  isArtistsActive
-                    ? "bg-accent text-white font-bold shadow-sm shadow-accent/30"
-                    : "bg-surfaceHover text-textMuted group-hover:text-textSecondary"
-                }`}
-              >
-                {artistCount}
-              </span>
+              {artistCount > 0 && (
+                <span
+                  className={`ml-auto text-2xs font-mono tabular-nums transition-colors ${
+                    isArtistsActive
+                      ? "text-accent font-semibold"
+                      : "text-textMuted group-hover:text-textSecondary"
+                  }`}
+                >
+                  {artistCount}
+                </span>
+              )}
             </button>
 
             {/* Albums */}
@@ -460,37 +474,57 @@ const SidebarInner: React.FC<SidebarProps> = ({
                 }`}
               />
               <span>Albums</span>
-              <span
-                className={`ml-auto text-2xs px-2 py-1 rounded-full font-mono transition-colors ${
-                  isAlbumsActive
-                    ? "bg-accent text-white font-bold shadow-sm shadow-accent/30"
-                    : "bg-surfaceHover text-textMuted group-hover:text-textSecondary"
-                }`}
-              >
-                {albumCount}
-              </span>
+              {albumCount > 0 && (
+                <span
+                  className={`ml-auto text-2xs font-mono tabular-nums transition-colors ${
+                    isAlbumsActive
+                      ? "text-accent font-semibold"
+                      : "text-textMuted group-hover:text-textSecondary"
+                  }`}
+                >
+                  {albumCount}
+                </span>
+              )}
             </button>
           </nav>
         </div>
 
         {/* Playlists Section */}
         <div>
-          <div className="flex items-center justify-between px-3 mb-2">
+          <div className="flex items-center justify-between gap-1 mb-1">
             <button
               onClick={() => onNavigate("playlists")}
-              className={`text-2xs font-bold transition-colors tracking-wider uppercase ${
-                isPlaylistsActive ? "text-accent" : "text-textMuted hover:text-textPrimary"
+              className={`flex-1 flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all group ${
+                isPlaylistsActive
+                  ? "bg-surfaceActive text-textPrimary border border-border shadow-sm"
+                  : "text-textSecondary hover:text-textPrimary hover:bg-surfaceHover"
               }`}
             >
-              Playlists
+              <ListMusic
+                className={`w-4 h-4 transition-colors ${
+                  isPlaylistsActive ? "text-accent" : "text-textMuted group-hover:text-textPrimary"
+                }`}
+              />
+              <span className="truncate">Playlists</span>
+              {playlists.length > 0 && (
+                <span
+                  className={`ml-auto text-2xs font-mono tabular-nums transition-colors ${
+                    isPlaylistsActive
+                      ? "text-accent font-semibold"
+                      : "text-textMuted group-hover:text-textSecondary"
+                  }`}
+                >
+                  {playlists.length}
+                </span>
+              )}
             </button>
             {onCreatePlaylist && (
               <button
                 onClick={onCreatePlaylist}
-                className="w-5 h-5 rounded-md hover:bg-surfaceHover text-textMuted hover:text-textPrimary flex items-center justify-center transition"
+                className="w-8 h-8 rounded-xl hover:bg-surfaceHover active:scale-[0.92] text-textMuted hover:text-textPrimary flex items-center justify-center transition-[color,background-color,border-color,transform] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] border border-transparent hover:border-white/[0.06] flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                 title="Create New Playlist"
               >
-                <Plus className="w-3.5 h-3.5" />
+                <Plus className="w-4 h-4" />
               </button>
             )}
           </div>
@@ -544,7 +578,7 @@ const SidebarInner: React.FC<SidebarProps> = ({
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (confirm(`Delete playlist "${pl.name}"?`)) {
+                          if (confirm(`Are you sure you want to delete the playlist "${pl.name}"? Tracks inside your library will not be removed.`)) {
                             onDeletePlaylist(pl.id);
                           }
                         }}
@@ -563,18 +597,18 @@ const SidebarInner: React.FC<SidebarProps> = ({
 
         {/* Manage & Settings Section */}
         <div>
-          <p className="text-2xs font-bold text-textMuted tracking-wider uppercase mb-2 px-3">
+          <p className="text-xs font-semibold text-textMuted mb-2 px-3">
             Manage
           </p>
           <nav className="space-y-2">
-            {/* Import Music CTA */}
+            {/* Import Music Action */}
             {onOpenImport && (
               <button
                 onClick={onOpenImport}
-                className="w-full flex items-center justify-center space-x-2 px-3 py-2 bg-accent hover:bg-accentHover active:scale-[0.98] text-white rounded-xl text-xs font-bold shadow-md shadow-accent/20 transition-all mb-2"
+                className="w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-semibold text-textSecondary hover:text-textPrimary hover:bg-surfaceHover transition-colors group"
               >
-                <Plus className="w-4 h-4" />
-                <span>Import Music</span>
+                <Plus className="w-4 h-4 text-textMuted group-hover:text-textPrimary transition-colors" />
+                <span className="truncate">Import Music</span>
               </button>
             )}
 
@@ -594,6 +628,42 @@ const SidebarInner: React.FC<SidebarProps> = ({
               />
               <span>Settings</span>
             </button>
+
+            {/* Fullscreen Toggle (Web / Mobile) */}
+            {!isTauri && (
+              <button
+                type="button"
+                onClick={async () => {
+                  await windowService.toggleFullscreen();
+                  setMobileSidebarOpen(false);
+                }}
+                className="w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-semibold text-textSecondary hover:text-textPrimary hover:bg-surfaceHover transition-colors group"
+                title={isFullscreen ? "Exit Fullscreen" : "Fullscreen (Hide Browser Bar)"}
+              >
+                {isFullscreen ? (
+                  <Minimize2 className="w-4 h-4 text-accent transition-colors" />
+                ) : (
+                  <Maximize2 className="w-4 h-4 text-textMuted group-hover:text-textPrimary transition-colors" />
+                )}
+                <span>{isFullscreen ? "Exit Fullscreen" : "Fullscreen (Hide Browser Bar)"}</span>
+              </button>
+            )}
+
+            {/* Install App (Web / Mobile PWA) */}
+            {!isTauri && onOpenInstall && (
+              <button
+                type="button"
+                onClick={() => {
+                  onOpenInstall();
+                  setMobileSidebarOpen(false);
+                }}
+                className="w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-semibold text-textSecondary hover:text-textPrimary hover:bg-surfaceHover transition-colors group"
+                title="Install Wavery App"
+              >
+                <Download className="w-4 h-4 text-accent transition-colors" />
+                <span>Install App</span>
+              </button>
+            )}
           </nav>
         </div>
       </div>
@@ -622,7 +692,7 @@ const SidebarInner: React.FC<SidebarProps> = ({
           {/* Slide-Up Bottom Sheet Pane */}
           <aside
             onContextMenu={handleSidebarNavContextMenu}
-            className="relative w-full max-h-[85vh] sm:max-h-[80vh] md:max-w-lg md:mx-auto bg-surface backdrop-blur-2xl border-t border-border rounded-t-[28px] p-5 pb-8 flex flex-col justify-between select-none shadow-[0_-16px_48px_rgba(0,0,0,0.6)] overflow-y-auto z-50 animate-drawer-in-up"
+            className="relative w-full max-h-[85vh] sm:max-h-[80vh] md:max-w-lg md:mx-auto bg-surface backdrop-blur-2xl border-t border-border rounded-t-[28px] p-5 safe-sheet-bottom flex flex-col justify-between select-none shadow-[0_-16px_48px_rgba(0,0,0,0.6)] overflow-y-auto z-50 animate-drawer-in-up"
           >
             {/* Grab Handle Pill for bottom sheet */}
             <div
@@ -634,12 +704,11 @@ const SidebarInner: React.FC<SidebarProps> = ({
             <div className="flex items-center justify-between pb-3 border-b border-border/40 mb-3 flex-shrink-0">
               <div className="flex items-center space-x-2">
                 <span className="font-bold text-sm text-textPrimary tracking-tight">Wavery</span>
-                <span className="text-2xs text-textMuted font-medium uppercase tracking-wider px-2 py-1 rounded-full bg-surfaceHover border border-border">Menu</span>
               </div>
               <button
                 type="button"
                 onClick={() => setMobileSidebarOpen(false)}
-                className="w-8 h-8 rounded-full bg-surfaceHover hover:bg-surfaceActive active:scale-95 text-textSecondary hover:text-textPrimary flex items-center justify-center transition focus:outline-none"
+                className="w-8 h-8 rounded-full bg-surfaceHover hover:bg-surfaceActive active:scale-[0.88] text-textSecondary hover:text-textPrimary flex items-center justify-center transition-[color,background-color,transform] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                 title="Close Navigation"
               >
                 <X className="w-4 h-4" />

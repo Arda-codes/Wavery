@@ -2,10 +2,13 @@ import {
   Track,
   AlbumInfo,
   ArtistInfo,
+  GenreInfo,
+  Playlist,
   TrackSortKey,
   SortDirection,
   AlbumSortKey,
   ArtistSortKey,
+  PlaylistSortKey,
 } from "../types";
 
 export function formatDuration(secs: number = 0): string {
@@ -21,6 +24,21 @@ export function formatTotalDuration(secs: number = 0): string {
     return `${hours} hr ${mins} min`;
   }
   return `${mins} min`;
+}
+
+/**
+ * Formats a byte count using binary units with a sensible number of decimals.
+ */
+export function formatBytes(bytes: number = 0): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const exponent = Math.min(
+    Math.floor(Math.log(bytes) / Math.log(1024)),
+    units.length - 1
+  );
+  const value = bytes / Math.pow(1024, exponent);
+  const decimals = exponent === 0 ? 0 : value >= 100 ? 0 : value >= 10 ? 1 : 2;
+  return `${value.toFixed(decimals)} ${units[exponent]}`;
 }
 
 /**
@@ -150,6 +168,42 @@ export function getProtectedArtists(): string[] {
 export function resetProtectedArtists(): void {
   PROTECTED_ARTISTS = [...DEFAULT_PROTECTED_ARTISTS];
   rebuildProtectedRegex();
+}
+
+let HIDDEN_ARTISTS: Set<string> = new Set();
+
+/**
+ * Updates the active list of hidden artists.
+ */
+export function setHiddenArtists(artists: string[]): void {
+  const seen = new Set<string>();
+  for (const a of artists) {
+    const trimmed = a.trim();
+    if (trimmed.length > 0) {
+      seen.add(trimmed.toLowerCase());
+    }
+  }
+  HIDDEN_ARTISTS = seen;
+}
+
+/**
+ * Returns whether an artist is hidden from playback and recommendations.
+ */
+export function isArtistHidden(artistName: string | undefined | null): boolean {
+  if (!artistName) return false;
+  return HIDDEN_ARTISTS.has(artistName.trim().toLowerCase());
+}
+
+/**
+ * Returns whether a track is performed by a hidden artist (checks main and featured/split artists).
+ */
+export function isTrackHidden(track: Track | undefined | null): boolean {
+  if (!track || !track.metadata?.artist) return false;
+  const raw = track.metadata.artist.trim();
+  if (!raw) return false;
+  if (isArtistHidden(raw)) return true;
+  const parts = splitArtists(raw);
+  return parts.some((a: string) => isArtistHidden(a));
 }
 
 function maskProtectedArtists(raw: string): {
@@ -910,3 +964,342 @@ export function sortArtists(
     return direction === "asc" ? result : -result;
   });
 }
+
+/**
+ * Sorts playlists using Schwartzian transform for O(N) string processing.
+ */
+export function sortPlaylists(
+  playlists: Playlist[],
+  sortKey: PlaylistSortKey = "name",
+  direction: SortDirection = "asc"
+): Playlist[] {
+  if (!playlists || playlists.length <= 1) return playlists;
+
+  if (sortKey === "name") {
+    const mapped = new Array<{ playlist: Playlist; key: string }>(playlists.length);
+    for (let i = 0; i < playlists.length; i++) {
+      mapped[i] = {
+        playlist: playlists[i],
+        key: playlists[i].name.toLowerCase(),
+      };
+    }
+    mapped.sort((a, b) => {
+      const cmp = a.key < b.key ? -1 : a.key > b.key ? 1 : 0;
+      return direction === "asc" ? cmp : -cmp;
+    });
+    const result = new Array<Playlist>(playlists.length);
+    for (let i = 0; i < mapped.length; i++) {
+      result[i] = mapped[i].playlist;
+    }
+    return result;
+  }
+
+  return [...playlists].sort((a, b) => {
+    let result = 0;
+    switch (sortKey) {
+      case "tracks":
+        result = (a.track_ids?.length || 0) - (b.track_ids?.length || 0);
+        break;
+      case "date":
+        result = (a.created_at || 0) - (b.created_at || 0);
+        break;
+    }
+    return direction === "asc" ? result : -result;
+  });
+}
+
+/**
+ * Default multilingual and transliterated genre aliases mapped to their canonical display name.
+ */
+export const DEFAULT_GENRE_MAPPINGS: Record<string, string> = {
+  // Russian / Cyrillic aliases
+  "альтернатива": "Alternative",
+  "альтернативный": "Alternative",
+  "альтернативный рок": "Alternative",
+  "альтернативный метал": "Alternative",
+  "рок": "Rock",
+  "русский рок": "Rock",
+  "классический рок": "Rock",
+  "хард-рок": "Rock",
+  "хард рок": "Rock",
+  "поп": "Pop",
+  "поп-музыка": "Pop",
+  "русский поп": "Pop",
+  "электроника": "Electronic",
+  "электронная музыка": "Electronic",
+  "электро": "Electronic",
+  "дэнс": "Dance",
+  "танцевальная": "Dance",
+  "танцевальная музыка": "Dance",
+  "хип-хоп": "Hip-Hop",
+  "хип хоп": "Hip-Hop",
+  "рэп": "Hip-Hop",
+  "русский рэп": "Hip-Hop",
+  "русский хип-хоп": "Hip-Hop",
+  "метал": "Metal",
+  "металл": "Metal",
+  "хэви-метал": "Metal",
+  "тяжелый рок": "Metal",
+  "панк": "Punk",
+  "панк-рок": "Punk",
+  "джаз": "Jazz",
+  "блюз": "Blues",
+  "классика": "Classical",
+  "классическая музыка": "Classical",
+  "эмбиент": "Ambient",
+  "эмбиэнт": "Ambient",
+  "инди": "Indie",
+  "инди-рок": "Indie",
+  "инди-поп": "Indie",
+  "саундтрек": "Soundtrack",
+  "саундтреки": "Soundtrack",
+  "музыка из фильмов": "Soundtrack",
+  "легкая музыка": "Easy Listening",
+  "легкое слушание": "Easy Listening",
+  "фолк": "Folk",
+  "фолк-рок": "Folk",
+  "соул": "Soul",
+  "фанк": "Funk",
+  "регги": "Reggae",
+  "диско": "Disco",
+  "техно": "Techno",
+  "хаус": "House",
+  "транс": "Trance",
+  "акустика": "Acoustic",
+  "инструментал": "Instrumental",
+  "инструментальная": "Instrumental",
+  "нью-эйдж": "New Age",
+
+  // English aliases and normalizations
+  "alternative rock": "Alternative",
+  "alt rock": "Alternative",
+  "alt-rock": "Alternative",
+  "alt. rock": "Alternative",
+  "electro": "Electronic",
+  "electronic music": "Electronic",
+  "electronica": "Electronic",
+  "dance music": "Dance",
+  "club": "Dance",
+  "hip hop": "Hip-Hop",
+  "hip-hop": "Hip-Hop",
+  "rap": "Hip-Hop",
+  "heavy metal": "Metal",
+  "hard rock": "Rock",
+  "punk rock": "Punk",
+  "r&b": "R&B",
+  "r & b": "R&B",
+  "rnb": "R&B",
+  "synthpop": "Synth-Pop",
+  "synth-pop": "Synth-Pop",
+  "lo-fi": "Lo-Fi",
+  "lofi": "Lo-Fi",
+  "k-pop": "K-Pop",
+  "kpop": "K-Pop",
+  "j-pop": "J-Pop",
+  "jpop": "J-Pop",
+  "edm": "EDM",
+  "drum and bass": "Drum & Bass",
+  "drum & bass": "Drum & Bass",
+  "dnb": "Drum & Bass",
+  "soundtrack": "Soundtrack",
+  "ost": "Soundtrack",
+  "score": "Soundtrack",
+  "chillout": "Chillout",
+  "chill-out": "Chillout",
+  "chill": "Chillout",
+};
+
+export let GENRE_MAPPINGS: Record<string, string> = { ...DEFAULT_GENRE_MAPPINGS };
+
+/**
+ * Updates the active genre mappings dynamically from configuration storage.
+ */
+export function setGenreMappings(mappings: Record<string, string>): void {
+  const clean: Record<string, string> = {};
+  for (const [key, val] of Object.entries(mappings)) {
+    const k = key.trim().toLowerCase();
+    const v = val.trim();
+    if (k && v) {
+      clean[k] = v;
+    }
+  }
+  GENRE_MAPPINGS = clean;
+}
+
+/**
+ * Returns a copy of active genre mappings.
+ */
+export function getGenreMappings(): Record<string, string> {
+  return { ...GENRE_MAPPINGS };
+}
+
+/**
+ * Resets active genre mappings back to initial defaults.
+ */
+export function resetGenreMappings(): void {
+  GENRE_MAPPINGS = { ...DEFAULT_GENRE_MAPPINGS };
+}
+
+/**
+ * Normalizes genre strings across multilingual variations, Cyrillic ID3 tags,
+ * and user-configurable mapping rules (e.g. "Альтернатив..." / "Альтернативный рок" -> "Alternative").
+ */
+export function normalizeGenre(raw: string): string {
+  if (!raw) return "";
+  let clean = raw.trim();
+  // Strip trailing ellipsis, dots, or dashes from tag truncation
+  clean = clean.replace(/[\s.…-]+$/, "").trim();
+  if (!clean) return "";
+
+  const lower = clean.toLowerCase();
+
+  // 1. Configurable user & default mappings lookup
+  if (GENRE_MAPPINGS[lower]) {
+    return GENRE_MAPPINGS[lower];
+  }
+
+  // 2. Prefix matching for truncated Cyrillic/English tags (e.g. "альтернатив", "alternat")
+  if (lower.startsWith("альтернатив") || lower.startsWith("alternat")) {
+    return "Alternative";
+  }
+  if (lower.startsWith("электрон") || lower.startsWith("electron")) {
+    return "Electronic";
+  }
+  if (lower.startsWith("классич") || lower.startsWith("classic")) {
+    return "Classical";
+  }
+  if (lower.startsWith("инструмент") || lower.startsWith("instrument")) {
+    return "Instrumental";
+  }
+
+  // 3. Fallback: Clean Title-Casing
+  return clean
+    .split(/[\s-]+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
+/**
+ * Splits compound genre strings (e.g. "Alternative / Rock & Pop") while protecting
+ * compound terms like "R&B" and "Drum & Bass".
+ */
+export function splitGenres(rawGenre: string): string[] {
+  if (!rawGenre || !rawGenre.trim()) return [];
+
+  // Protect "R&B", "Drum & Bass", "Rock & Roll"
+  const masked = rawGenre
+    .replace(/\b(r)\s*&\s*(b)\b/gi, "__R_AND_B__")
+    .replace(/\b(drum)\s*&\s*(bass)\b/gi, "__D_AND_B__")
+    .replace(/\b(rock)\s*&\s*(roll)\b/gi, "__ROCK_AND_ROLL__");
+
+  const parts = masked.split(/[,/;&|]/).map((p) => p.trim()).filter(Boolean);
+
+  const results: string[] = [];
+  for (const p of parts) {
+    const unmasked = p
+      .replace(/__R_AND_B__/g, "R&B")
+      .replace(/__D_AND_B__/g, "Drum & Bass")
+      .replace(/__ROCK_AND_ROLL__/g, "Rock & Roll");
+
+    const normalized = normalizeGenre(unmasked);
+    if (normalized && !results.includes(normalized)) {
+      results.push(normalized);
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Groups tracks by normalized genre and sorts descending by track count.
+ */
+export function extractLibraryGenres(tracks: Track[]): { name: string; tracks: Track[] }[] {
+  const genreMap = new Map<string, { name: string; tracks: Track[]; trackIds: Set<string> }>();
+
+  for (const track of tracks) {
+    const rawGenre = track.metadata?.genre;
+    if (!rawGenre) continue;
+
+    const genres = splitGenres(rawGenre);
+    for (const g of genres) {
+      let entry = genreMap.get(g.toLowerCase());
+      if (!entry) {
+        entry = { name: g, tracks: [], trackIds: new Set() };
+        genreMap.set(g.toLowerCase(), entry);
+      }
+      if (!entry.trackIds.has(track.id)) {
+        entry.trackIds.add(track.id);
+        entry.tracks.push(track);
+      }
+    }
+  }
+
+  return Array.from(genreMap.values())
+    .sort((a, b) => b.tracks.length - a.tracks.length)
+    .map(({ name, tracks }) => ({ name, tracks }));
+}
+
+/**
+ * Asynchronously retrieves albums, delegating to native Rust SQLite IPC in Tauri mode
+ * or falling back to local grouping in browser mode.
+ */
+export async function getAlbumsOrCluster(tracks?: Track[]): Promise<AlbumInfo[]> {
+  return groupTracksByAlbum(tracks || []);
+}
+
+export const fetchAlbumsIpc = getAlbumsOrCluster;
+
+/**
+ * Asynchronously retrieves artists by grouping tracks.
+ */
+export async function getArtistsOrCluster(tracks?: Track[]): Promise<ArtistInfo[]> {
+  return groupTracksByArtist(tracks || []);
+}
+
+export const fetchArtistsIpc = getArtistsOrCluster;
+
+/**
+ * Asynchronously retrieves genres by grouping tracks.
+ */
+export async function getGenresOrCluster(tracks?: Track[]): Promise<GenreInfo[]> {
+  return extractLibraryGenres(tracks || []);
+}
+
+export const fetchGenresIpc = getGenresOrCluster;
+
+/**
+ * Asynchronously retrieves album details by grouping tracks.
+ */
+export async function getAlbumDetailsOrCluster(
+  title: string,
+  artist?: string,
+  tracks?: Track[]
+): Promise<AlbumInfo | null> {
+  const albums = groupTracksByAlbum(tracks || []);
+  const cleanTitle = title.trim().toLowerCase();
+  const cleanArtist = artist?.trim().toLowerCase();
+  return (
+    albums.find(
+      (a) =>
+        a.title.trim().toLowerCase() === cleanTitle &&
+        (!cleanArtist || a.artist.trim().toLowerCase() === cleanArtist)
+    ) || null
+  );
+}
+
+export const fetchAlbumDetailsIpc = getAlbumDetailsOrCluster;
+
+/**
+ * Asynchronously retrieves artist details by grouping tracks.
+ */
+export async function getArtistDetailsOrCluster(
+  name: string,
+  tracks?: Track[]
+): Promise<ArtistInfo | null> {
+  const artists = groupTracksByArtist(tracks || []);
+  const cleanName = name.trim().toLowerCase();
+  return artists.find((a) => a.name.trim().toLowerCase() === cleanName) || null;
+}
+
+export const fetchArtistDetailsIpc = getArtistDetailsOrCluster;
+

@@ -6,8 +6,9 @@ import { AlbumCard } from "./AlbumCard";
 import { AlbumMetadataModal } from "./AlbumMetadataModal";
 import { ArtistMetadataModal } from "./ArtistMetadataModal";
 import { usePlayerStore } from "../stores/playerStore";
+import { useSettingsStore } from "../stores/settingsStore";
 import { useArtwork } from "../utils/useArtwork";
-import { Users, Play, Disc, Music, Clock, FilePenLine } from "lucide-react";
+import { Users, Play, Disc, Music, Clock, FilePenLine, EyeOff, Eye } from "lucide-react";
 import { EqualizerWave } from "./EqualizerWave";
 
 interface ArtistProfileProps {
@@ -32,6 +33,8 @@ const ArtistProfileInner: React.FC<ArtistProfileProps> = ({
   const [avatarError, setAvatarError] = useState(false);
   const [editingAlbum, setEditingAlbum] = useState<AlbumInfo | null>(null);
   const [isEditingArtist, setIsEditingArtist] = useState(false);
+  const isHidden = useSettingsStore((s) => s.isArtistHidden(artist.name));
+  const toggleHideArtist = useSettingsStore((s) => s.toggleHideArtist);
 
   const artistContext = useMemo<PlaybackContext>(
     () => ({
@@ -113,74 +116,87 @@ const ArtistProfileInner: React.FC<ArtistProfileProps> = ({
 
         {/* Info */}
         <div className="flex-1 text-center md:text-left">
-          <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
-            <p className="text-2xs font-bold text-accent tracking-wider uppercase">
-              Artist Profile
-            </p>
-            {isArtistPlaying && (
-              <span className="inline-flex items-center gap-2 px-2 py-1 rounded-[4px] bg-accent/10 border border-accent/25 text-2xs font-semibold text-accent uppercase tracking-wider animate-fade-in">
+          {isArtistPlaying && (
+            <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
+              <span className="inline-flex items-center gap-2 px-2 py-1 rounded-[4px] bg-accent/10 border border-accent/25 text-2xs font-medium text-accent animate-fade-in">
                 <EqualizerWave isPlaying={isPlaying} size="xs" color="bg-accent-fill" />
                 <span>Now Playing</span>
               </span>
-            )}
-          </div>
-          <h1 className="text-2xl sm:text-3xl md:text-5xl font-extrabold text-white tracking-tight mb-3">
+            </div>
+          )}
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white tracking-tight mb-3">
             {artist.name}
           </h1>
 
-          <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 text-xs text-textSecondary mb-5">
-            <span className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 text-xs text-textSecondary mb-5">
+            <span className="flex items-center gap-2 whitespace-nowrap">
               <Disc className="w-4 h-4 text-accent" />
               <strong className="text-white">{fullAlbums.length}</strong> Albums
             </span>
             {singles.length > 0 && (
-              <>
-                <span className="text-textMuted">•</span>
-                <span className="flex items-center gap-2">
-                  <Music className="w-4 h-4 text-accent" />
-                  <strong className="text-white">{singles.length}</strong> Singles & EPs
-                </span>
-              </>
+              <span className="flex items-center gap-2 whitespace-nowrap before:content-['•'] before:text-textMuted">
+                <Music className="w-4 h-4 text-accent" />
+                <strong className="text-white">{singles.length}</strong> Singles & EPs
+              </span>
             )}
-            <span className="text-textMuted">•</span>
-            <span className="flex items-center gap-2">
+            <span className="flex items-center gap-2 whitespace-nowrap before:content-['•'] before:text-textMuted">
               <Music className="w-4 h-4 text-textMuted" />
               <strong className="text-white">{artist.trackCount}</strong> Tracks
             </span>
-            <span className="text-textMuted">•</span>
-            <span className="flex items-center gap-2">
+            <span className="flex items-center gap-2 whitespace-nowrap before:content-['•'] before:text-textMuted">
               <Clock className="w-4 h-4 text-textMuted" />
               {formatTotalDuration(totalDuration)}
             </span>
           </div>
 
-          <div className="flex flex-wrap items-center justify-center md:justify-start gap-3">
+          <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 sm:gap-3">
             <button
               onClick={handlePlayArtist}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-accent-fill hover:bg-accentHover active:scale-95 text-white rounded-xl text-xs font-bold shadow-lg shadow-accent/20 transition"
+              className="inline-flex w-full sm:w-auto items-center justify-center gap-2 px-6 py-3 bg-accent-fill hover:bg-accentHover active:scale-95 text-white rounded-xl text-xs font-bold shadow-lg shadow-accent/20 transition whitespace-nowrap"
             >
               <Play className="w-4 h-4 fill-white" />
               <span>{isArtistPlaying && isPlaying ? "Restart Artist" : "Play Artist"}</span>
             </button>
             <button
               onClick={() => setIsEditingArtist(true)}
-              className="inline-flex items-center gap-2 px-4 py-3 bg-white/[0.06] hover:bg-white/[0.12] active:scale-95 text-white/90 hover:text-white rounded-xl text-xs font-semibold border border-white/[0.08] transition"
+              className="inline-flex items-center justify-center gap-2 px-4 py-3 bg-white/[0.06] hover:bg-white/[0.12] active:scale-95 text-white/90 hover:text-white rounded-xl text-xs font-semibold border border-white/[0.08] transition whitespace-nowrap"
               title="Edit Artist Metadata"
             >
-              <FilePenLine className="w-3.5 h-3.5 text-textSecondary" />
+              <FilePenLine className="w-4 h-4 text-textSecondary" />
               <span>Edit Artist</span>
+            </button>
+            <button
+              onClick={() => toggleHideArtist(artist.name)}
+              className={`inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-xs font-semibold border transition active:scale-95 whitespace-nowrap ${
+                isHidden
+                  ? "bg-warning/15 hover:bg-warning/25 text-warning border-warning/30"
+                  : "bg-white/[0.06] hover:bg-white/[0.12] text-white/90 hover:text-white border-white/[0.08]"
+              }`}
+              title={isHidden ? "Unhide this artist" : "Don't play songs from this artist"}
+            >
+              {isHidden ? (
+                <>
+                  <Eye className="w-4 h-4 text-warning" />
+                  <span>Unhide Artist</span>
+                </>
+              ) : (
+                <>
+                  <EyeOff className="w-4 h-4 text-textSecondary" />
+                  <span>Hide Artist</span>
+                </>
+              )}
             </button>
           </div>
         </div>
       </div>
 
       {/* Discography / Albums by this Artist */}
-      <div className="p-3 sm:p-6 space-y-8 pb-28 sm:pb-24">
+      <div className="p-3 sm:p-6 space-y-8 pb-32 sm:pb-24">
         {/* Full Albums */}
         {fullAlbums.length > 0 && (
           <div>
-            <h3 className="text-xs font-bold text-white uppercase tracking-wider mb-4 flex items-center gap-2">
-              <Disc className="w-4 h-4 text-accent" /> Albums ({fullAlbums.length})
+            <h3 className="text-base font-bold text-white mb-4">
+              Albums
             </h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
               {fullAlbums.map((album) => (
@@ -200,8 +216,8 @@ const ArtistProfileInner: React.FC<ArtistProfileProps> = ({
         {/* Singles & EPs */}
         {singles.length > 0 && (
           <div>
-            <h3 className="text-xs font-bold text-white uppercase tracking-wider mb-4 flex items-center gap-2">
-              <Music className="w-4 h-4 text-accent" /> Singles & EPs ({singles.length})
+            <h3 className="text-base font-bold text-white mb-4">
+              Singles & EPs
             </h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
               {singles.map((album) => (
@@ -221,8 +237,8 @@ const ArtistProfileInner: React.FC<ArtistProfileProps> = ({
         {/* Appears On / Features & Collaborations */}
         {artist.appearsOn && artist.appearsOn.length > 0 && (
           <div>
-            <h3 className="text-xs font-bold text-white uppercase tracking-wider mb-4 flex items-center gap-2">
-              <Users className="w-4 h-4 text-accent" /> Appears On & Collaborations ({artist.appearsOn.length})
+            <h3 className="text-base font-bold text-white mb-4">
+              Appears On & Collaborations
             </h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
               {artist.appearsOn.map((album) => (
@@ -241,11 +257,14 @@ const ArtistProfileInner: React.FC<ArtistProfileProps> = ({
 
         {/* All Songs by this Artist */}
         <div>
-          <h3 className="text-xs font-bold text-white uppercase tracking-wider mb-4 flex items-center gap-2">
-            <Music className="w-4 h-4 text-accent" /> All Tracks ({artist.tracks.length})
+          <h3 className="text-base font-bold text-white mb-4">
+            All Tracks
           </h3>
           <div className="bg-surface/60 rounded-2xl border border-white/[0.06] overflow-hidden shadow-md">
             <TrackTable
+              pageKey="artist_detail"
+              defaultSortKey="title"
+              defaultSortDir="asc"
               tracks={artist.tracks}
               playbackContext={artistContext}
               onSelectArtist={onSelectArtist}

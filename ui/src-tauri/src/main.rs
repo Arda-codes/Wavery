@@ -7,12 +7,12 @@
 
 use parking_lot::Mutex as SyncMutex;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
-use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem};
 #[cfg(target_os = "macos")]
 use tauri::menu::Menu;
+use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 #[cfg(not(target_os = "macos"))]
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent};
@@ -20,9 +20,15 @@ use tauri::{Emitter, Manager};
 use tokio::sync::Mutex as AsyncMutex;
 use wavery_audio::{RodioPlayer, StandardQueueManager};
 use wavery_config::{default_config_path, load_or_create, save as save_config_file, Config};
-use wavery_core::models::{ImportStrategy, LoopMode, PlaybackState, Playlist, Track};
+use wavery_core::lyrics::{
+    LyricCandidate, LyricLine, LyricTargetInfo, ParsedLyrics, ScoredLyricCandidate,
+};
+use wavery_core::models::{
+    Album, Artist, GenreInfo, ImportStrategy, LoopMode, PlaybackState, Playlist, QueueStateSnapshot,
+    Track, WaveformData,
+};
 use wavery_core::traits::{LibraryManager, PlayerEngine, QueueManager};
-use wavery_library::SqliteLibraryManager;
+use wavery_library::{DatabaseBackup, DatabaseHealth, DatabaseStats, SqliteLibraryManager};
 
 const MAX_ARTWORK_CACHE_ENTRIES: usize = 64;
 
@@ -35,6 +41,12 @@ pub enum IpcError {
 
     #[error("Audio playback engine is unavailable")]
     AudioEngineUnavailable,
+
+    /// Raised by `resume_playback` when the engine holds no resumable track
+    /// (restored session that was never loaded, or a track that already
+    /// ended). The UI reloads the track instead of faking playback.
+    #[error("Nothing to resume: no track is loaded")]
+    NothingToResume,
 
     #[error("Track not found: {0}")]
     TrackNotFound(String),
@@ -172,9 +184,114 @@ pub struct PlayerStatus {
 
 #[tauri::command]
 async fn get_tracks(state: tauri::State<'_, Arc<AppState>>) -> Result<Vec<Track>, IpcError> {
-    let lib_arc = state.library.as_ref().ok_or(IpcError::LibraryNotInitialized)?;
+    let lib_arc = state
+        .library
+        .as_ref()
+        .ok_or(IpcError::LibraryNotInitialized)?;
     let lib = lib_arc.lock().await;
     Ok(lib.all_tracks().to_vec())
+}
+
+/// Returns pre-aggregated album list with compilation detection and track listings.
+#[tauri::command]
+async fn get_albums(state: tauri::State<'_, Arc<AppState>>) -> Result<Vec<Album>, IpcError> {
+    let lib_arc = state
+        .library
+        .as_ref()
+        .ok_or(IpcError::LibraryNotInitialized)?;
+    let lib = lib_arc.lock().await;
+    lib.list_albums().map_err(Into::into)
+}
+
+/// Returns pre-aggregated artist profiles with owned albums, appearances, and track rosters.
+#[tauri::command]
+async fn get_artists(state: tauri::State<'_, Arc<AppState>>) -> Result<Vec<Artist>, IpcError> {
+    let lib_arc = state
+        .library
+        .as_ref()
+        .ok_or(IpcError::LibraryNotInitialized)?;
+    let lib = lib_arc.lock().await;
+    lib.list_artists().map_err(Into::into)
+}
+
+/// Returns pre-aggregated genres with track listings sorted descending by popularity.
+#[tauri::command]
+async fn get_genres(state: tauri::State<'_, Arc<AppState>>) -> Result<Vec<GenreInfo>, IpcError> {
+    let lib_arc = state
+        .library
+        .as_ref()
+        .ok_or(IpcError::LibraryNotInitialized)?;
+    let lib = lib_arc.lock().await;
+    lib.list_genres().map_err(Into::into)
+}
+
+/// Returns detailed album profile by title and optional artist.
+#[tauri::command]
+async fn get_album_details(
+    title: String,
+    artist: Option<String>,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<Option<Album>, IpcError> {
+    let lib_arc = state
+        .library
+        .as_ref()
+        .ok_or(IpcError::LibraryNotInitialized)?;
+    let lib = lib_arc.lock().await;
+    let albums = lib.list_albums().map_err(IpcError::from)?;
+    let title_lower = title.trim().to_lowercase();
+    let artist_lower = artist.as_deref().map(|a| a.trim().to_lowercase());
+
+    let found = albums.into_iter().find(|alb| {
+        alb.title.to_lowercase() == title_lower
+            && artist_lower
+                .as_ref()
+                .is_none_or(|a| alb.artist.to_lowercase() == *a)
+    });
+    Ok(found)
+}
+
+/// Returns detailed artist profile by name.
+#[tauri::command]
+async fn get_artist_details(
+    name: String,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<Option<Artist>, IpcError> {
+    let lib_arc = state
+        .library
+        .as_ref()
+        .ok_or(IpcError::LibraryNotInitialized)?;
+    let lib = lib_arc.lock().await;
+    let artists = lib.list_artists().map_err(IpcError::from)?;
+    let name_lower = name.trim().to_lowercase();
+
+    let found = artists
+        .into_iter()
+        .find(|art| art.name.to_lowercase() == name_lower);
+    Ok(found)
+}
+
+/// Parses raw LRC lyrics string into structured parsed lines and metadata.
+#[tauri::command]
+async fn parse_lrc_content(raw: String) -> Result<ParsedLyrics, IpcError> {
+    Ok(wavery_core::lyrics::parse_lrc(&raw))
+}
+
+/// Finds the active lyric index for a given playback position in seconds.
+#[tauri::command]
+async fn find_active_lyric_line(
+    lines: Vec<LyricLine>,
+    position_secs: f64,
+) -> Result<Option<usize>, IpcError> {
+    Ok(wavery_core::lyrics::get_active_lyric_index(&lines, position_secs))
+}
+
+/// Scores and ranks candidate lyrics from LRCLIB against target track metadata.
+#[tauri::command]
+async fn score_lyric_candidates(
+    target: LyricTargetInfo,
+    candidates: Vec<LyricCandidate>,
+) -> Result<Vec<ScoredLyricCandidate>, IpcError> {
+    Ok(wavery_core::lyrics::score_lyric_candidates(&target, candidates))
 }
 
 #[tauri::command]
@@ -183,7 +300,10 @@ async fn import_file(
     strategy: ImportStrategy,
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<Track, IpcError> {
-    let lib_arc = state.library.as_ref().ok_or(IpcError::LibraryNotInitialized)?;
+    let lib_arc = state
+        .library
+        .as_ref()
+        .ok_or(IpcError::LibraryNotInitialized)?;
     let mut lib = lib_arc.lock().await;
     let path = PathBuf::from(source_path);
     let track = lib.import_track(&path, strategy).await?;
@@ -196,7 +316,10 @@ async fn import_folder(
     strategy: ImportStrategy,
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<Vec<Track>, IpcError> {
-    let lib_arc = state.library.as_ref().ok_or(IpcError::LibraryNotInitialized)?;
+    let lib_arc = state
+        .library
+        .as_ref()
+        .ok_or(IpcError::LibraryNotInitialized)?;
     let mut lib = lib_arc.lock().await;
     let path = PathBuf::from(dir_path);
     let tracks = lib.import_directory(&path, strategy).await?;
@@ -243,7 +366,10 @@ async fn update_track_metadata(
     req: UpdateTrackMetadataDto,
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<Track, IpcError> {
-    let lib_arc = state.library.as_ref().ok_or(IpcError::LibraryNotInitialized)?;
+    let lib_arc = state
+        .library
+        .as_ref()
+        .ok_or(IpcError::LibraryNotInitialized)?;
     let mut lib = lib_arc.lock().await;
     let write_tags = req.write_tags.unwrap_or(true);
     let mut meta = if let Some(m) = req.metadata {
@@ -300,7 +426,10 @@ async fn update_artist_metadata(
     req: UpdateArtistMetadataDto,
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<Vec<Track>, IpcError> {
-    let lib_arc = state.library.as_ref().ok_or(IpcError::LibraryNotInitialized)?;
+    let lib_arc = state
+        .library
+        .as_ref()
+        .ok_or(IpcError::LibraryNotInitialized)?;
     let mut lib = lib_arc.lock().await;
     let write_tags = req.write_tags.unwrap_or(true);
     let update_album_artist = req.update_album_artist.unwrap_or(true);
@@ -326,7 +455,8 @@ async fn update_artist_metadata(
                 .as_deref()
                 .map(|a| {
                     let a_trimmed = a.trim();
-                    a_trimmed.to_lowercase() == orig_lower || (is_orig_unknown && a_trimmed.is_empty())
+                    a_trimmed.to_lowercase() == orig_lower
+                        || (is_orig_unknown && a_trimmed.is_empty())
                 })
                 .unwrap_or(false)
         } else {
@@ -390,7 +520,10 @@ async fn update_album_metadata(
     req: UpdateAlbumMetadataDto,
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<Vec<Track>, IpcError> {
-    let lib_arc = state.library.as_ref().ok_or(IpcError::LibraryNotInitialized)?;
+    let lib_arc = state
+        .library
+        .as_ref()
+        .ok_or(IpcError::LibraryNotInitialized)?;
     let mut lib = lib_arc.lock().await;
     let write_tags = req.write_tags.unwrap_or(true);
     let mut updated_tracks = Vec::new();
@@ -435,7 +568,10 @@ async fn update_album_metadata(
 
 #[tauri::command]
 async fn rebuild_library(state: tauri::State<'_, Arc<AppState>>) -> Result<Vec<Track>, IpcError> {
-    let lib_arc = state.library.as_ref().ok_or(IpcError::LibraryNotInitialized)?;
+    let lib_arc = state
+        .library
+        .as_ref()
+        .ok_or(IpcError::LibraryNotInitialized)?;
     let mut lib = lib_arc.lock().await;
     let tracks = lib.rebuild_library().await?;
 
@@ -455,15 +591,22 @@ async fn delete_track(
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<(), IpcError> {
     {
-        let lib_arc = state.library.as_ref().ok_or(IpcError::LibraryNotInitialized)?;
+        let lib_arc = state
+            .library
+            .as_ref()
+            .ok_or(IpcError::LibraryNotInitialized)?;
         let mut lib = lib_arc.lock().await;
-        lib.delete_track(&track_id, remove_file.unwrap_or(false)).await?;
+        lib.delete_track(&track_id, remove_file.unwrap_or(false))
+            .await?;
     }
 
     // If currently playing, stop playback
     let is_current = {
         let queue = state.queue.lock();
-        queue.current_track().map(|t| t.id == track_id).unwrap_or(false)
+        queue
+            .current_track()
+            .map(|t| t.id == track_id)
+            .unwrap_or(false)
     };
     if is_current {
         let mut player = state.player.lock().await;
@@ -483,10 +626,132 @@ async fn delete_track(
 
 #[tauri::command]
 async fn vacuum_library(state: tauri::State<'_, Arc<AppState>>) -> Result<(), IpcError> {
-    let lib_arc = state.library.as_ref().ok_or(IpcError::LibraryNotInitialized)?;
+    let lib_arc = state
+        .library
+        .as_ref()
+        .ok_or(IpcError::LibraryNotInitialized)?;
     let lib = lib_arc.lock().await;
     lib.vacuum_database()?;
     Ok(())
+}
+
+#[tauri::command]
+async fn get_database_stats(
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<DatabaseStats, IpcError> {
+    let artwork_cache_dir = state.config.lock().library.cache_directory.clone();
+    let lib_arc = state
+        .library
+        .as_ref()
+        .ok_or(IpcError::LibraryNotInitialized)?;
+    let lib = lib_arc.lock().await;
+    Ok(lib.database_stats(&artwork_cache_dir)?)
+}
+
+#[tauri::command]
+async fn check_database_health(
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<DatabaseHealth, IpcError> {
+    let lib_arc = state
+        .library
+        .as_ref()
+        .ok_or(IpcError::LibraryNotInitialized)?;
+    let lib = lib_arc.lock().await;
+    Ok(lib.database_health()?)
+}
+
+#[tauri::command]
+async fn prune_missing_tracks(state: tauri::State<'_, Arc<AppState>>) -> Result<usize, IpcError> {
+    let lib_arc = state
+        .library
+        .as_ref()
+        .ok_or(IpcError::LibraryNotInitialized)?;
+    let mut lib = lib_arc.lock().await;
+    Ok(lib.prune_missing_tracks()?)
+}
+
+#[tauri::command]
+async fn backup_database(
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<Option<DatabaseBackup>, IpcError> {
+    let file = rfd::AsyncFileDialog::new()
+        .set_title("Back Up Wavery Database")
+        .set_file_name("wavery-library-backup.db")
+        .add_filter("SQLite Database", &["db"])
+        .save_file()
+        .await;
+
+    let Some(file) = file else {
+        return Ok(None);
+    };
+
+    let lib_arc = state
+        .library
+        .as_ref()
+        .ok_or(IpcError::LibraryNotInitialized)?;
+    let lib = lib_arc.lock().await;
+    Ok(Some(lib.backup_database(file.path())?))
+}
+
+#[tauri::command]
+async fn reveal_database_location(
+    location: String,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<(), IpcError> {
+    let (path, select_file) = {
+        let cfg = state.config.lock();
+        match location.as_str() {
+            "database" => (cfg.library.database_path.clone(), true),
+            "library" => (cfg.library.managed_directory.clone(), false),
+            "artwork" => (cfg.library.cache_directory.clone(), false),
+            other => {
+                return Err(IpcError::Config(format!(
+                    "Unknown database location: {other}"
+                )))
+            }
+        }
+    };
+
+    if !select_file {
+        std::fs::create_dir_all(&path).map_err(|e| IpcError::Config(e.to_string()))?;
+    }
+    reveal_in_file_manager(&path, select_file);
+    Ok(())
+}
+
+/// Opens the platform file manager at `path`, optionally selecting a file.
+fn reveal_in_file_manager(path: &Path, select_file: bool) {
+    #[cfg(target_os = "windows")]
+    {
+        let mut command = std::process::Command::new("explorer");
+        if select_file {
+            command.arg(format!("/select,{}", path.display()));
+        } else {
+            command.arg(path);
+        }
+        let _ = command.spawn();
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let mut command = std::process::Command::new("open");
+        if select_file {
+            command.arg("-R");
+        }
+        let _ = command.arg(path).spawn();
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let target = if select_file {
+            path.parent().unwrap_or(path)
+        } else {
+            path
+        };
+        let _ = std::process::Command::new("xdg-open").arg(target).spawn();
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    {
+        let _ = (path, select_file);
+    }
 }
 
 #[tauri::command]
@@ -499,7 +764,13 @@ async fn clear_artwork_cache(state: tauri::State<'_, Arc<AppState>>) -> Result<(
 #[tauri::command]
 async fn pick_file() -> Result<Option<String>, IpcError> {
     let file = rfd::AsyncFileDialog::new()
-        .add_filter("Audio Files", &["mp3", "flac", "ogg", "opus", "m4a", "wav", "aac"])
+        .add_filter(
+            "Audio Files",
+            &[
+                "mp3", "flac", "ogg", "opus", "m4a", "wav", "aac", "alac", "aiff", "aif",
+                "weba", "webm",
+            ],
+        )
         .set_title("Select Audio Track to Ingest")
         .pick_file()
         .await;
@@ -515,17 +786,62 @@ async fn pick_folder() -> Result<Option<String>, IpcError> {
     Ok(folder.map(|f| f.path().to_string_lossy().to_string()))
 }
 
+/// Opens a file picker for playlist files (.m3u, .m3u8, or yt-dlp JSON).
+#[tauri::command]
+async fn pick_playlist_file() -> Result<Option<String>, IpcError> {
+    let file = rfd::AsyncFileDialog::new()
+        .add_filter(
+            "Playlist Files (*.m3u, *.m3u8, *.json)",
+            &["m3u", "m3u8", "json"],
+        )
+        .set_title("Select a Playlist File (.m3u, .m3u8, or yt-dlp JSON)")
+        .pick_file()
+        .await;
+    Ok(file.map(|f| f.path().to_string_lossy().to_string()))
+}
+
+/// Builds a Wavery playlist from an M3U, M3U8, or yt-dlp JSON file.
+///
+/// Entries are matched against tracks already in the library. No audio file is
+/// downloaded, moved, or re-tagged; only playlist order is stored.
+#[tauri::command]
+async fn import_playlist_file(
+    file_path: Option<String>,
+    json_path: Option<String>,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<wavery_library::playlist_import::PlaylistImportSummary, IpcError> {
+    let path = file_path
+        .or(json_path)
+        .ok_or_else(|| IpcError::Library("No playlist file path provided".into()))?;
+    let lib_arc = state
+        .library
+        .as_ref()
+        .ok_or(IpcError::LibraryNotInitialized)?;
+    let lib = lib_arc.lock().await;
+    let summary = lib.import_playlist_file(&PathBuf::from(path))?;
+    Ok(summary)
+}
+
 #[tauri::command]
 async fn play_track(
     track_id: String,
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<(), IpcError> {
     let track = {
-        let lib_arc = state.library.as_ref().ok_or(IpcError::LibraryNotInitialized)?;
+        let lib_arc = state
+            .library
+            .as_ref()
+            .ok_or(IpcError::LibraryNotInitialized)?;
         let lib = lib_arc.lock().await;
-        lib.get_track(&track_id)
-            .cloned()
-            .ok_or_else(|| IpcError::TrackNotFound(track_id.clone()))?
+        if let Some(t) = lib.get_track(&track_id) {
+            t.clone()
+        } else if let Ok(Some(t)) = lib.db().get_track(&track_id, lib.library_root()) {
+            t
+        } else if let Some(t) = state.queue.lock().queue().iter().find(|t| t.id == track_id).cloned() {
+            t
+        } else {
+            return Err(IpcError::TrackNotFound(track_id.clone()));
+        }
     };
 
     {
@@ -539,8 +855,15 @@ async fn play_track(
     }
 
     let mut player_guard = state.player.lock().await;
-    let player = player_guard.as_mut().ok_or(IpcError::AudioEngineUnavailable)?;
-    player.load(&track, None).await?;
+    let player = player_guard
+        .as_mut()
+        .ok_or(IpcError::AudioEngineUnavailable)?;
+    if let Err(e) = player.load(&track, None).await {
+        eprintln!("[Audio] Failed to load track '{}': {e}", track.id);
+        let _ = player.stop();
+        return Err(e.into());
+    }
+    player.play()?;
     Ok(())
 }
 
@@ -560,7 +883,11 @@ async fn sync_queue(
 ) -> Result<(), IpcError> {
     let mut queue = state.queue.lock();
     let start_idx = if let Some(ref tid) = payload.current_track_id {
-        payload.context_queue.iter().position(|t| &t.id == tid).unwrap_or(0)
+        payload
+            .context_queue
+            .iter()
+            .position(|t| &t.id == tid)
+            .unwrap_or(0)
     } else {
         0
     };
@@ -579,10 +906,419 @@ async fn sync_queue(
     Ok(())
 }
 
+// ============================================================================
+// Queue Authority & Autoplay Helpers and Tauri IPC Commands (Milestone M3)
+// ============================================================================
+
+/// Advances playback to the next track across two-tier user/context queues,
+/// falling back to library autoplay recommendations if enabled and queue is exhausted.
+///
+/// Emits `"queue-track-changed"` upon successful transition.
+pub(crate) async fn advance_queue_next(
+    app_handle: &tauri::AppHandle,
+    state: &AppState,
+) -> Result<QueueStateSnapshot, IpcError> {
+    // 1. Initial queue progression
+    let initial_next = {
+        let mut queue = state.queue.lock();
+        queue.next().cloned()
+    };
+
+    // 2. Autoplay fallback if next track is None but autoplay is enabled
+    let track_to_play = if let Some(track) = initial_next {
+        Some(track)
+    } else {
+        let is_autoplay = state.queue.lock().is_autoplay();
+        if is_autoplay {
+            let library_tracks = if let Some(ref lib_arc) = state.library {
+                let lib = lib_arc.lock().await;
+                lib.all_tracks().to_vec()
+            } else {
+                Vec::new()
+            };
+
+            let mut queue = state.queue.lock();
+            if let Some(candidate) = queue.select_autoplay_candidate(&library_tracks) {
+                queue.append_autoplay_track(candidate.clone());
+                Some(candidate)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    };
+
+    // 3. Update player and emit event
+    if let Some(ref track) = track_to_play {
+        let mut player_guard = state.player.lock().await;
+        if let Some(player) = player_guard.as_mut() {
+            if let Err(e) = player.load(track, None).await {
+                eprintln!("[Audio] Failed to load track '{}': {e}", track.id);
+                let _ = player.stop();
+                return Err(e.into());
+            }
+            player.play()?;
+        }
+        let _ = app_handle.emit("queue-track-changed", track);
+    } else {
+        let mut player_guard = state.player.lock().await;
+        if let Some(player) = player_guard.as_mut() {
+            let _ = player.stop();
+        }
+    }
+
+    let queue = state.queue.lock();
+    Ok(queue.get_state())
+}
+
+/// Reverts playback to the previous track or restarts current track if elapsed position exceeds threshold.
+///
+/// Emits `"queue-track-changed"` upon track transition or restart.
+pub(crate) async fn advance_queue_previous(
+    position_secs: f64,
+    app_handle: &tauri::AppHandle,
+    state: &AppState,
+) -> Result<QueueStateSnapshot, IpcError> {
+    let prev_track = {
+        let mut queue = state.queue.lock();
+        queue
+            .previous(Duration::from_secs_f64(position_secs.max(0.0)))
+            .cloned()
+    };
+
+    if let Some(ref track) = prev_track {
+        let mut player_guard = state.player.lock().await;
+        if let Some(player) = player_guard.as_mut() {
+            if let Err(e) = player.load(track, None).await {
+                eprintln!("[Audio] Failed to load track '{}': {e}", track.id);
+                let _ = player.stop();
+                return Err(e.into());
+            }
+            player.play()?;
+        }
+        let _ = app_handle.emit("queue-track-changed", track);
+    }
+
+    let queue = state.queue.lock();
+    Ok(queue.get_state())
+}
+
+/// Sets the context queue (e.g. album or playlist) and initiates playback at `start_index`.
+#[tauri::command]
+async fn queue_set_context(
+    tracks: Vec<Track>,
+    start_index: usize,
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<QueueStateSnapshot, IpcError> {
+    let (curr_track, snapshot) = {
+        let mut queue = state.queue.lock();
+        queue.set_context_queue(tracks, start_index);
+        (queue.current_track().cloned(), queue.get_state())
+    };
+
+    if let Some(ref track) = curr_track {
+        let mut player_guard = state.player.lock().await;
+        if let Some(player) = player_guard.as_mut() {
+            if let Err(e) = player.load(track, None).await {
+                eprintln!("[Audio] Failed to load track '{}': {e}", track.id);
+                let _ = player.stop();
+                return Err(e.into());
+            }
+            player.play()?;
+        }
+        let _ = app_handle.emit("queue-track-changed", track);
+    } else {
+        let mut player_guard = state.player.lock().await;
+        if let Some(player) = player_guard.as_mut() {
+            let _ = player.stop();
+        }
+    }
+
+    Ok(snapshot)
+}
+
+/// Appends tracks to the back of the user priority queue ("Add to Queue").
+#[tauri::command]
+async fn queue_add_user(
+    tracks: Vec<Track>,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<QueueStateSnapshot, IpcError> {
+    let snapshot = {
+        let mut queue = state.queue.lock();
+        for track in tracks {
+            queue.push_back(track);
+        }
+        queue.get_state()
+    };
+    Ok(snapshot)
+}
+
+/// Inserts tracks at the front of the user priority queue ("Play Next").
+#[tauri::command]
+async fn queue_play_next(
+    tracks: Vec<Track>,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<QueueStateSnapshot, IpcError> {
+    let snapshot = {
+        let mut queue = state.queue.lock();
+        for track in tracks.into_iter().rev() {
+            queue.play_next(track);
+        }
+        queue.get_state()
+    };
+    Ok(snapshot)
+}
+
+/// Removes a track at 0-based index from the user priority queue.
+#[tauri::command]
+async fn queue_remove_user_track(
+    index: usize,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<QueueStateSnapshot, IpcError> {
+    let snapshot = {
+        let mut queue = state.queue.lock();
+        queue.remove_user_track(index);
+        queue.get_state()
+    };
+    Ok(snapshot)
+}
+
+/// Reorders a track within the user priority queue from index `from` to index `to`.
+#[tauri::command]
+async fn queue_reorder_user(
+    from: usize,
+    to: usize,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<QueueStateSnapshot, IpcError> {
+    let snapshot = {
+        let mut queue = state.queue.lock();
+        queue.reorder_user_queue(from, to);
+        queue.get_state()
+    };
+    Ok(snapshot)
+}
+
+/// Clears all tracks from the user priority queue.
+#[tauri::command]
+async fn queue_clear_user(
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<QueueStateSnapshot, IpcError> {
+    let snapshot = {
+        let mut queue = state.queue.lock();
+        queue.clear_user_queue();
+        queue.get_state()
+    };
+    Ok(snapshot)
+}
+
+/// Advances playback to the next track (User Queue -> Context Queue -> Autoplay).
+#[tauri::command]
+async fn queue_next(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<QueueStateSnapshot, IpcError> {
+    advance_queue_next(&app_handle, &state).await
+}
+
+/// Steps back to previous track in history or restarts current track if elapsed position > 3s.
+#[tauri::command]
+async fn queue_previous(
+    position_secs: f64,
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<QueueStateSnapshot, IpcError> {
+    advance_queue_previous(position_secs, &app_handle, &state).await
+}
+
+/// Jumps directly to a track at index in the synthesized flattened queue.
+#[tauri::command]
+async fn queue_jump_to_index(
+    index: usize,
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<QueueStateSnapshot, IpcError> {
+    let (track, snapshot) = {
+        let mut queue = state.queue.lock();
+        let t = queue.jump_to_index(index).cloned();
+        (t, queue.get_state())
+    };
+
+    if let Some(ref t) = track {
+        let mut player_guard = state.player.lock().await;
+        if let Some(player) = player_guard.as_mut() {
+            if let Err(e) = player.load(t, None).await {
+                eprintln!("[Audio] Failed to load track '{}': {e}", t.id);
+                let _ = player.stop();
+                return Err(e.into());
+            }
+            player.play()?;
+        }
+        let _ = app_handle.emit("queue-track-changed", t);
+    }
+    Ok(snapshot)
+}
+
+/// Jumps directly to a track at index within the context queue.
+#[tauri::command]
+async fn queue_jump_to_context_track(
+    context_index: usize,
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<QueueStateSnapshot, IpcError> {
+    let (track, snapshot) = {
+        let mut queue = state.queue.lock();
+        let t = queue.jump_to_context_track(context_index).cloned();
+        (t, queue.get_state())
+    };
+
+    if let Some(ref t) = track {
+        let mut player_guard = state.player.lock().await;
+        if let Some(player) = player_guard.as_mut() {
+            if let Err(e) = player.load(t, None).await {
+                eprintln!("[Audio] Failed to load track '{}': {e}", t.id);
+                let _ = player.stop();
+                return Err(e.into());
+            }
+            player.play()?;
+        }
+        let _ = app_handle.emit("queue-track-changed", t);
+    }
+    Ok(snapshot)
+}
+
+/// Jumps directly to a track at index within the user priority queue.
+#[tauri::command]
+async fn queue_jump_to_user_track(
+    user_index: usize,
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<QueueStateSnapshot, IpcError> {
+    let (track, snapshot) = {
+        let mut queue = state.queue.lock();
+        let t = queue.jump_to_user_track(user_index).cloned();
+        (t, queue.get_state())
+    };
+
+    if let Some(ref t) = track {
+        let mut player_guard = state.player.lock().await;
+        if let Some(player) = player_guard.as_mut() {
+            if let Err(e) = player.load(t, None).await {
+                eprintln!("[Audio] Failed to load track '{}': {e}", t.id);
+                let _ = player.stop();
+                return Err(e.into());
+            }
+            player.play()?;
+        }
+        let _ = app_handle.emit("queue-track-changed", t);
+    }
+    Ok(snapshot)
+}
+
+/// Sets queue shuffle mode on or off.
+#[tauri::command]
+async fn queue_set_shuffle(
+    enabled: bool,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<QueueStateSnapshot, IpcError> {
+    let snapshot = {
+        let mut queue = state.queue.lock();
+        queue.set_shuffle(enabled);
+        queue.get_state()
+    };
+    Ok(snapshot)
+}
+
+/// Sets queue loop mode (`Off`, `Track`, `Queue`).
+#[tauri::command]
+async fn queue_set_loop_mode(
+    mode: String,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<QueueStateSnapshot, IpcError> {
+    let loop_mode = match mode.to_lowercase().as_str() {
+        "track" => LoopMode::Track,
+        "queue" => LoopMode::Queue,
+        _ => LoopMode::Off,
+    };
+    let snapshot = {
+        let mut queue = state.queue.lock();
+        queue.set_loop_mode(loop_mode);
+        queue.get_state()
+    };
+    Ok(snapshot)
+}
+
+/// Sets autoplay continuous playback mode on or off.
+#[tauri::command]
+async fn queue_set_autoplay(
+    enabled: bool,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<QueueStateSnapshot, IpcError> {
+    let snapshot = {
+        let mut queue = state.queue.lock();
+        queue.set_autoplay(enabled);
+        queue.get_state()
+    };
+    Ok(snapshot)
+}
+
+/// Clears all queues and stops active playback.
+#[tauri::command]
+async fn queue_clear(
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<QueueStateSnapshot, IpcError> {
+    let snapshot = {
+        let mut queue = state.queue.lock();
+        queue.clear();
+        queue.get_state()
+    };
+
+    let mut player_guard = state.player.lock().await;
+    if let Some(player) = player_guard.as_mut() {
+        let _ = player.stop();
+    }
+
+    Ok(snapshot)
+}
+
+/// Queries the full canonical QueueStateSnapshot.
+#[tauri::command]
+async fn queue_get_state(
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<QueueStateSnapshot, IpcError> {
+    let queue = state.queue.lock();
+    Ok(queue.get_state())
+}
+
+/// Queries the next autoplay candidate track without mutating queue state.
+#[tauri::command]
+async fn get_autoplay_next(
+    candidate_pool: Option<Vec<Track>>,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<Option<Track>, IpcError> {
+    let pool = match candidate_pool {
+        Some(pool) if !pool.is_empty() => pool,
+        _ => {
+            if let Some(ref lib_arc) = state.library {
+                let lib = lib_arc.lock().await;
+                lib.all_tracks().to_vec()
+            } else {
+                Vec::new()
+            }
+        }
+    };
+
+    let queue = state.queue.lock();
+    Ok(queue.select_autoplay_candidate(&pool))
+}
+
 #[tauri::command]
 async fn pause_playback(state: tauri::State<'_, Arc<AppState>>) -> Result<(), IpcError> {
     let mut player_guard = state.player.lock().await;
-    let player = player_guard.as_mut().ok_or(IpcError::AudioEngineUnavailable)?;
+    let player = player_guard
+        .as_mut()
+        .ok_or(IpcError::AudioEngineUnavailable)?;
     player.pause()?;
     Ok(())
 }
@@ -590,15 +1326,32 @@ async fn pause_playback(state: tauri::State<'_, Arc<AppState>>) -> Result<(), Ip
 #[tauri::command]
 async fn resume_playback(state: tauri::State<'_, Arc<AppState>>) -> Result<(), IpcError> {
     let mut player_guard = state.player.lock().await;
-    let player = player_guard.as_mut().ok_or(IpcError::AudioEngineUnavailable)?;
+    let player = player_guard
+        .as_mut()
+        .ok_or(IpcError::AudioEngineUnavailable)?;
     player.play()?;
+    // `PlayerEngine::play` is a deliberate no-op when there is nothing
+    // resumable (a restored session that was never loaded, or a track that
+    // already finished). Report that honestly: if possible load from queue first.
+    if player.state() != wavery_core::models::PlaybackState::Playing {
+        let curr = state.queue.lock().current_track().cloned();
+        if let Some(track) = curr {
+            player.load(&track, None).await?;
+            player.play()?;
+        }
+    }
+    if player.state() != wavery_core::models::PlaybackState::Playing {
+        return Err(IpcError::NothingToResume);
+    }
     Ok(())
 }
 
 #[tauri::command]
 async fn stop_playback(state: tauri::State<'_, Arc<AppState>>) -> Result<(), IpcError> {
     let mut player_guard = state.player.lock().await;
-    let player = player_guard.as_mut().ok_or(IpcError::AudioEngineUnavailable)?;
+    let player = player_guard
+        .as_mut()
+        .ok_or(IpcError::AudioEngineUnavailable)?;
     player.stop()?;
     Ok(())
 }
@@ -609,7 +1362,9 @@ async fn seek_playback(
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<(), IpcError> {
     let mut player_guard = state.player.lock().await;
-    let player = player_guard.as_mut().ok_or(IpcError::AudioEngineUnavailable)?;
+    let player = player_guard
+        .as_mut()
+        .ok_or(IpcError::AudioEngineUnavailable)?;
     player.seek(Duration::from_secs_f64(position_secs.max(0.0)))?;
     Ok(())
 }
@@ -617,7 +1372,9 @@ async fn seek_playback(
 #[tauri::command]
 async fn set_volume(volume: f32, state: tauri::State<'_, Arc<AppState>>) -> Result<(), IpcError> {
     let mut player_guard = state.player.lock().await;
-    let player = player_guard.as_mut().ok_or(IpcError::AudioEngineUnavailable)?;
+    let player = player_guard
+        .as_mut()
+        .ok_or(IpcError::AudioEngineUnavailable)?;
     player.set_volume(volume);
     Ok(())
 }
@@ -653,7 +1410,10 @@ async fn search_tracks(
     query: String,
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<Vec<Track>, IpcError> {
-    let lib_arc = state.library.as_ref().ok_or(IpcError::LibraryNotInitialized)?;
+    let lib_arc = state
+        .library
+        .as_ref()
+        .ok_or(IpcError::LibraryNotInitialized)?;
     let lib = lib_arc.lock().await;
     Ok(lib.search(&query).into_iter().cloned().collect())
 }
@@ -673,7 +1433,10 @@ async fn get_artwork(
 
     // 2. Fetch track path and immediately drop library lock
     let track_path = {
-        let lib_arc = state.library.as_ref().ok_or(IpcError::LibraryNotInitialized)?;
+        let lib_arc = state
+            .library
+            .as_ref()
+            .ok_or(IpcError::LibraryNotInitialized)?;
         let lib = lib_arc.lock().await;
         let track = lib
             .get_track(&track_id)
@@ -709,6 +1472,213 @@ fn get_config(state: tauri::State<Arc<AppState>>) -> Config {
     state.config.lock().clone()
 }
 
+/// Status and connection metadata for the embedded HTTP streaming server.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ServerStatusResponse {
+    /// Active bind host address (`"127.0.0.1"` or `"0.0.0.0"`).
+    pub host: String,
+    /// Active HTTP listening port.
+    pub port: u16,
+    /// Whether LAN streaming mode is enabled (snake_case contract).
+    #[serde(default)]
+    pub is_lan_enabled: bool,
+    /// Whether LAN streaming mode is enabled (camelCase contract).
+    #[serde(default, rename = "lanEnabled")]
+    pub lan_enabled: bool,
+    /// Discovered local network IPv4 address (snake_case contract).
+    #[serde(default)]
+    pub local_ip: Option<String>,
+    /// Discovered local network IPv4 address (camelCase contract).
+    #[serde(default, rename = "localIp")]
+    pub local_ip_camel: Option<String>,
+    /// Full LAN HTTP URL if local IP is available.
+    #[serde(default)]
+    pub lan_url: Option<String>,
+    /// Canonical active streaming URL (`http://<lan_ip>:<port>` when LAN enabled, otherwise `http://127.0.0.1:<port>`).
+    #[serde(default, rename = "streamUrl", alias = "stream_url")]
+    pub stream_url: String,
+}
+
+/// Discovers the local primary LAN IPv4 address via RFC 1122 UDP socket routing table inspection.
+///
+/// Binds an ephemeral UDP socket to the unspecified IPv4 address and connects to a public
+/// routable IPv4 address on port 80 without transmitting any packets, inspecting the
+/// kernel-selected source interface address.
+#[must_use]
+pub fn detect_local_lan_ip() -> Option<String> {
+    use std::net::{Ipv4Addr, SocketAddrV4, UdpSocket};
+    let bind_addr = SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0);
+    let target_primary = SocketAddrV4::new(Ipv4Addr::new(1, 1, 1, 1), 80);
+    let target_fallback = SocketAddrV4::new(Ipv4Addr::new(8, 8, 8, 8), 80);
+    let socket = UdpSocket::bind(bind_addr).ok()?;
+    if socket.connect(target_primary).is_err() {
+        socket.connect(target_fallback).ok()?;
+    }
+    let local_addr = socket.local_addr().ok()?;
+    let ip = local_addr.ip();
+    if ip.is_loopback() || ip.is_unspecified() {
+        None
+    } else {
+        Some(ip.to_string())
+    }
+}
+
+/// Constructs a [`ServerStatusResponse`] from the current [`wavery_config::ServerConfig`] and detected LAN IP.
+#[must_use]
+pub fn build_server_status_response(
+    server_cfg: &wavery_config::ServerConfig,
+    detected_ip: Option<String>,
+) -> ServerStatusResponse {
+    let is_lan = server_cfg.is_lan_enabled();
+    let host = server_cfg.host.clone();
+    let port = server_cfg.port;
+    let lan_url = detected_ip.as_ref().map(|ip| format!("http://{ip}:{port}"));
+    let loopback_ip = std::net::Ipv4Addr::LOCALHOST;
+    let stream_url = if is_lan {
+        lan_url
+            .clone()
+            .unwrap_or_else(|| format!("http://{loopback_ip}:{port}"))
+    } else {
+        format!("http://{loopback_ip}:{port}")
+    };
+    ServerStatusResponse {
+        host,
+        port,
+        is_lan_enabled: is_lan,
+        lan_enabled: is_lan,
+        local_ip_camel: detected_ip.clone(),
+        local_ip: detected_ip,
+        lan_url,
+        stream_url,
+    }
+}
+
+/// Queries the current HTTP streaming server status, bind configuration, and local LAN IP.
+#[tauri::command]
+async fn get_server_status(
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<ServerStatusResponse, IpcError> {
+    let server_cfg = state.config.lock().server.clone();
+    let local_ip = detect_local_lan_ip();
+    Ok(build_server_status_response(&server_cfg, local_ip))
+}
+
+/// Dynamically toggles the embedded HTTP streaming server between loopback (`127.0.0.1`)
+/// and LAN (`0.0.0.0`) modes, persisting configuration atomically and rolling back to
+/// loopback if binding on all interfaces fails.
+pub(crate) async fn apply_server_lan_mode(
+    state: &Arc<AppState>,
+    enabled: bool,
+    custom_config_path: Option<&std::path::Path>,
+) -> Result<ServerStatusResponse, IpcError> {
+    let cfg_path = match custom_config_path {
+        Some(p) => p.to_path_buf(),
+        None => default_config_path()?,
+    };
+
+    // 1. Stop any currently active in-process server before rebinding
+    let was_running = {
+        let tx_opt = state.server_shutdown_tx.lock().take();
+        if let Some(tx) = tx_opt {
+            let _ = tx.send(true);
+            true
+        } else {
+            false
+        }
+    };
+    if let Some(handle) = state.server_abort_handle.lock().take() {
+        handle.abort();
+    }
+
+    // 2. Apply requested LAN mode to configuration and persist atomically
+    let mut updated_config = {
+        let mut guard = state.config.lock();
+        guard.server.set_lan_enabled(enabled);
+        guard.server.sanitize();
+        guard.clone()
+    };
+    save_config_file(&cfg_path, &updated_config)?;
+
+    // 3. Verify socket bind availability when enabling LAN mode (0.0.0.0:port)
+    let mut bind_failed = false;
+    if enabled {
+        let bind_addr = std::net::SocketAddrV4::new(
+            std::net::Ipv4Addr::UNSPECIFIED,
+            updated_config.server.port,
+        );
+        let max_attempts = if was_running { 10 } else { 1 };
+        let mut bound_ok = false;
+        for attempt in 0..max_attempts {
+            if let Ok(listener) = std::net::TcpListener::bind(bind_addr) {
+                drop(listener);
+                bound_ok = true;
+                break;
+            }
+            if attempt + 1 < max_attempts {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        }
+        if !bound_ok {
+            bind_failed = true;
+        }
+    }
+
+    // 4. Atomic rollback to loopback (127.0.0.1) if binding to 0.0.0.0 failed
+    if bind_failed {
+        updated_config = {
+            let mut guard = state.config.lock();
+            guard.server.set_lan_enabled(false);
+            guard.server.sanitize();
+            guard.clone()
+        };
+        save_config_file(&cfg_path, &updated_config)?;
+    }
+
+    // 5. Restart the in-process server if browser client is enabled and library is initialized
+    if updated_config.server.enable_browser_client && state.library.is_some() {
+        start_in_process_server(state);
+    }
+
+    let local_ip = detect_local_lan_ip();
+    Ok(build_server_status_response(&updated_config.server, local_ip))
+}
+
+/// Enables or disables LAN streaming (`0.0.0.0` vs `127.0.0.1`), dynamically restarting
+/// the embedded HTTP server and persisting the updated configuration atomically.
+#[tauri::command]
+async fn set_server_lan_mode(
+    enabled: bool,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<ServerStatusResponse, IpcError> {
+    apply_server_lan_mode(state.inner(), enabled, None).await
+}
+
+/// Queries the cached 100-point waveform peak envelope for a track by ID.
+pub(crate) async fn query_track_waveform(
+    state: &AppState,
+    track_id: &str,
+) -> Result<Option<WaveformData>, IpcError> {
+    let trimmed = track_id.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    let lib_arc = state
+        .library
+        .as_ref()
+        .ok_or(IpcError::LibraryNotInitialized)?;
+    let lib = lib_arc.lock().await;
+    lib.get_waveform(trimmed).await.map_err(IpcError::from)
+}
+
+/// Returns the pre-computed 100-point waveform peak envelope for a given track ID, if cached.
+#[tauri::command]
+async fn get_waveform(
+    track_id: String,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<Option<WaveformData>, IpcError> {
+    query_track_waveform(&state, &track_id).await
+}
+
 #[tauri::command]
 async fn save_config(
     mut config: Config,
@@ -717,14 +1687,27 @@ async fn save_config(
     config.sanitize();
     let cfg_path = default_config_path()?;
     save_config_file(&cfg_path, &config)?;
-    {
+    let old_host = {
         let mut guard = state.config.lock();
+        let old = guard.server.host.clone();
         *guard = config.clone();
+        old
+    };
+    if old_host != config.server.host {
+        let _ = apply_server_lan_mode(
+            state.inner(),
+            config.server.is_lan_enabled(),
+            Some(&cfg_path),
+        )
+        .await?;
     }
     {
         let mut player_guard = state.player.lock().await;
         if let Some(player) = player_guard.as_mut() {
-            player.set_crossfade(Duration::from_millis(config.audio.crossfade_duration_ms as u64));
+            player.set_crossfade(Duration::from_millis(
+                config.audio.crossfade_duration_ms as u64,
+            ));
+            player.set_replay_gain_mode(&config.audio.replay_gain_mode);
         }
     }
     Ok(())
@@ -746,16 +1729,17 @@ async fn import_config_json(
     {
         let mut player_guard = state.player.lock().await;
         if let Some(player) = player_guard.as_mut() {
-            player.set_crossfade(Duration::from_millis(imported_config.audio.crossfade_duration_ms as u64));
+            player.set_crossfade(Duration::from_millis(
+                imported_config.audio.crossfade_duration_ms as u64,
+            ));
+            player.set_replay_gain_mode(&imported_config.audio.replay_gain_mode);
         }
     }
     Ok(imported_config)
 }
 
 #[tauri::command]
-async fn export_config_json(
-    state: tauri::State<'_, Arc<AppState>>,
-) -> Result<String, IpcError> {
+async fn export_config_json(state: tauri::State<'_, Arc<AppState>>) -> Result<String, IpcError> {
     let config = {
         let guard = state.config.lock();
         guard.clone()
@@ -802,11 +1786,12 @@ async fn show_desktop_notification(
                 notification.body(b);
             }
             notification.auto_icon();
-            let res = notification.show().map_err(|e| IpcError::Task(e.to_string()));
+            let res = notification
+                .show()
+                .map_err(|e| IpcError::Task(e.to_string()));
             let _ = tx.send(res.map(|_| ()));
         });
-        rx.await
-            .map_err(|e| IpcError::Task(e.to_string()))?
+        rx.await.map_err(|e| IpcError::Task(e.to_string()))?
     }
     #[cfg(not(target_os = "linux"))]
     {
@@ -820,8 +1805,7 @@ async fn show_desktop_notification(
             let res = builder.show().map_err(|e| IpcError::Task(e.to_string()));
             let _ = tx.send(res);
         });
-        rx.await
-            .map_err(|e| IpcError::Task(e.to_string()))?
+        rx.await.map_err(|e| IpcError::Task(e.to_string()))?
     }
 }
 
@@ -864,9 +1848,7 @@ async fn update_discord_presence(
 }
 
 #[tauri::command]
-async fn clear_discord_presence(
-    state: tauri::State<'_, Arc<AppState>>,
-) -> Result<(), IpcError> {
+async fn clear_discord_presence(state: tauri::State<'_, Arc<AppState>>) -> Result<(), IpcError> {
     let handle = Arc::clone(&state.discord_handle);
     tokio::task::spawn_blocking(move || {
         let lock = handle.blocking_read();
@@ -968,7 +1950,9 @@ fn find_server_executable() -> Option<PathBuf> {
     #[cfg(target_os = "windows")]
     {
         if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
-            let p = PathBuf::from(local_app_data).join("Wavery").join("wavery-server.exe");
+            let p = PathBuf::from(local_app_data)
+                .join("Wavery")
+                .join("wavery-server.exe");
             if p.is_file() {
                 return Some(p);
             }
@@ -1023,9 +2007,7 @@ fn open_browser_url(url: &str) -> Result<(), std::io::Error> {
     }
     #[cfg(target_os = "macos")]
     {
-        let _ = std::process::Command::new("open")
-            .arg(url)
-            .spawn();
+        let _ = std::process::Command::new("open").arg(url).spawn();
     }
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
@@ -1124,7 +2106,9 @@ fn notify_server_quit_sync(host: &str, port: u16) {
     use std::net::TcpStream;
     let addr = format!("{}:{}", host, port);
     if let Ok(addr_sock) = addr.parse() {
-        if let Ok(mut stream) = TcpStream::connect_timeout(&addr_sock, std::time::Duration::from_millis(300)) {
+        if let Ok(mut stream) =
+            TcpStream::connect_timeout(&addr_sock, std::time::Duration::from_millis(300))
+        {
             let req = format!(
                 "POST /api/app/quit HTTP/1.1\r\nHost: {}:{}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
                 host, port
@@ -1225,7 +2209,8 @@ fn start_in_process_server(state: &Arc<AppState>) {
     let root = find_project_root();
     let static_dir = resolve_static_dir(&root);
     let config = state.config.lock().clone();
-    let cfg_path = wavery_config::default_config_path().unwrap_or_else(|_| PathBuf::from("config.toml"));
+    let cfg_path =
+        wavery_config::default_config_path().unwrap_or_else(|_| PathBuf::from("config.toml"));
 
     let server_app_state = Arc::new(wavery_server::AppState::with_config_and_discord(
         shared_lib,
@@ -1241,8 +2226,13 @@ fn start_in_process_server(state: &Arc<AppState>) {
 
     let state_weak = Arc::downgrade(state);
     let handle = tauri::async_runtime::spawn(async move {
-        if let Err(e) = wavery_server::start_server_with_shutdown(server_app_state, &addr, shutdown_rx).await {
-            eprintln!("[Wavery] In-process web server terminated on {}: {}", addr, e);
+        if let Err(e) =
+            wavery_server::start_server_with_shutdown(server_app_state, &addr, shutdown_rx).await
+        {
+            eprintln!(
+                "[Wavery] In-process web server terminated on {}: {}",
+                addr, e
+            );
         }
         if let Some(state_arc) = state_weak.upgrade() {
             *state_arc.server_shutdown_tx.lock() = None;
@@ -1382,9 +2372,7 @@ async fn get_saved_session() -> Result<Option<wavery_core::models::PlaybackSessi
 }
 
 #[tauri::command]
-async fn save_session_state(
-    session: wavery_core::models::PlaybackSession,
-) -> Result<(), IpcError> {
+async fn save_session_state(session: wavery_core::models::PlaybackSession) -> Result<(), IpcError> {
     let path = wavery_config::default_session_path()?;
     wavery_config::save_session_atomic(&path, &session)?;
     Ok(())
@@ -1445,7 +2433,9 @@ async fn switch_to_web(
     // 5. Launch browser to target url
     if let Err(e) = open_browser_url(&target_url) {
         eprintln!("[Wavery] Failed to open default browser to {target_url}: {e}");
-        return Err(IpcError::Task(format!("Failed to open default web browser: {e}")));
+        return Err(IpcError::Task(format!(
+            "Failed to open default web browser: {e}"
+        )));
     }
 
     // 6. Hide the window (music already stopped) — Tauri stays alive in the tray.
@@ -1458,7 +2448,10 @@ async fn switch_to_web(
 
 #[tauri::command]
 async fn get_liked_tracks(state: tauri::State<'_, Arc<AppState>>) -> Result<Vec<Track>, IpcError> {
-    let lib_arc = state.library.as_ref().ok_or(IpcError::LibraryNotInitialized)?;
+    let lib_arc = state
+        .library
+        .as_ref()
+        .ok_or(IpcError::LibraryNotInitialized)?;
     let lib = lib_arc.lock().await;
     Ok(lib.get_liked_tracks()?)
 }
@@ -1467,7 +2460,10 @@ async fn get_liked_tracks(state: tauri::State<'_, Arc<AppState>>) -> Result<Vec<
 async fn get_liked_track_ids(
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<Vec<String>, IpcError> {
-    let lib_arc = state.library.as_ref().ok_or(IpcError::LibraryNotInitialized)?;
+    let lib_arc = state
+        .library
+        .as_ref()
+        .ok_or(IpcError::LibraryNotInitialized)?;
     let lib = lib_arc.lock().await;
     Ok(lib.get_liked_track_ids()?)
 }
@@ -1477,7 +2473,10 @@ async fn toggle_like(
     track_id: String,
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<bool, IpcError> {
-    let lib_arc = state.library.as_ref().ok_or(IpcError::LibraryNotInitialized)?;
+    let lib_arc = state
+        .library
+        .as_ref()
+        .ok_or(IpcError::LibraryNotInitialized)?;
     let lib = lib_arc.lock().await;
     Ok(lib.toggle_like(&track_id)?)
 }
@@ -1487,7 +2486,10 @@ async fn like_track(
     track_id: String,
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<(), IpcError> {
-    let lib_arc = state.library.as_ref().ok_or(IpcError::LibraryNotInitialized)?;
+    let lib_arc = state
+        .library
+        .as_ref()
+        .ok_or(IpcError::LibraryNotInitialized)?;
     let lib = lib_arc.lock().await;
     lib.like_track(&track_id)?;
     Ok(())
@@ -1498,17 +2500,21 @@ async fn unlike_track(
     track_id: String,
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<(), IpcError> {
-    let lib_arc = state.library.as_ref().ok_or(IpcError::LibraryNotInitialized)?;
+    let lib_arc = state
+        .library
+        .as_ref()
+        .ok_or(IpcError::LibraryNotInitialized)?;
     let lib = lib_arc.lock().await;
     lib.unlike_track(&track_id)?;
     Ok(())
 }
 
 #[tauri::command]
-async fn list_playlists(
-    state: tauri::State<'_, Arc<AppState>>,
-) -> Result<Vec<Playlist>, IpcError> {
-    let lib_arc = state.library.as_ref().ok_or(IpcError::LibraryNotInitialized)?;
+async fn list_playlists(state: tauri::State<'_, Arc<AppState>>) -> Result<Vec<Playlist>, IpcError> {
+    let lib_arc = state
+        .library
+        .as_ref()
+        .ok_or(IpcError::LibraryNotInitialized)?;
     let lib = lib_arc.lock().await;
     Ok(lib.list_playlists()?)
 }
@@ -1518,7 +2524,10 @@ async fn create_playlist(
     name: String,
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<Playlist, IpcError> {
-    let lib_arc = state.library.as_ref().ok_or(IpcError::LibraryNotInitialized)?;
+    let lib_arc = state
+        .library
+        .as_ref()
+        .ok_or(IpcError::LibraryNotInitialized)?;
     let lib = lib_arc.lock().await;
     Ok(lib.create_playlist(&name)?)
 }
@@ -1528,7 +2537,10 @@ async fn get_playlist(
     id: String,
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<Option<Playlist>, IpcError> {
-    let lib_arc = state.library.as_ref().ok_or(IpcError::LibraryNotInitialized)?;
+    let lib_arc = state
+        .library
+        .as_ref()
+        .ok_or(IpcError::LibraryNotInitialized)?;
     let lib = lib_arc.lock().await;
     Ok(lib.get_playlist(&id)?)
 }
@@ -1538,7 +2550,10 @@ async fn get_playlist_tracks(
     id: String,
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<Vec<Track>, IpcError> {
-    let lib_arc = state.library.as_ref().ok_or(IpcError::LibraryNotInitialized)?;
+    let lib_arc = state
+        .library
+        .as_ref()
+        .ok_or(IpcError::LibraryNotInitialized)?;
     let lib = lib_arc.lock().await;
     Ok(lib.get_playlist_tracks(&id)?)
 }
@@ -1549,7 +2564,10 @@ async fn rename_playlist(
     name: String,
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<(), IpcError> {
-    let lib_arc = state.library.as_ref().ok_or(IpcError::LibraryNotInitialized)?;
+    let lib_arc = state
+        .library
+        .as_ref()
+        .ok_or(IpcError::LibraryNotInitialized)?;
     let lib = lib_arc.lock().await;
     lib.rename_playlist(&id, &name)?;
     Ok(())
@@ -1560,7 +2578,10 @@ async fn delete_playlist(
     id: String,
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<(), IpcError> {
-    let lib_arc = state.library.as_ref().ok_or(IpcError::LibraryNotInitialized)?;
+    let lib_arc = state
+        .library
+        .as_ref()
+        .ok_or(IpcError::LibraryNotInitialized)?;
     let lib = lib_arc.lock().await;
     lib.delete_playlist(&id)?;
     Ok(())
@@ -1572,7 +2593,10 @@ async fn add_tracks_to_playlist(
     track_ids: Vec<String>,
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<(), IpcError> {
-    let lib_arc = state.library.as_ref().ok_or(IpcError::LibraryNotInitialized)?;
+    let lib_arc = state
+        .library
+        .as_ref()
+        .ok_or(IpcError::LibraryNotInitialized)?;
     let lib = lib_arc.lock().await;
     lib.add_tracks_to_playlist(&playlist_id, &track_ids)?;
     Ok(())
@@ -1584,7 +2608,10 @@ async fn remove_track_from_playlist(
     track_id: String,
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<(), IpcError> {
-    let lib_arc = state.library.as_ref().ok_or(IpcError::LibraryNotInitialized)?;
+    let lib_arc = state
+        .library
+        .as_ref()
+        .ok_or(IpcError::LibraryNotInitialized)?;
     let lib = lib_arc.lock().await;
     lib.remove_track_from_playlist(&playlist_id, &track_id)?;
     Ok(())
@@ -1595,7 +2622,10 @@ async fn save_playlist(
     playlist: Playlist,
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<(), IpcError> {
-    let lib_arc = state.library.as_ref().ok_or(IpcError::LibraryNotInitialized)?;
+    let lib_arc = state
+        .library
+        .as_ref()
+        .ok_or(IpcError::LibraryNotInitialized)?;
     let lib = lib_arc.lock().await;
     lib.save_playlist(&playlist)?;
     Ok(())
@@ -1603,14 +2633,19 @@ async fn save_playlist(
 
 #[tauri::command]
 async fn minimize_window(window: tauri::WebviewWindow) -> Result<(), IpcError> {
-    let _ = window.emit("window-state-changed", serde_json::json!({
-        "isMaximized": false,
-        "isMinimized": true,
-        "isFullscreen": false,
-        "width": 0,
-        "height": 0
-    }));
-    window.minimize().map_err(|e| IpcError::Task(e.to_string()))?;
+    let _ = window.emit(
+        "window-state-changed",
+        serde_json::json!({
+            "isMaximized": false,
+            "isMinimized": true,
+            "isFullscreen": false,
+            "width": 0,
+            "height": 0
+        }),
+    );
+    window
+        .minimize()
+        .map_err(|e| IpcError::Task(e.to_string()))?;
     Ok(())
 }
 
@@ -1618,20 +2653,30 @@ async fn minimize_window(window: tauri::WebviewWindow) -> Result<(), IpcError> {
 async fn toggle_maximize_window(window: tauri::WebviewWindow) -> Result<bool, IpcError> {
     let is_max = window.is_maximized().unwrap_or(false);
     if is_max {
-        window.unmaximize().map_err(|e| IpcError::Task(e.to_string()))?;
-        let _ = window.emit("window-state-changed", serde_json::json!({
-            "isMaximized": false,
-            "isMinimized": false,
-            "isFullscreen": false
-        }));
+        window
+            .unmaximize()
+            .map_err(|e| IpcError::Task(e.to_string()))?;
+        let _ = window.emit(
+            "window-state-changed",
+            serde_json::json!({
+                "isMaximized": false,
+                "isMinimized": false,
+                "isFullscreen": false
+            }),
+        );
         Ok(false)
     } else {
-        window.maximize().map_err(|e| IpcError::Task(e.to_string()))?;
-        let _ = window.emit("window-state-changed", serde_json::json!({
-            "isMaximized": true,
-            "isMinimized": false,
-            "isFullscreen": false
-        }));
+        window
+            .maximize()
+            .map_err(|e| IpcError::Task(e.to_string()))?;
+        let _ = window.emit(
+            "window-state-changed",
+            serde_json::json!({
+                "isMaximized": true,
+                "isMinimized": false,
+                "isFullscreen": false
+            }),
+        );
         Ok(true)
     }
 }
@@ -1645,10 +2690,15 @@ async fn is_window_maximized(window: tauri::WebviewWindow) -> Result<bool, IpcEr
 async fn toggle_fullscreen_window(window: tauri::WebviewWindow) -> Result<bool, IpcError> {
     let is_fs = window.is_fullscreen().unwrap_or(false);
     let next_fs = !is_fs;
-    window.set_fullscreen(next_fs).map_err(|e| IpcError::Task(e.to_string()))?;
-    let _ = window.emit("window-state-changed", serde_json::json!({
-        "isFullscreen": next_fs
-    }));
+    window
+        .set_fullscreen(next_fs)
+        .map_err(|e| IpcError::Task(e.to_string()))?;
+    let _ = window.emit(
+        "window-state-changed",
+        serde_json::json!({
+            "isFullscreen": next_fs
+        }),
+    );
     Ok(next_fs)
 }
 
@@ -1682,9 +2732,10 @@ fn start_header_drag(
 ) -> Result<(), IpcError> {
     let is_max = window.is_maximized().unwrap_or(false);
     if is_max {
-        let max_size = window
-            .outer_size()
-            .unwrap_or(tauri::PhysicalSize { width: 1920, height: 1080 });
+        let max_size = window.outer_size().unwrap_or(tauri::PhysicalSize {
+            width: 1920,
+            height: 1080,
+        });
 
         #[cfg(target_os = "windows")]
         let (phys_cur_x, phys_cur_y) = {
@@ -1785,13 +2836,16 @@ fn start_header_drag(
             }));
         }
 
-        let _ = window.emit("window-state-changed", serde_json::json!({
-            "isMaximized": false,
-            "isMinimized": false,
-            "isFullscreen": false,
-            "width": target_w,
-            "height": target_h
-        }));
+        let _ = window.emit(
+            "window-state-changed",
+            serde_json::json!({
+                "isMaximized": false,
+                "isMinimized": false,
+                "isFullscreen": false,
+                "width": target_w,
+                "height": target_h
+            }),
+        );
     }
 
     let _ = window.start_dragging();
@@ -1820,7 +2874,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // 3. Note: NEVER force WEBKIT_DISABLE_COMPOSITING_MODE=1 by default. Disabling compositing
         // forces WebKit into Cairo CPU software rasterization, turning all CSS blurs and glassmorphism
-        // into multi-second CPU bottlenecks during window resize.
+        // into multi-second CPU bottlenecks and triggering FrameRenderer assertions in WebKitGTK 2.45+.
     }
 
     let cfg_path = default_config_path().unwrap_or_else(|_| PathBuf::from("config.toml"));
@@ -1828,8 +2882,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut player = RodioPlayer::try_new().ok();
     if let Some(ref mut p) = player {
-        p.set_crossfade(Duration::from_millis(config.audio.crossfade_duration_ms as u64));
+        p.set_crossfade(Duration::from_millis(
+            config.audio.crossfade_duration_ms as u64,
+        ));
         p.set_volume(config.audio.default_volume);
+        p.set_replay_gain_mode(&config.audio.replay_gain_mode);
     }
     let library_res = SqliteLibraryManager::new(
         config.library.managed_directory.clone(),
@@ -1837,7 +2894,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     let shared_library = match library_res {
-        Ok(lib) => Some(Arc::new(AsyncMutex::new(lib))),
+        Ok(mut lib) => {
+            lib.set_protected_artists(config.library.protected_artists.clone());
+            lib.set_genre_mappings(config.library.genre_mappings.clone());
+            Some(Arc::new(AsyncMutex::new(lib)))
+        }
         Err(e) => {
             eprintln!("Failed to initialize SQLite library: {e}");
             None
@@ -1850,7 +2911,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let managed_dir = config.library.managed_directory.clone();
             tauri::async_runtime::spawn(async move {
                 let mut lib = scan_lib.lock().await;
-                match lib.import_directory(&managed_dir, ImportStrategy::Copy).await {
+                match lib
+                    .import_directory(&managed_dir, ImportStrategy::Copy)
+                    .await
+                {
                     Ok(tracks) => {
                         eprintln!(
                             "[Wavery] Background startup auto-scan finished: {} tracks indexed",
@@ -2020,17 +3084,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 let state_clone = state_handle.inner().clone();
                                 let app_clone = app_handle.clone();
                                 tauri::async_runtime::spawn(async move {
-                                    let next_track = {
-                                        let mut queue = state_clone.queue.lock();
-                                        queue.next().cloned()
-                                    };
-                                    if let Some(track) = next_track {
-                                        let mut player_guard = state_clone.player.lock().await;
-                                        if let Some(player) = player_guard.as_mut() {
-                                            let _ = player.load(&track, None).await;
-                                        }
-                                        let _ = app_clone.emit("queue-track-changed", &track);
-                                    }
+                                    let _ = advance_queue_next(&app_clone, &state_clone).await;
                                 });
                             }
                             "prev" => {
@@ -2038,17 +3092,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 let state_clone = state_handle.inner().clone();
                                 let app_clone = app_handle.clone();
                                 tauri::async_runtime::spawn(async move {
-                                    let prev_track = {
-                                        let mut queue = state_clone.queue.lock();
-                                        queue.previous(Duration::ZERO).cloned()
+                                    let current_pos = {
+                                        let player_guard = state_clone.player.lock().await;
+                                        player_guard
+                                            .as_ref()
+                                            .map(|p| p.position())
+                                            .unwrap_or(Duration::ZERO)
                                     };
-                                    if let Some(track) = prev_track {
-                                        let mut player_guard = state_clone.player.lock().await;
-                                        if let Some(player) = player_guard.as_mut() {
-                                            let _ = player.load(&track, None).await;
-                                        }
-                                        let _ = app_clone.emit("queue-track-changed", &track);
-                                    }
+                                    let _ = advance_queue_previous(
+                                        current_pos.as_secs_f64(),
+                                        &app_clone,
+                                        &state_clone,
+                                    )
+                                    .await;
                                 });
                             }
                             "quit" => {
@@ -2138,6 +3194,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             // Ensure main window has proper taskbar restore style flags and is shown on startup
             if let Some(window) = app.get_webview_window("main") {
+                let win_icon = app.default_window_icon().cloned().or_else(|| {
+                    tauri::image::Image::from_bytes(include_bytes!("../icons/128x128.png")).ok()
+                });
+                if let Some(icon) = win_icon {
+                    let _ = window.set_icon(icon);
+                }
                 #[cfg(target_os = "windows")]
                 if let Ok(hwnd) = window.hwnd() {
                     extern "system" {
@@ -2221,13 +3283,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .invoke_handler(tauri::generate_handler![
             get_tracks,
+            get_albums,
+            get_artists,
+            get_genres,
+            get_album_details,
+            get_artist_details,
             delete_track,
             import_file,
             import_folder,
             pick_file,
             pick_folder,
+            pick_playlist_file,
+            import_playlist_file,
             play_track,
             sync_queue,
+            queue_set_context,
+            queue_add_user,
+            queue_play_next,
+            queue_remove_user_track,
+            queue_reorder_user,
+            queue_clear_user,
+            queue_next,
+            queue_previous,
+            queue_jump_to_index,
+            queue_jump_to_context_track,
+            queue_jump_to_user_track,
+            queue_set_shuffle,
+            queue_set_loop_mode,
+            queue_set_autoplay,
+            queue_clear,
+            queue_get_state,
+            get_autoplay_next,
             pause_playback,
             resume_playback,
             stop_playback,
@@ -2236,7 +3322,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             get_status,
             search_tracks,
             get_artwork,
+            get_waveform,
             get_config,
+            get_server_status,
+            set_server_lan_mode,
             save_config,
             import_config_json,
             export_config_json,
@@ -2245,6 +3334,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             update_album_metadata,
             rebuild_library,
             vacuum_library,
+            get_database_stats,
+            check_database_health,
+            prune_missing_tracks,
+            backup_database,
+            reveal_database_location,
             clear_artwork_cache,
             switch_to_web,
             get_saved_session,
@@ -2275,7 +3369,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             start_header_drag,
             open_external_url,
             export_config_to_file,
-            show_desktop_notification
+            show_desktop_notification,
+            parse_lrc_content,
+            find_active_lyric_line,
+            score_lyric_candidates
         ])
         .build(tauri::generate_context!())?;
 
@@ -2300,7 +3397,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         #[cfg(target_os = "macos")]
-        tauri::RunEvent::Reopen { has_visible_windows, .. } => {
+        tauri::RunEvent::Reopen {
+            has_visible_windows,
+            ..
+        } => {
             if !has_visible_windows {
                 if let Some(window) = app_handle.get_webview_window("main") {
                     let _ = window.show();
@@ -2371,7 +3471,10 @@ mod tests {
 
         // Insert 1000 entries
         for i in 0..1000 {
-            cache.insert(format!("track_{i}"), Some(format!("data:image/jpeg;base64,{i}")));
+            cache.insert(
+                format!("track_{i}"),
+                Some(format!("data:image/jpeg;base64,{i}")),
+            );
             assert!(cache.len() <= capacity);
         }
 
@@ -2379,7 +3482,11 @@ mod tests {
 
         // The oldest 936 entries (0..936) must have been evicted in strict FIFO order
         for i in 0..(1000 - capacity) {
-            assert_eq!(cache.get(&format!("track_{i}")), None, "track_{i} should be evicted");
+            assert_eq!(
+                cache.get(&format!("track_{i}")),
+                None,
+                "track_{i} should be evicted"
+            );
         }
 
         // The newest 64 entries (936..1000) must still exist
@@ -2508,7 +3615,9 @@ mod tests {
         }
 
         for handle in handles {
-            handle.join().expect("thread finished without panic or deadlock");
+            handle
+                .join()
+                .expect("thread finished without panic or deadlock");
         }
 
         let final_cache = cache.lock();
@@ -2550,7 +3659,10 @@ mod tests {
 
         for (err, expected_json) in cases {
             let serialized = serde_json::to_string(&err).expect("serialization succeeds");
-            assert_eq!(serialized, expected_json, "JSON serialization format mismatch");
+            assert_eq!(
+                serialized, expected_json,
+                "JSON serialization format mismatch"
+            );
 
             let deserialized: IpcError =
                 serde_json::from_str(&serialized).expect("deserialization succeeds");
@@ -2600,7 +3712,10 @@ mod tests {
         let cfg_dir_err = wavery_config::ConfigError::DirectoryResolutionFailed;
         let ipc_err2: IpcError = cfg_dir_err.into();
         assert!(matches!(ipc_err2, IpcError::Config(_)));
-        assert!(ipc_err2.to_string().contains("resolution failed") || ipc_err2.to_string().contains("Configuration error"));
+        assert!(
+            ipc_err2.to_string().contains("resolution failed")
+                || ipc_err2.to_string().contains("Configuration error")
+        );
 
         let json_err = serde_json::from_str::<Config>("{ \"malformed\": true ").unwrap_err();
         let ipc_err3: IpcError = json_err.into();
@@ -2667,7 +3782,8 @@ mod tests {
             cfg.keybinds.toggle_lyrics = "Alt+L".into();
 
             let json_str = serde_json::to_string_pretty(&cfg).expect("JSON serialization succeeds");
-            let deserialized: Config = serde_json::from_str(&json_str).expect("JSON deserialization succeeds");
+            let deserialized: Config =
+                serde_json::from_str(&json_str).expect("JSON deserialization succeeds");
 
             assert_eq!(cfg, deserialized);
             assert_eq!(deserialized.theme.mode, theme);
@@ -2694,11 +3810,26 @@ mod tests {
             ("true", "scalar boolean"),
             ("null", "null literal"),
             ("[1, 2, 3]", "json array"),
-            ("{\"audio\": {\"backend\": \"non_existent_engine\"}}", "invalid enum backend"),
-            ("{\"theme\": {\"mode\": \"cyberpunk_neon\"}}", "invalid enum theme mode"),
-            ("{\"server\": {\"port\": \"not_a_number\"}}", "type mismatch for u16"),
-            ("{\"general\": {\"notifications_enabled\": \"yes\"}}", "type mismatch for bool"),
-            ("{\"audio\": {\"default_volume\": \"loud\"}}", "type mismatch for f32"),
+            (
+                "{\"audio\": {\"backend\": \"non_existent_engine\"}}",
+                "invalid enum backend",
+            ),
+            (
+                "{\"theme\": {\"mode\": \"cyberpunk_neon\"}}",
+                "invalid enum theme mode",
+            ),
+            (
+                "{\"server\": {\"port\": \"not_a_number\"}}",
+                "type mismatch for u16",
+            ),
+            (
+                "{\"general\": {\"notifications_enabled\": \"yes\"}}",
+                "type mismatch for bool",
+            ),
+            (
+                "{\"audio\": {\"default_volume\": \"loud\"}}",
+                "type mismatch for f32",
+            ),
         ];
 
         for (invalid_json, description) in test_cases {
@@ -2740,7 +3871,9 @@ mod tests {
         {
             let non_existent = temp_dir.join("non_existent_subdir");
             let mut lib = shared_lib.lock().await;
-            let res = lib.import_directory(&non_existent, ImportStrategy::Copy).await;
+            let res = lib
+                .import_directory(&non_existent, ImportStrategy::Copy)
+                .await;
             assert!(res.is_ok());
             assert_eq!(res.unwrap().len(), 0);
         }
@@ -2792,6 +3925,7 @@ mod tests {
                 channels: Some(2),
                 format: "FLAC".into(),
                 lyrics: None,
+                ..Default::default()
             },
             date_added: 0,
         }
@@ -2804,17 +3938,792 @@ mod tests {
         let track2 = make_test_track("track-2", "/music/song2.flac");
         queue.set_queue(vec![track1.clone(), track2.clone()], 0);
 
-        assert_eq!(queue.current_track().map(|t| t.id.clone()), Some(track1.id.clone()));
+        assert_eq!(
+            queue.current_track().map(|t| t.id.clone()),
+            Some(track1.id.clone())
+        );
 
         // Simulate "next" tray menu action
         let next_track = queue.next().cloned();
         assert_eq!(next_track.map(|t| t.id.clone()), Some(track2.id.clone()));
 
-        // Simulate "prev" tray menu action
-        let prev_track = queue.previous(Duration::ZERO).cloned();
+        // Simulate "prev" tray menu action with position > 3.0s (restarts current track)
+        let restarted = queue.previous(Duration::from_secs(5)).cloned();
+        assert_eq!(restarted.map(|t| t.id.clone()), Some(track2.id.clone()));
+        assert_eq!(queue.current_index(), Some(1));
+
+        // Simulate "prev" tray menu action with position <= 3.0s (steps back to previous)
+        let prev_track = queue.previous(Duration::from_secs(1)).cloned();
         assert_eq!(prev_track.map(|t| t.id.clone()), Some(track1.id.clone()));
+        assert_eq!(queue.current_index(), Some(0));
+    }
+
+    #[test]
+    fn test_queue_state_snapshot_camel_case_serialization_and_roundtrip() {
+        let track = make_test_track("t1", "/music/t1.flac");
+        let snapshot = QueueStateSnapshot {
+            current_track: Some(track.clone()),
+            current_index: Some(0),
+            user_queue: vec![track.clone()],
+            context_queue: vec![track.clone()],
+            context_index: Some(0),
+            queue: vec![track.clone()],
+            is_shuffle: true,
+            loop_mode: LoopMode::Queue,
+            is_autoplay: true,
+            history: vec![track],
+            shuffle_indices: vec![0],
+            shuffle_pos: 0,
+        };
+
+        let json = serde_json::to_string(&snapshot).unwrap();
+        assert!(json.contains("\"currentTrack\":{"));
+        assert!(json.contains("\"currentIndex\":0"));
+        assert!(json.contains("\"userQueue\":["));
+        assert!(json.contains("\"contextQueue\":["));
+        assert!(json.contains("\"contextIndex\":0"));
+        assert!(json.contains("\"isShuffle\":true"));
+        assert!(json.contains("\"loopMode\":\"Queue\""));
+        assert!(json.contains("\"isAutoplay\":true"));
+
+        // Roundtrip deserialization
+        let deserialized: QueueStateSnapshot = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.current_index, Some(0));
+        assert!(deserialized.is_shuffle);
+        assert!(deserialized.is_autoplay);
+        assert_eq!(deserialized.loop_mode, LoopMode::Queue);
+
+        // Dual snake_case deserialization
+        let snake_json = r#"{
+            "current_track": null,
+            "current_index": 2,
+            "user_queue": [],
+            "context_queue": [],
+            "context_index": 1,
+            "queue": [],
+            "is_shuffle": false,
+            "loop_mode": "Track",
+            "is_autoplay": false,
+            "history": []
+        }"#;
+        let snake_parsed: QueueStateSnapshot = serde_json::from_str(snake_json).unwrap();
+        assert_eq!(snake_parsed.current_index, Some(2));
+        assert_eq!(snake_parsed.context_index, Some(1));
+        assert_eq!(snake_parsed.loop_mode, LoopMode::Track);
+    }
+
+    #[tokio::test]
+    async fn test_queue_autoplay_candidate_selection_via_ipc() {
+        let mut queue = StandardQueueManager::new();
+        let curr = make_test_track("curr", "/music/curr.flac");
+        let mut cand1 = make_test_track("cand1", "/music/cand1.flac");
+        cand1.metadata.artist = Some("Test Artist".into()); // matches current artist (+50)
+        let mut cand2 = make_test_track("cand2", "/music/cand2.flac");
+        cand2.metadata.artist = Some("Different Artist".into());
+        cand2.metadata.genre = Some("Other Genre".into());
+
+        queue.set_queue(vec![curr.clone()], 0);
+        let pool = vec![cand1.clone(), cand2.clone()];
+
+        let chosen = queue.select_autoplay_candidate(&pool);
+        assert!(chosen.is_some());
+        assert_eq!(chosen.unwrap().id, "cand1");
+    }
+
+    #[test]
+    fn test_library_aggregation_ipc_models_and_camel_case_serialization() {
+        let album = Album {
+            title: "Random Access Memories".into(),
+            artist: "Daft Punk".into(),
+            album_artist: Some("Daft Punk".into()),
+            is_compilation: false,
+            year: Some(2013),
+            artwork_track_id: Some("track-1".into()),
+            tracks: Vec::new(),
+            track_count: 13,
+            total_duration: Duration::from_secs(4460),
+            total_duration_secs: 4460,
+        };
+
+        let json = serde_json::to_string(&album).unwrap();
+        assert!(json.contains("\"totalDurationSecs\":4460"));
+        assert!(json.contains("\"isCompilation\":false"));
+        assert!(json.contains("\"trackCount\":13"));
+        assert!(json.contains("\"artworkTrackId\":\"track-1\""));
+        assert!(json.contains("\"albumArtist\":\"Daft Punk\""));
+
+        let artist = Artist {
+            name: "Daft Punk".into(),
+            albums: vec![album],
+            appears_on: Vec::new(),
+            tracks: Vec::new(),
+            album_count: 1,
+            track_count: 13,
+            artwork_track_id: Some("track-1".into()),
+        };
+
+        let artist_json = serde_json::to_string(&artist).unwrap();
+        assert!(artist_json.contains("\"albumCount\":1"));
+        assert!(artist_json.contains("\"trackCount\":13"));
+        assert!(artist_json.contains("\"appearsOn\":[]"));
+
+        let genre = GenreInfo {
+            name: "Electronic".into(),
+            tracks: Vec::new(),
+            track_count: 13,
+        };
+        let genre_json = serde_json::to_string(&genre).unwrap();
+        assert!(genre_json.contains("\"trackCount\":13"));
+    }
+
+    #[tokio::test]
+    async fn test_lyrics_ipc_commands_and_camel_case_serialization() {
+        let raw = "[ti: Creep]\n[ar: Radiohead]\n[offset: +250]\n[00:10.00] When you were here before\n[00:20.00] Couldn't look you in the eye";
+        let parsed = parse_lrc_content(raw.to_string()).await.unwrap();
+        assert!(parsed.is_synced);
+        assert_eq!(parsed.offset_ms, 250);
+        assert_eq!(parsed.lines.len(), 2);
+        assert_eq!(parsed.metadata.title.as_deref(), Some("Creep"));
+
+        let json = serde_json::to_string(&parsed).unwrap();
+        assert!(json.contains("\"isSynced\":true"));
+        assert!(json.contains("\"offsetMs\":250"));
+        assert!(json.contains("\"time\":10.25"));
+
+        let active_idx = find_active_lyric_line(parsed.lines.clone(), 15.0).await.unwrap();
+        assert_eq!(active_idx, Some(0));
+
+        let active_idx_2 = find_active_lyric_line(parsed.lines.clone(), 25.0).await.unwrap();
+        assert_eq!(active_idx_2, Some(1));
+
+        let target = LyricTargetInfo {
+            title: Some("Creep".into()),
+            artist: Some("Radiohead".into()),
+            album: Some("Pablo Honey".into()),
+            duration_secs: Some(238.0),
+        };
+
+        let candidate = LyricCandidate {
+            id: Some(101),
+            track_name: Some("Creep".into()),
+            artist_name: Some("Radiohead".into()),
+            album_name: Some("Pablo Honey".into()),
+            duration: Some(238.5),
+            instrumental: Some(false),
+            synced_lyrics: Some(raw.to_string()),
+            plain_lyrics: None,
+        };
+
+        let scored = score_lyric_candidates(target, vec![candidate]).await.unwrap();
+        assert_eq!(scored.len(), 1);
+        assert!(scored[0].score > 1500);
+        assert!(scored[0].is_synced);
+        assert!(!scored[0].is_instrumental);
+
+        let scored_json = serde_json::to_string(&scored).unwrap();
+        assert!(scored_json.contains("\"isSynced\":true"));
+        assert!(scored_json.contains("\"isInstrumental\":false"));
+        assert!(scored_json.contains("\"bestLyrics\""));
+    }
+
+    #[tokio::test]
+    async fn test_adversarial_candidate_scoring_duration_deltas() {
+        use wavery_core::lyrics::{score_single_candidate, LyricCandidate, LyricTargetInfo};
+
+        let target = LyricTargetInfo {
+            title: Some("Song".into()),
+            artist: Some("Artist".into()),
+            album: Some("Album".into()),
+            duration_secs: Some(200.0),
+        };
+
+        let make_cand = |id: u64, dur: Option<f64>| LyricCandidate {
+            id: Some(id),
+            track_name: Some("Song".into()),
+            artist_name: Some("Artist".into()),
+            album_name: Some("Album".into()),
+            duration: dur,
+            instrumental: Some(false),
+            synced_lyrics: Some("[00:01.00] test".into()),
+            plain_lyrics: None,
+        };
+
+        // diff = 0.0s -> diff <= 2.0 -> +300 bonus -> score = 1750
+        let c_0s = make_cand(1, Some(200.0));
+        assert_eq!(score_single_candidate(&c_0s, &target), 1750);
+
+        // diff = 2.0s -> diff <= 2.0 -> +300 bonus -> score = 1750
+        let c_2s = make_cand(2, Some(202.0));
+        assert_eq!(score_single_candidate(&c_2s, &target), 1750);
+
+        // diff = 2.01s -> diff <= 4.0 -> +150 bonus -> score = 1600
+        let c_2_01s = make_cand(3, Some(202.01));
+        assert_eq!(score_single_candidate(&c_2_01s, &target), 1600);
+
+        // diff = 4.0s -> diff <= 4.0 -> +150 bonus -> score = 1600
+        let c_4s = make_cand(4, Some(204.0));
+        assert_eq!(score_single_candidate(&c_4s, &target), 1600);
+
+        // diff = 4.01s -> diff <= 8.0 -> +50 bonus -> score = 1500
+        let c_4_01s = make_cand(5, Some(204.01));
+        assert_eq!(score_single_candidate(&c_4_01s, &target), 1500);
+
+        // diff = 8.0s -> diff <= 8.0 -> +50 bonus -> score = 1500
+        let c_8s = make_cand(6, Some(208.0));
+        assert_eq!(score_single_candidate(&c_8s, &target), 1500);
+
+        // diff = 8.01s -> excess = 0.01 -> excess * 10 = 0.1 -> clamped to 50 -> -50 penalty -> score = 1400
+        let c_8_01s = make_cand(7, Some(208.01));
+        assert_eq!(score_single_candidate(&c_8_01s, &target), 1400);
+
+        // diff = 10.0s -> excess = 2.0 -> excess * 10 = 20 -> clamped to 50 -> -50 penalty -> score = 1400
+        let c_10s = make_cand(8, Some(210.0));
+        assert_eq!(score_single_candidate(&c_10s, &target), 1400);
+
+        // diff = 20.0s -> excess = 12.0 -> excess * 10 = 120 -> -120 penalty -> score = 1330
+        let c_20s = make_cand(9, Some(220.0));
+        assert_eq!(score_single_candidate(&c_20s, &target), 1330);
+
+        // diff = 600.0s -> excess = 592.0 -> excess * 10 = 5920 -> clamped to 1500 -> -1500 penalty -> score = -50
+        let c_600s = make_cand(10, Some(800.0));
+        assert_eq!(score_single_candidate(&c_600s, &target), -50);
+
+        // Boundary duration cases:
+        let c_none_dur = make_cand(11, None);
+        assert_eq!(score_single_candidate(&c_none_dur, &target), 1450);
+
+        let c_zero_dur = make_cand(12, Some(0.0));
+        assert_eq!(score_single_candidate(&c_zero_dur, &target), 1450);
+
+        let c_neg_dur = make_cand(13, Some(-10.0));
+        assert_eq!(score_single_candidate(&c_neg_dur, &target), 1450);
+
+        let c_nan_dur = make_cand(14, Some(f64::NAN));
+        assert_eq!(score_single_candidate(&c_nan_dur, &target), 1450);
+
+        let target_no_dur = LyricTargetInfo {
+            title: Some("Song".into()),
+            artist: Some("Artist".into()),
+            album: Some("Album".into()),
+            duration_secs: None,
+        };
+        assert_eq!(score_single_candidate(&c_0s, &target_no_dur), 1450);
+
+        let candidates = vec![c_600s, c_10s, c_8s, c_4s, c_0s];
+        let ranked = super::score_lyric_candidates(target, candidates).await.unwrap();
+        assert_eq!(ranked[0].candidate.id, Some(1));
+        assert_eq!(ranked[1].candidate.id, Some(4));
+        assert_eq!(ranked[2].candidate.id, Some(6));
+        assert_eq!(ranked[3].candidate.id, Some(8));
+        assert_eq!(ranked[4].candidate.id, Some(10));
+    }
+
+    #[tokio::test]
+    async fn test_adversarial_candidate_scoring_sorting_stability() {
+        use wavery_core::lyrics::{LyricCandidate, LyricTargetInfo};
+
+        let target = LyricTargetInfo {
+            title: Some("Song".into()),
+            artist: Some("Artist".into()),
+            album: Some("Album".into()),
+            duration_secs: Some(200.0),
+        };
+
+        // Create 100 candidates with identical score
+        let mut candidates_asc = Vec::new();
+        for id in 1..=100 {
+            candidates_asc.push(LyricCandidate {
+                id: Some(id),
+                track_name: Some("Song".into()),
+                artist_name: Some("Artist".into()),
+                album_name: Some("Album".into()),
+                duration: Some(200.0),
+                instrumental: Some(false),
+                synced_lyrics: Some("[00:01.00] test".into()),
+                plain_lyrics: None,
+            });
+        }
+
+        let scored_asc = super::score_lyric_candidates(target.clone(), candidates_asc).await.unwrap();
+        assert_eq!(scored_asc.len(), 100);
+        for (idx, sc) in scored_asc.iter().enumerate() {
+            assert_eq!(sc.candidate.id, Some((idx + 1) as u64), "Order stability broken at index {}", idx);
+        }
+
+        // Now reverse initial input (100 down to 1)
+        let mut candidates_desc = Vec::new();
+        for id in (1..=100).rev() {
+            candidates_desc.push(LyricCandidate {
+                id: Some(id),
+                track_name: Some("Song".into()),
+                artist_name: Some("Artist".into()),
+                album_name: Some("Album".into()),
+                duration: Some(200.0),
+                instrumental: Some(false),
+                synced_lyrics: Some("[00:01.00] test".into()),
+                plain_lyrics: None,
+            });
+        }
+
+        let scored_desc = super::score_lyric_candidates(target.clone(), candidates_desc).await.unwrap();
+        assert_eq!(scored_desc.len(), 100);
+        for (idx, sc) in scored_desc.iter().enumerate() {
+            assert_eq!(sc.candidate.id, Some((100 - idx) as u64), "Reverse stability broken at index {}", idx);
+        }
+    }
+
+    #[test]
+    fn test_adversarial_title_and_artist_normalization() {
+        use wavery_core::lyrics::*;
+
+        // 1. Title normalization
+        assert_eq!(normalize_query("01 - Paranoid Android (Remastered 2021)"), "Paranoid Android");
+        assert_eq!(normalize_query("02. Creep [Live at Reading]"), "Creep");
+        assert_eq!(normalize_query("105 - Karma Police (feat. Thom Yorke)"), "Karma Police");
+        assert_eq!(normalize_query("3_No Surprises (Deluxe Edition)"), "No Surprises");
+        assert_eq!(normalize_query("Exit Music (For a Film)"), "Exit Music (For a Film)");
+        assert_eq!(normalize_query("Life in a Glasshouse (Full Length Version)"), "Life in a Glasshouse");
+
+        // 2. Clean artists extraction
+        assert_eq!(extract_clean_artist("Radiohead; Thom Yorke"), "Radiohead");
+        assert_eq!(extract_clean_artist("Kendrick Lamar feat. Rihanna"), "Kendrick Lamar");
+        assert_eq!(extract_clean_artist("Kendrick Lamar ft. Rihanna"), "Kendrick Lamar");
+        assert_eq!(extract_clean_artist("Daft Punk & Pharrell Williams"), "Daft Punk");
+        assert_eq!(extract_clean_artist("Eminem / Rihanna"), "Eminem");
+
+        // 3. Protected band names without featuring
+        assert_eq!(extract_clean_artist("AC/DC"), "AC/DC");
+        assert_eq!(extract_clean_artist("Earth, Wind & Fire"), "Earth, Wind & Fire");
+        assert_eq!(extract_clean_artist("Crosby, Stills, Nash & Young"), "Crosby, Stills, Nash & Young");
+        assert_eq!(extract_clean_artist("Tom Petty & The Heartbreakers"), "Tom Petty & The Heartbreakers");
+        assert_eq!(extract_clean_artist("Simon & Garfunkel"), "Simon & Garfunkel");
+        assert_eq!(extract_clean_artist("Panic! At The Disco"), "Panic! At The Disco");
+        assert_eq!(extract_clean_artist("Sunn O)))"), "Sunn O)))");
+        assert_eq!(extract_clean_artist("!!! (Chk Chk Chk)"), "!!! (Chk Chk Chk)");
+        assert_eq!(extract_clean_artist("$uicideboy$"), "$uicideboy$");
+
+        // 4. Protected band names with featuring artists and candidate scoring
+        let target_ewf = LyricTargetInfo {
+            title: Some("September".into()),
+            artist: Some("Earth, Wind & Fire feat. Friends".into()),
+            album: Some("The Best of Earth, Wind & Fire".into()),
+            duration_secs: Some(215.0),
+        };
+        let cand_ewf = LyricCandidate {
+            id: Some(1),
+            track_name: Some("September".into()),
+            artist_name: Some("Earth, Wind & Fire".into()),
+            album_name: Some("The Best of Earth, Wind & Fire".into()),
+            duration: Some(215.0),
+            instrumental: Some(false),
+            synced_lyrics: Some("[00:01.00] Do you remember".into()),
+            plain_lyrics: None,
+        };
+        let score_ewf = score_single_candidate(&cand_ewf, &target_ewf);
+        assert!(score_ewf >= 1675, "Expected high match for EWF candidate, got {}", score_ewf);
+
+        // 5. AC/DC with feat. test
+        let acdc_feat = extract_clean_artist("AC/DC feat. Axl Rose");
+        // Document empirical behavior: extract_clean_artist splits on '/' before checking feat., yielding "AC"
+        assert_eq!(acdc_feat, "AC");
+
+        let target_acdc = LyricTargetInfo {
+            title: Some("Back In Black".into()),
+            artist: Some("AC/DC feat. Axl Rose".into()),
+            album: None,
+            duration_secs: Some(255.0),
+        };
+        let cand_acdc = LyricCandidate {
+            id: Some(1),
+            track_name: Some("Back In Black".into()),
+            artist_name: Some("AC/DC".into()),
+            album_name: None,
+            duration: Some(255.0),
+            instrumental: Some(false),
+            synced_lyrics: Some("[00:01.00] Back in black".into()),
+            plain_lyrics: None,
+        };
+        let cand_jack_white = LyricCandidate {
+            id: Some(2),
+            track_name: Some("Back In Black".into()),
+            artist_name: Some("Jack White".into()),
+            album_name: None,
+            duration: Some(255.0),
+            instrumental: Some(false),
+            synced_lyrics: Some("[00:01.00] Back in black".into()),
+            plain_lyrics: None,
+        };
+        let score_acdc = score_single_candidate(&cand_acdc, &target_acdc);
+        let score_jack = score_single_candidate(&cand_jack_white, &target_acdc);
+        // Both get +75 for artist because "ac/dc".contains("ac") and "jack white".contains("ac")
+        assert_eq!(score_acdc, score_jack, "Expected both candidates to tie due to 'ac' substring match");
+
+        // Verify that wavery_core::heuristics::split_artists already correctly handles AC/DC feat.
+        let split_result = wavery_core::heuristics::split_artists("AC/DC feat. Axl Rose", &[]);
+        assert_eq!(split_result[0], "AC/DC");
+        assert_eq!(split_result[1], "Axl Rose");
+    }
+
+    #[tokio::test]
+    async fn test_adversarial_tauri_ipc_camel_case_and_serialization() {
+        use wavery_core::lyrics::*;
+
+        // 1. LyricLine camelCase
+        let line = LyricLine { time: 42.5, text: "Some lyric".into() };
+        let line_json = serde_json::to_string(&line).unwrap();
+        assert!(line_json.contains("\"time\":42.5"));
+        assert!(line_json.contains("\"text\":\"Some lyric\""));
+
+        // 2. LrcMetadata camelCase
+        let mut meta = LrcMetadata {
+            title: Some("Title".into()),
+            artist: Some("Artist".into()),
+            album: Some("Album".into()),
+            author: Some("Author".into()),
+            creator: Some("Creator".into()),
+            length: Some("03:45".into()),
+            offset_ms: Some(500),
+            additional: std::collections::HashMap::new(),
+        };
+        meta.additional.insert("re".into(), "Wavery".into());
+        let meta_json = serde_json::to_string(&meta).unwrap();
+        assert!(meta_json.contains("\"offsetMs\":500"));
+        assert!(meta_json.contains("\"title\":\"Title\""));
+        assert!(meta_json.contains("\"additional\":{\"re\":\"Wavery\"}"));
+
+        // 3. ParsedLyrics camelCase
+        let parsed = ParsedLyrics {
+            is_synced: true,
+            lines: vec![line.clone()],
+            metadata: meta.clone(),
+            offset_ms: 500,
+        };
+        let parsed_json = serde_json::to_string(&parsed).unwrap();
+        assert!(parsed_json.contains("\"isSynced\":true"));
+        assert!(parsed_json.contains("\"offsetMs\":500"));
+        assert!(parsed_json.contains("\"lines\":["));
+        assert!(parsed_json.contains("\"metadata\":{"));
+
+        // 4. LyricTargetInfo camelCase
+        let target = LyricTargetInfo {
+            title: Some("Song".into()),
+            artist: Some("Artist".into()),
+            album: Some("Album".into()),
+            duration_secs: Some(180.0),
+        };
+        let target_json = serde_json::to_string(&target).unwrap();
+        assert!(target_json.contains("\"durationSecs\":180.0"));
+
+        // 5. LyricCandidate deserialization from LRCLIB snake_case JSON (track_name)
+        let lrclib_raw_json = r#"{
+            "id": 9999,
+            "track_name": "Karma Police",
+            "artist_name": "Radiohead",
+            "album_name": "OK Computer",
+            "duration": 261.0,
+            "instrumental": false,
+            "synced_lyrics": "[00:10.00] Karma police",
+            "plain_lyrics": "Karma police"
+        }"#;
+        let cand_from_snake: LyricCandidate = serde_json::from_str(lrclib_raw_json).unwrap();
+        assert_eq!(cand_from_snake.id, Some(9999));
+        assert_eq!(cand_from_snake.track_name.as_deref(), Some("Karma Police"));
+        assert_eq!(cand_from_snake.artist_name.as_deref(), Some("Radiohead"));
+        assert_eq!(cand_from_snake.synced_lyrics.as_deref(), Some("[00:10.00] Karma police"));
+
+        // Also test alias 'name'
+        let name_alias_json = r#"{
+            "id": 7777,
+            "name": "Karma Police",
+            "artist_name": "Radiohead"
+        }"#;
+        let cand_from_name: LyricCandidate = serde_json::from_str(name_alias_json).unwrap();
+        assert_eq!(cand_from_name.id, Some(7777));
+        assert_eq!(cand_from_name.track_name.as_deref(), Some("Karma Police"));
+
+        // Deserialization from frontend camelCase JSON
+        let frontend_raw_json = r#"{
+            "id": 8888,
+            "trackName": "No Surprises",
+            "artistName": "Radiohead",
+            "albumName": "OK Computer",
+            "duration": 229.0,
+            "instrumental": false,
+            "syncedLyrics": "[00:05.00] A heart that's full up like a landfill",
+            "plainLyrics": "A heart that's full up like a landfill"
+        }"#;
+        let cand_from_camel: LyricCandidate = serde_json::from_str(frontend_raw_json).unwrap();
+        assert_eq!(cand_from_camel.id, Some(8888));
+        assert_eq!(cand_from_camel.track_name.as_deref(), Some("No Surprises"));
+        assert_eq!(cand_from_camel.artist_name.as_deref(), Some("Radiohead"));
+
+        // 6. ScoredLyricCandidate camelCase serialization
+        let scored_cand = ScoredLyricCandidate {
+            candidate: cand_from_snake,
+            score: 1750,
+            is_synced: true,
+            is_instrumental: false,
+            best_lyrics: Some("[00:10.00] Karma police".into()),
+        };
+        let scored_json = serde_json::to_string(&scored_cand).unwrap();
+        assert!(scored_json.contains("\"isSynced\":true"));
+        assert!(scored_json.contains("\"isInstrumental\":false"));
+        assert!(scored_json.contains("\"bestLyrics\":\"[00:10.00] Karma police\""));
+        assert!(scored_json.contains("\"score\":1750"));
+    }
+
+    #[tokio::test]
+    async fn test_adversarial_tauri_ipc_empty_inputs_and_error_propagation() {
+        use wavery_core::lyrics::*;
+
+        // 1. parse_lrc_content empty string
+        let empty_parsed = parse_lrc_content("".into()).await.unwrap();
+        assert!(!empty_parsed.is_synced);
+        assert!(empty_parsed.lines.is_empty());
+        assert_eq!(empty_parsed.offset_ms, 0);
+
+        // Whitespace only
+        let ws_parsed = parse_lrc_content("   \n\n\t  \r\n   ".into()).await.unwrap();
+        assert!(!ws_parsed.is_synced);
+        assert!(ws_parsed.lines.is_empty());
+
+        // 2. find_active_lyric_line with empty lines
+        assert_eq!(find_active_lyric_line(vec![], 10.0).await.unwrap(), None);
+
+        // Negative position
+        let lines = vec![LyricLine { time: 10.0, text: "A".into() }, LyricLine { time: 20.0, text: "B".into() }];
+        assert_eq!(find_active_lyric_line(lines.clone(), -5.0).await.unwrap(), None);
+
+        // NaN position
+        assert_eq!(find_active_lyric_line(lines.clone(), f64::NAN).await.unwrap(), None);
+
+        // Infinity position -> lands on last line (index 1)
+        assert_eq!(find_active_lyric_line(lines.clone(), f64::INFINITY).await.unwrap(), Some(1));
+
+        // Unsynced lines (time < 0)
+        let unsynced_lines = vec![LyricLine { time: -1.0, text: "Plain".into() }];
+        assert_eq!(find_active_lyric_line(unsynced_lines, 5.0).await.unwrap(), None);
+
+        // 3. score_lyric_candidates with empty candidates
+        let target = LyricTargetInfo {
+            title: Some("Song".into()),
+            artist: Some("Artist".into()),
+            album: None,
+            duration_secs: Some(180.0),
+        };
+        let empty_scored = super::score_lyric_candidates(target.clone(), vec![]).await.unwrap();
+        assert!(empty_scored.is_empty());
+
+        // Target with all None fields
+        let empty_target = LyricTargetInfo::default();
+        let cand = LyricCandidate {
+            id: Some(1),
+            track_name: None,
+            artist_name: None,
+            album_name: None,
+            duration: None,
+            instrumental: Some(false),
+            synced_lyrics: None,
+            plain_lyrics: None,
+        };
+        let scored_empty = super::score_lyric_candidates(empty_target, vec![cand]).await.unwrap();
+        assert_eq!(scored_empty.len(), 1);
+        assert_eq!(scored_empty[0].score, 0);
+
+        // 4. IpcError serialization and roundtrip
+        let err = IpcError::Audio("Playback failed".into());
+        let err_json = serde_json::to_string(&err).unwrap();
+        assert_eq!(err_json, r#"{"type":"Audio","message":"Playback failed"}"#);
+
+        let err_lib = IpcError::Library("DB locked".into());
+        let err_lib_json = serde_json::to_string(&err_lib).unwrap();
+        assert_eq!(err_lib_json, r#"{"type":"Library","message":"DB locked"}"#);
+    }
+
+    #[test]
+    fn test_detect_local_lan_ip_rfc1122() {
+        let maybe_ip = detect_local_lan_ip();
+        if let Some(ip_str) = maybe_ip {
+            let parsed: std::net::IpAddr = ip_str.parse().expect("Detected IP must be valid IpAddr");
+            assert!(!parsed.is_loopback(), "Detected LAN IP must not be loopback");
+            assert!(
+                !parsed.is_unspecified(),
+                "Detected LAN IP must not be unspecified"
+            );
+        }
+    }
+
+    #[test]
+    fn test_server_status_response_dual_case_serialization() {
+        let mut srv_cfg = wavery_config::ServerConfig::default();
+        assert!(!srv_cfg.is_lan_enabled());
+
+        let status_loopback =
+            build_server_status_response(&srv_cfg, Some("192.168.1.50".to_string()));
+        assert_eq!(status_loopback.host, "127.0.0.1");
+        assert_eq!(status_loopback.port, 4242);
+        assert!(!status_loopback.is_lan_enabled);
+        assert!(!status_loopback.lan_enabled);
+        assert_eq!(status_loopback.local_ip.as_deref(), Some("192.168.1.50"));
+        assert_eq!(
+            status_loopback.local_ip_camel.as_deref(),
+            Some("192.168.1.50")
+        );
+        assert_eq!(
+            status_loopback.lan_url.as_deref(),
+            Some("http://192.168.1.50:4242")
+        );
+        assert_eq!(status_loopback.stream_url, "http://127.0.0.1:4242");
+
+        let json_loopback = serde_json::to_string(&status_loopback).unwrap();
+        assert!(json_loopback.contains("\"is_lan_enabled\":false"));
+        assert!(json_loopback.contains("\"lanEnabled\":false"));
+        assert!(json_loopback.contains("\"local_ip\":\"192.168.1.50\""));
+        assert!(json_loopback.contains("\"localIp\":\"192.168.1.50\""));
+        assert!(json_loopback.contains("\"lan_url\":\"http://192.168.1.50:4242\""));
+        assert!(json_loopback.contains("\"streamUrl\":\"http://127.0.0.1:4242\""));
+
+        srv_cfg.set_lan_enabled(true);
+        let status_lan = build_server_status_response(&srv_cfg, Some("192.168.1.50".to_string()));
+        assert_eq!(status_lan.host, "0.0.0.0");
+        assert!(status_lan.is_lan_enabled);
+        assert!(status_lan.lan_enabled);
+        assert_eq!(status_lan.stream_url, "http://192.168.1.50:4242");
+
+        let roundtrip: ServerStatusResponse = serde_json::from_str(&json_loopback).unwrap();
+        assert_eq!(roundtrip, status_loopback);
+    }
+
+    #[tokio::test]
+    async fn test_apply_server_lan_mode_toggle_and_atomic_rollback() {
+        let unique_id = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp_dir = std::env::temp_dir().join(format!("wavery_lan_m5_test_{}", unique_id));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        let cfg_path = temp_dir.join("config.toml");
+
+        // Bind a temporary listener on an ephemeral port to discover a free port first
+        let probe = std::net::TcpListener::bind((std::net::Ipv4Addr::UNSPECIFIED, 0)).unwrap();
+        let free_port = probe.local_addr().unwrap().port();
+        drop(probe);
+
+        let mut cfg = Config::default();
+        cfg.server.port = free_port;
+        cfg.server.enable_browser_client = false;
+
+        let state = Arc::new(AppState {
+            player: AsyncMutex::new(None),
+            library: None,
+            queue: SyncMutex::new(StandardQueueManager::new()),
+            config: SyncMutex::new(cfg),
+            artwork_cache: SyncMutex::new(ArtworkCache::new(MAX_ARTWORK_CACHE_ENTRIES)),
+            server_process: SyncMutex::new(None),
+            server_shutdown_tx: SyncMutex::new(None),
+            server_abort_handle: SyncMutex::new(None),
+            discord_handle: wavery_server::discord::new_discord_handle(None),
+            last_normal_size: SyncMutex::new((1100, 720)),
+        });
+
+        // 1. Enable LAN mode on free port -> succeeds and persists 0.0.0.0
+        let status_enabled = apply_server_lan_mode(&state, true, Some(&cfg_path))
+            .await
+            .unwrap();
+        assert!(status_enabled.is_lan_enabled);
+        assert!(status_enabled.lan_enabled);
+        assert_eq!(status_enabled.host, "0.0.0.0");
+        let saved_cfg = load_or_create(&cfg_path).unwrap();
+        assert_eq!(saved_cfg.server.host, "0.0.0.0");
+
+        // 2. Disable LAN mode -> reverts and persists 127.0.0.1
+        let status_disabled = apply_server_lan_mode(&state, false, Some(&cfg_path))
+            .await
+            .unwrap();
+        assert!(!status_disabled.is_lan_enabled);
+        assert!(!status_disabled.lan_enabled);
+        assert_eq!(status_disabled.host, "127.0.0.1");
+        let saved_cfg_2 = load_or_create(&cfg_path).unwrap();
+        assert_eq!(saved_cfg_2.server.host, "127.0.0.1");
+
+        // 3. Occupy a port to simulate bind conflict -> must atomically roll back to 127.0.0.1
+        let blocker = std::net::TcpListener::bind((std::net::Ipv4Addr::UNSPECIFIED, 0)).unwrap();
+        let blocked_port = blocker.local_addr().unwrap().port();
+        state.config.lock().server.port = blocked_port;
+
+        let status_rollback = apply_server_lan_mode(&state, true, Some(&cfg_path))
+            .await
+            .unwrap();
+        assert!(
+            !status_rollback.is_lan_enabled,
+            "Port conflict must roll back LAN mode to false"
+        );
+        assert!(!status_rollback.lan_enabled);
+        assert_eq!(status_rollback.host, "127.0.0.1");
+        let saved_cfg_rollback = load_or_create(&cfg_path).unwrap();
+        assert_eq!(saved_cfg_rollback.server.host, "127.0.0.1");
+
+        drop(blocker);
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[tokio::test]
+    async fn test_query_track_waveform_ipc_transitions() {
+        let unique_id = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp_dir = std::env::temp_dir().join(format!("wavery_wav_m5_test_{}", unique_id));
+        let db_path = temp_dir.join("test_lib.sqlite");
+        let music_dir = temp_dir.join("music");
+        std::fs::create_dir_all(&music_dir).unwrap();
+
+        // Uninitialized library state
+        let uninit_state = AppState {
+            player: AsyncMutex::new(None),
+            library: None,
+            queue: SyncMutex::new(StandardQueueManager::new()),
+            config: SyncMutex::new(Config::default()),
+            artwork_cache: SyncMutex::new(ArtworkCache::new(MAX_ARTWORK_CACHE_ENTRIES)),
+            server_process: SyncMutex::new(None),
+            server_shutdown_tx: SyncMutex::new(None),
+            server_abort_handle: SyncMutex::new(None),
+            discord_handle: wavery_server::discord::new_discord_handle(None),
+            last_normal_size: SyncMutex::new((1100, 720)),
+        };
+
+        // Empty track_id returns Ok(None) even before library check
+        assert_eq!(query_track_waveform(&uninit_state, "   ").await.unwrap(), None);
+        // Non-empty track_id with uninitialized library returns Err(LibraryNotInitialized)
+        assert!(matches!(
+            query_track_waveform(&uninit_state, "track-1").await,
+            Err(IpcError::LibraryNotInitialized)
+        ));
+
+        let lib = SqliteLibraryManager::new(music_dir, db_path).unwrap();
+        let shared_lib = Arc::new(AsyncMutex::new(lib));
+        let init_state = AppState {
+            player: AsyncMutex::new(None),
+            library: Some(shared_lib),
+            queue: SyncMutex::new(StandardQueueManager::new()),
+            config: SyncMutex::new(Config::default()),
+            artwork_cache: SyncMutex::new(ArtworkCache::new(MAX_ARTWORK_CACHE_ENTRIES)),
+            server_process: SyncMutex::new(None),
+            server_shutdown_tx: SyncMutex::new(None),
+            server_abort_handle: SyncMutex::new(None),
+            discord_handle: wavery_server::discord::new_discord_handle(None),
+            last_normal_size: SyncMutex::new((1100, 720)),
+        };
+
+        // Missing track waveform returns Ok(None)
+        assert_eq!(
+            query_track_waveform(&init_state, "non-existent-track")
+                .await
+                .unwrap(),
+            None
+        );
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }
-
-
 

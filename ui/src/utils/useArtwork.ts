@@ -26,13 +26,16 @@ export function useArtwork(trackId?: string): string | null {
     const cached = getCachedArtworkSync(trackId);
     if (cached) {
       setArtworkUrl(cached);
+      if (!playerAdapter.isTauri() || cached.startsWith("data:") || cached.startsWith("http")) {
+        return;
+      }
     }
 
     playerAdapter
       .getArtwork(trackId)
       .then((url) => {
         if (isMounted && url) {
-          setArtworkUrl(url);
+          setArtworkUrl((prev) => (prev !== url ? url : prev));
         }
       })
       .catch(() => {

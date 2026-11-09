@@ -41,4 +41,3 @@ pub enum MprisError {
     #[error("Failed to emit MPRIS event or signal: {0}")]
     EmitError(String),
 }
-

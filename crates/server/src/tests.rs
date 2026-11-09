@@ -1,4 +1,6 @@
-use crate::{build_router, parse_range_header, AppState, ArtworkCache, CachedArtwork};
+use crate::{
+    build_router, parse_range_header, AppState, ArtworkCache, CachedArtwork, ServerStatusResponse,
+};
 use axum::body::{to_bytes, Body, Bytes};
 use axum::http::{header, Request, StatusCode};
 use std::fs::{self, File};
@@ -22,10 +24,16 @@ async fn test_server_health_and_stream_range() {
     let song_path = temp_dir.join("sample.mp3");
     {
         let mut f = File::create(&song_path).unwrap();
-        f.write_all(&[0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xAA, 0xBB, 0xCC, 0xDD]).unwrap();
+        f.write_all(&[
+            0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xAA, 0xBB, 0xCC, 0xDD,
+        ])
+        .unwrap();
     }
 
-    let track = manager.import_track(&song_path, ImportStrategy::Copy).await.unwrap();
+    let track = manager
+        .import_track(&song_path, ImportStrategy::Copy)
+        .await
+        .unwrap();
 
     let state = Arc::new(AppState::new(
         Arc::new(tokio::sync::Mutex::new(manager)),
@@ -117,7 +125,10 @@ async fn test_server_comprehensive_range_streaming_and_edge_cases() {
     let file_path = temp_dir.join("stream_test.mp3");
     fs::write(&file_path, &test_bytes).unwrap();
 
-    let track = manager.import_track(&file_path, ImportStrategy::Copy).await.unwrap();
+    let track = manager
+        .import_track(&file_path, ImportStrategy::Copy)
+        .await
+        .unwrap();
 
     let state = Arc::new(AppState::new(
         Arc::new(tokio::sync::Mutex::new(manager)),
@@ -135,7 +146,10 @@ async fn test_server_comprehensive_range_streaming_and_edge_cases() {
         .unwrap();
     let res = app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::PARTIAL_CONTENT);
-    assert_eq!(res.headers().get(header::CONTENT_RANGE).unwrap(), "bytes 0-0/20");
+    assert_eq!(
+        res.headers().get(header::CONTENT_RANGE).unwrap(),
+        "bytes 0-0/20"
+    );
     assert_eq!(res.headers().get(header::CONTENT_LENGTH).unwrap(), "1");
     let body = to_bytes(res.into_body(), 1024).await.unwrap();
     assert_eq!(&body[..], &[0]);
@@ -148,7 +162,10 @@ async fn test_server_comprehensive_range_streaming_and_edge_cases() {
         .unwrap();
     let res = app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::PARTIAL_CONTENT);
-    assert_eq!(res.headers().get(header::CONTENT_RANGE).unwrap(), "bytes 19-19/20");
+    assert_eq!(
+        res.headers().get(header::CONTENT_RANGE).unwrap(),
+        "bytes 19-19/20"
+    );
     assert_eq!(res.headers().get(header::CONTENT_LENGTH).unwrap(), "1");
     let body = to_bytes(res.into_body(), 1024).await.unwrap();
     assert_eq!(&body[..], &[19]);
@@ -161,7 +178,10 @@ async fn test_server_comprehensive_range_streaming_and_edge_cases() {
         .unwrap();
     let res = app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::PARTIAL_CONTENT);
-    assert_eq!(res.headers().get(header::CONTENT_RANGE).unwrap(), "bytes 5-10/20");
+    assert_eq!(
+        res.headers().get(header::CONTENT_RANGE).unwrap(),
+        "bytes 5-10/20"
+    );
     assert_eq!(res.headers().get(header::CONTENT_LENGTH).unwrap(), "6");
     let body = to_bytes(res.into_body(), 1024).await.unwrap();
     assert_eq!(&body[..], &[5, 6, 7, 8, 9, 10]);
@@ -174,7 +194,10 @@ async fn test_server_comprehensive_range_streaming_and_edge_cases() {
         .unwrap();
     let res = app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::PARTIAL_CONTENT);
-    assert_eq!(res.headers().get(header::CONTENT_RANGE).unwrap(), "bytes 15-19/20");
+    assert_eq!(
+        res.headers().get(header::CONTENT_RANGE).unwrap(),
+        "bytes 15-19/20"
+    );
     assert_eq!(res.headers().get(header::CONTENT_LENGTH).unwrap(), "5");
     let body = to_bytes(res.into_body(), 1024).await.unwrap();
     assert_eq!(&body[..], &[15, 16, 17, 18, 19]);
@@ -187,7 +210,10 @@ async fn test_server_comprehensive_range_streaming_and_edge_cases() {
         .unwrap();
     let res = app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::PARTIAL_CONTENT);
-    assert_eq!(res.headers().get(header::CONTENT_RANGE).unwrap(), "bytes 0-19/20");
+    assert_eq!(
+        res.headers().get(header::CONTENT_RANGE).unwrap(),
+        "bytes 0-19/20"
+    );
     assert_eq!(res.headers().get(header::CONTENT_LENGTH).unwrap(), "20");
     let body = to_bytes(res.into_body(), 1024).await.unwrap();
     assert_eq!(&body[..], &test_bytes[..]);
@@ -200,7 +226,10 @@ async fn test_server_comprehensive_range_streaming_and_edge_cases() {
         .unwrap();
     let res = app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::RANGE_NOT_SATISFIABLE);
-    assert_eq!(res.headers().get(header::CONTENT_RANGE).unwrap(), "bytes */20");
+    assert_eq!(
+        res.headers().get(header::CONTENT_RANGE).unwrap(),
+        "bytes */20"
+    );
 
     // Case 7: Non-existent track ID: /api/stream/ghost_id -> 404
     let req = Request::builder()
@@ -215,7 +244,9 @@ async fn test_server_comprehensive_range_streaming_and_edge_cases() {
     fs::write(&deleted_song, b"temp content").unwrap();
     let deleted_track = {
         let mut lib = state.library.lock().await;
-        lib.import_track(&deleted_song, ImportStrategy::Move).await.unwrap()
+        lib.import_track(&deleted_song, ImportStrategy::Move)
+            .await
+            .unwrap()
     };
     // Physically delete file from disk
     let _ = fs::remove_file(deleted_track.source.path());
@@ -246,6 +277,8 @@ async fn test_server_mime_types_for_audio_formats() {
         ("m4a", "audio/mp4"),
         ("wav", "audio/wav"),
         ("aac", "audio/aac"),
+        ("webm", "audio/webm"),
+        ("aiff", "audio/aiff"),
         ("unknown", "application/octet-stream"),
     ];
 
@@ -254,7 +287,10 @@ async fn test_server_mime_types_for_audio_formats() {
     for (ext, expected_mime) in formats {
         let file_path = temp_dir.join(format!("audio.{ext}"));
         fs::write(&file_path, b"test_audio_data_content").unwrap();
-        let track = manager.import_track(&file_path, ImportStrategy::Copy).await.unwrap();
+        let track = manager
+            .import_track(&file_path, ImportStrategy::Copy)
+            .await
+            .unwrap();
         track_map.push((track.id, expected_mime));
     }
 
@@ -395,21 +431,30 @@ fn test_artwork_cache_replacement_and_capacity_hardening() {
 
     // 3. Oversized single entry eviction
     let mut small_cache = ArtworkCache::new(5, 80);
-    small_cache.insert("t1".into(), Some(CachedArtwork {
-        data: Bytes::from(vec![0x01; 20]),
-        mime_type: "image/png".into(),
-    }));
-    small_cache.insert("t2".into(), Some(CachedArtwork {
-        data: Bytes::from(vec![0x02; 20]),
-        mime_type: "image/png".into(),
-    }));
+    small_cache.insert(
+        "t1".into(),
+        Some(CachedArtwork {
+            data: Bytes::from(vec![0x01; 20]),
+            mime_type: "image/png".into(),
+        }),
+    );
+    small_cache.insert(
+        "t2".into(),
+        Some(CachedArtwork {
+            data: Bytes::from(vec![0x02; 20]),
+            mime_type: "image/png".into(),
+        }),
+    );
     assert_eq!(small_cache.len(), 2);
 
     // Insert oversized 80-byte artwork
-    small_cache.insert("oversized".into(), Some(CachedArtwork {
-        data: Bytes::from(vec![0x03; 80]),
-        mime_type: "image/jpeg".into(),
-    }));
+    small_cache.insert(
+        "oversized".into(),
+        Some(CachedArtwork {
+            data: Bytes::from(vec![0x03; 80]),
+            mime_type: "image/jpeg".into(),
+        }),
+    );
     // All previous entries evicted
     assert_eq!(small_cache.len(), 1);
     assert!(small_cache.get("t1").is_none());
@@ -570,6 +615,19 @@ async fn test_server_config_endpoints_and_persistence() {
     let disk_reloaded = wavery_config::load_or_create(&cfg_path).unwrap();
     assert_eq!(disk_reloaded.general.language, "es");
 
+    // 5. GET /api/server/status
+    let status_req = Request::builder()
+        .uri("/api/server/status")
+        .body(Body::empty())
+        .unwrap();
+    let status_res = app.clone().oneshot(status_req).await.unwrap();
+    assert_eq!(status_res.status(), StatusCode::OK);
+    let status_body = to_bytes(status_res.into_body(), 1024 * 64).await.unwrap();
+    let status_json: ServerStatusResponse = serde_json::from_slice(&status_body).unwrap();
+    assert_eq!(status_json.host, "127.0.0.1");
+    assert_eq!(status_json.port, 4242);
+    assert!(!status_json.is_lan_enabled);
+
     let _ = fs::remove_dir_all(&temp_dir);
 }
 
@@ -670,10 +728,16 @@ async fn test_delete_track_endpoint_and_artwork_cache_eviction() {
     let song_path = temp_dir.join("song_to_delete.mp3");
     {
         let mut f = File::create(&song_path).unwrap();
-        f.write_all(&[0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xAA, 0xBB, 0xCC, 0xDD]).unwrap();
+        f.write_all(&[
+            0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xAA, 0xBB, 0xCC, 0xDD,
+        ])
+        .unwrap();
     }
 
-    let track = manager.import_track(&song_path, ImportStrategy::Copy).await.unwrap();
+    let track = manager
+        .import_track(&song_path, ImportStrategy::Copy)
+        .await
+        .unwrap();
 
     let state = Arc::new(AppState::new(
         Arc::new(tokio::sync::Mutex::new(manager)),
@@ -725,7 +789,9 @@ async fn test_delete_track_endpoint_and_artwork_cache_eviction() {
     // Import again and delete with remove_file=true
     let track2 = {
         let mut lib = state.library.lock().await;
-        lib.import_track(&song_path, ImportStrategy::Copy).await.unwrap()
+        lib.import_track(&song_path, ImportStrategy::Copy)
+            .await
+            .unwrap()
     };
     assert!(track2.source.path().exists());
 
@@ -755,10 +821,16 @@ async fn test_server_update_track_metadata_and_lyrics() {
     let song_path = temp_dir.join("sample.mp3");
     {
         let mut f = File::create(&song_path).unwrap();
-        f.write_all(&[0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xAA, 0xBB, 0xCC, 0xDD]).unwrap();
+        f.write_all(&[
+            0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xAA, 0xBB, 0xCC, 0xDD,
+        ])
+        .unwrap();
     }
 
-    let track = manager.import_track(&song_path, ImportStrategy::Copy).await.unwrap();
+    let track = manager
+        .import_track(&song_path, ImportStrategy::Copy)
+        .await
+        .unwrap();
     let state = Arc::new(AppState::new(
         Arc::new(tokio::sync::Mutex::new(manager)),
         LoftyMetadataReader::new(),
@@ -790,14 +862,18 @@ async fn test_server_update_track_metadata_and_lyrics() {
     assert_eq!(updated.metadata.title.as_deref(), Some("New Title"));
     assert_eq!(updated.metadata.artist.as_deref(), Some("New Artist"));
     assert_eq!(updated.metadata.album.as_deref(), Some("New Album"));
-    assert_eq!(updated.metadata.lyrics.as_deref(), Some("[00:01.00] Test Lyric"));
+    assert_eq!(
+        updated.metadata.lyrics.as_deref(),
+        Some("[00:01.00] Test Lyric")
+    );
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
 
 #[tokio::test]
 async fn test_server_update_artist_metadata_batch_rename() {
-    let temp_dir = std::env::temp_dir().join(format!("wavery_artist_meta_{}", uuid::Uuid::new_v4()));
+    let temp_dir =
+        std::env::temp_dir().join(format!("wavery_artist_meta_{}", uuid::Uuid::new_v4()));
     let lib_dir = temp_dir.join("library");
     let db_path = temp_dir.join("library.db");
     fs::create_dir_all(&lib_dir).unwrap();
@@ -806,15 +882,24 @@ async fn test_server_update_artist_metadata_batch_rename() {
     let song_path = temp_dir.join("sample.mp3");
     {
         let mut f = File::create(&song_path).unwrap();
-        f.write_all(&[0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xAA, 0xBB, 0xCC, 0xDD]).unwrap();
+        f.write_all(&[
+            0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xAA, 0xBB, 0xCC, 0xDD,
+        ])
+        .unwrap();
     }
 
-    let track = manager.import_track(&song_path, ImportStrategy::Copy).await.unwrap();
+    let track = manager
+        .import_track(&song_path, ImportStrategy::Copy)
+        .await
+        .unwrap();
     // Set initial artist name
     let mut initial_meta = track.metadata.clone();
     initial_meta.artist = Some("Original Band".to_string());
     initial_meta.album_artist = Some("Original Band".to_string());
-    let _ = manager.update_track_metadata(&track.id, &initial_meta, false).await.unwrap();
+    let _ = manager
+        .update_track_metadata(&track.id, &initial_meta, false)
+        .await
+        .unwrap();
 
     let state = Arc::new(AppState::new(
         Arc::new(tokio::sync::Mutex::new(manager)),
@@ -844,8 +929,265 @@ async fn test_server_update_artist_metadata_batch_rename() {
     let updated: Vec<wavery_core::models::Track> = serde_json::from_slice(&bytes).unwrap();
     assert_eq!(updated.len(), 1);
     assert_eq!(updated[0].metadata.artist.as_deref(), Some("Renamed Band"));
-    assert_eq!(updated[0].metadata.album_artist.as_deref(), Some("Renamed Band"));
+    assert_eq!(
+        updated[0].metadata.album_artist.as_deref(),
+        Some("Renamed Band")
+    );
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
 
+#[tokio::test]
+async fn test_waveform_endpoint_caching_and_not_found() {
+    let temp_dir = std::env::temp_dir().join(format!("wavery_srv_wf_{}", uuid::Uuid::new_v4()));
+    let lib_dir = temp_dir.join("library");
+    let db_path = temp_dir.join("library.db");
+    fs::create_dir_all(&lib_dir).unwrap();
+
+    let mut manager = SqliteLibraryManager::new(lib_dir.clone(), db_path).unwrap();
+    let song_path = temp_dir.join("sample.mp3");
+    {
+        let mut f = File::create(&song_path).unwrap();
+        f.write_all(&[
+            0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xAA, 0xBB, 0xCC, 0xDD,
+        ])
+        .unwrap();
+    }
+
+    let track = manager
+        .import_track(&song_path, ImportStrategy::Copy)
+        .await
+        .unwrap();
+
+    let points: Vec<f32> = (0..100).map(|i| (i as f32) / 99.0).collect();
+    let expected_wf = wavery_core::models::WaveformData::new(track.id.clone(), 1, points);
+    manager.save_waveform(&expected_wf).await.unwrap();
+
+    let state = Arc::new(AppState::new(
+        Arc::new(tokio::sync::Mutex::new(manager)),
+        LoftyMetadataReader::new(),
+        None,
+    ));
+    let app = build_router(state);
+
+    // 1. Valid track with saved waveform -> 200 OK + immutable cache headers + 100 points
+    let req = Request::builder()
+        .method("GET")
+        .uri(format!("/api/tracks/{}/waveform", track.id))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(
+        res.headers().get(header::CONTENT_TYPE).unwrap(),
+        "application/json"
+    );
+    assert_eq!(
+        res.headers().get(header::CACHE_CONTROL).unwrap(),
+        "public, max-age=604800, immutable"
+    );
+
+    let body = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let fetched_wf: wavery_core::models::WaveformData = serde_json::from_slice(&body).unwrap();
+    assert_eq!(fetched_wf.track_id, track.id);
+    assert_eq!(fetched_wf.version, 1);
+    assert_eq!(fetched_wf.points.len(), 100);
+    assert!(fetched_wf.is_valid_100_point_envelope());
+
+    // 2. Unknown track ID -> 404 Not Found
+    let missing_req = Request::builder()
+        .method("GET")
+        .uri("/api/tracks/nonexistent_track_id/waveform")
+        .body(Body::empty())
+        .unwrap();
+    let missing_res = app.oneshot(missing_req).await.unwrap();
+    assert_eq!(missing_res.status(), StatusCode::NOT_FOUND);
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[tokio::test]
+async fn test_security_boundary_middleware_loopback_and_remote_enforcement() {
+    use axum::extract::ConnectInfo;
+    use axum::http::Method;
+    use std::net::{IpAddr, SocketAddr};
+
+    // 1. Unit assertions for helper functions
+    assert!(crate::is_loopback_ip("127.0.0.1".parse::<IpAddr>().unwrap()));
+    assert!(crate::is_loopback_ip("::1".parse::<IpAddr>().unwrap()));
+    assert!(crate::is_loopback_ip(
+        "::ffff:127.0.0.1".parse::<IpAddr>().unwrap()
+    ));
+    assert!(!crate::is_loopback_ip(
+        "192.168.1.50".parse::<IpAddr>().unwrap()
+    ));
+    assert!(!crate::is_loopback_ip("10.0.0.5".parse::<IpAddr>().unwrap()));
+    assert!(!crate::is_loopback_ip("0.0.0.0".parse::<IpAddr>().unwrap()));
+
+    assert!(crate::is_destructive_endpoint(
+        &Method::POST,
+        "/api/library/rebuild"
+    ));
+    assert!(crate::is_destructive_endpoint(
+        &Method::POST,
+        "/api/library/vacuum"
+    ));
+    assert!(crate::is_destructive_endpoint(
+        &Method::POST,
+        "/api/library/scan"
+    ));
+    assert!(crate::is_destructive_endpoint(&Method::POST, "/api/import"));
+    assert!(crate::is_destructive_endpoint(
+        &Method::POST,
+        "/api/import/folder"
+    ));
+    assert!(crate::is_destructive_endpoint(
+        &Method::POST,
+        "/api/tracks/delete"
+    ));
+    assert!(crate::is_destructive_endpoint(
+        &Method::DELETE,
+        "/api/tracks/abc123"
+    ));
+    assert!(crate::is_destructive_endpoint(
+        &Method::POST,
+        "/api/config/import"
+    ));
+    assert!(crate::is_destructive_endpoint(
+        &Method::POST,
+        "/api/app/quit"
+    ));
+    assert!(crate::is_destructive_endpoint(
+        &Method::POST,
+        "/api/app/close-web"
+    ));
+    assert!(!crate::is_destructive_endpoint(&Method::GET, "/api/tracks"));
+    assert!(!crate::is_destructive_endpoint(
+        &Method::GET,
+        "/api/tracks/abc123/waveform"
+    ));
+
+    // 2. Router integration tests
+    let temp_dir = std::env::temp_dir().join(format!("wavery_srv_sec_{}", uuid::Uuid::new_v4()));
+    let lib_dir = temp_dir.join("library");
+    let db_path = temp_dir.join("library.db");
+    fs::create_dir_all(&lib_dir).unwrap();
+
+    let mut manager = SqliteLibraryManager::new(lib_dir.clone(), db_path).unwrap();
+    let song_path = temp_dir.join("sample.mp3");
+    {
+        let mut f = File::create(&song_path).unwrap();
+        f.write_all(&[
+            0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xAA, 0xBB, 0xCC, 0xDD,
+        ])
+        .unwrap();
+    }
+
+    let track = manager
+        .import_track(&song_path, ImportStrategy::Copy)
+        .await
+        .unwrap();
+    let wf = wavery_core::models::WaveformData::new(track.id.clone(), 1, vec![0.5; 100]);
+    manager.save_waveform(&wf).await.unwrap();
+
+    let state = Arc::new(AppState::new(
+        Arc::new(tokio::sync::Mutex::new(manager)),
+        LoftyMetadataReader::new(),
+        None,
+    ));
+    let app = build_router(state);
+
+    let remote_addr: SocketAddr = "192.168.1.50:54321".parse().unwrap();
+    let loopback_addr: SocketAddr = "127.0.0.1:54321".parse().unwrap();
+
+    let destructive_requests = vec![
+        ("POST", "/api/library/rebuild".to_string()),
+        ("POST", "/api/library/vacuum".to_string()),
+        ("POST", "/api/library/scan".to_string()),
+        ("POST", "/api/import".to_string()),
+        ("POST", "/api/import/folder".to_string()),
+        ("POST", "/api/tracks/delete".to_string()),
+        ("DELETE", format!("/api/tracks/{}", track.id)),
+        ("POST", "/api/config/import".to_string()),
+        ("POST", "/api/app/quit".to_string()),
+        ("POST", "/api/app/close-web".to_string()),
+    ];
+
+    // Remote ConnectInfo must be rejected with 403 Forbidden on all destructive endpoints
+    for (method, uri) in &destructive_requests {
+        let mut req = Request::builder()
+            .method(*method)
+            .uri(uri)
+            .body(Body::empty())
+            .unwrap();
+        req.extensions_mut().insert(ConnectInfo(remote_addr));
+
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(
+            res.status(),
+            StatusCode::FORBIDDEN,
+            "Expected 403 Forbidden for remote {method} {uri}"
+        );
+        let body = to_bytes(res.into_body(), 4096).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["status"], 403);
+    }
+
+    // Remote X-Forwarded-For must also be rejected with 403 Forbidden
+    let forwarded_req = Request::builder()
+        .method("POST")
+        .uri("/api/app/quit")
+        .header("x-forwarded-for", "192.168.1.50")
+        .body(Body::empty())
+        .unwrap();
+    let forwarded_res = app.clone().oneshot(forwarded_req).await.unwrap();
+    assert_eq!(forwarded_res.status(), StatusCode::FORBIDDEN);
+
+    // Remote LAN client MUST be allowed to read tracks and waveforms
+    let mut remote_tracks_req = Request::builder()
+        .method("GET")
+        .uri("/api/tracks")
+        .body(Body::empty())
+        .unwrap();
+    remote_tracks_req
+        .extensions_mut()
+        .insert(ConnectInfo(remote_addr));
+    let remote_tracks_res = app.clone().oneshot(remote_tracks_req).await.unwrap();
+    assert_eq!(remote_tracks_res.status(), StatusCode::OK);
+
+    let mut remote_wf_req = Request::builder()
+        .method("GET")
+        .uri(format!("/api/tracks/{}/waveform", track.id))
+        .body(Body::empty())
+        .unwrap();
+    remote_wf_req
+        .extensions_mut()
+        .insert(ConnectInfo(remote_addr));
+    let remote_wf_res = app.clone().oneshot(remote_wf_req).await.unwrap();
+    assert_eq!(remote_wf_res.status(), StatusCode::OK);
+
+    // Localhost (127.0.0.1) MUST be allowed to invoke destructive endpoints
+    let mut local_vacuum_req = Request::builder()
+        .method("POST")
+        .uri("/api/library/vacuum")
+        .body(Body::empty())
+        .unwrap();
+    local_vacuum_req
+        .extensions_mut()
+        .insert(ConnectInfo(loopback_addr));
+    let local_vacuum_res = app.clone().oneshot(local_vacuum_req).await.unwrap();
+    assert_eq!(local_vacuum_res.status(), StatusCode::OK);
+
+    let mut local_del_req = Request::builder()
+        .method("DELETE")
+        .uri(format!("/api/tracks/{}", track.id))
+        .body(Body::empty())
+        .unwrap();
+    local_del_req
+        .extensions_mut()
+        .insert(ConnectInfo(loopback_addr));
+    let local_del_res = app.oneshot(local_del_req).await.unwrap();
+    assert_eq!(local_del_res.status(), StatusCode::NO_CONTENT);
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}

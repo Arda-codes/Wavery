@@ -16,8 +16,9 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::io::SeekFrom;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
@@ -25,7 +26,9 @@ use tokio_util::io::ReaderStream;
 use tower_http::cors::CorsLayer;
 use wavery_core::models::{ImportStrategy, Playlist, Track};
 use wavery_core::traits::{LibraryManager, MetadataReader};
-use wavery_library::{LoftyMetadataReader, SqliteLibraryManager};
+use wavery_library::{
+    DatabaseBackup, DatabaseHealth, DatabaseStats, LoftyMetadataReader, SqliteLibraryManager,
+};
 
 pub mod tray;
 pub use tray::ServerTrayManager;
@@ -77,7 +80,6 @@ pub struct CachedArtwork {
     pub mime_type: String,
 }
 
-
 /// Bounded LRU cache for extracted artwork with maximum entry count and byte capacity.
 pub struct ArtworkCache {
     entries: HashMap<String, Option<CachedArtwork>>,
@@ -106,7 +108,6 @@ impl ArtworkCache {
             current_bytes: 0,
         }
     }
-
 
     /// Creates a cache with default bounds (256 items, 64 MB).
     #[must_use]
@@ -160,7 +161,6 @@ impl ArtworkCache {
                 break;
             }
         }
-
 
         self.current_bytes += entry_bytes;
         self.lru_order.push_back(track_id.clone());
@@ -247,7 +247,8 @@ impl AppState {
         reader: LoftyMetadataReader,
         static_dir: Option<PathBuf>,
     ) -> Self {
-        let config_path = wavery_config::default_config_path().unwrap_or_else(|_| PathBuf::from("config.toml"));
+        let config_path =
+            wavery_config::default_config_path().unwrap_or_else(|_| PathBuf::from("config.toml"));
         let config = wavery_config::load_or_create(&config_path).unwrap_or_default();
         let session = wavery_config::default_session_path()
             .ok()
@@ -258,7 +259,9 @@ impl AppState {
             library,
             reader,
             static_dir,
-            artwork_cache: Arc::new(tokio::sync::RwLock::new(ArtworkCache::with_default_capacity())),
+            artwork_cache: Arc::new(tokio::sync::RwLock::new(
+                ArtworkCache::with_default_capacity(),
+            )),
             config: Arc::new(tokio::sync::RwLock::new(config)),
             config_path,
             session: Arc::new(tokio::sync::RwLock::new(session)),
@@ -285,7 +288,9 @@ impl AppState {
             library,
             reader,
             static_dir,
-            artwork_cache: Arc::new(tokio::sync::RwLock::new(ArtworkCache::with_default_capacity())),
+            artwork_cache: Arc::new(tokio::sync::RwLock::new(
+                ArtworkCache::with_default_capacity(),
+            )),
             config: Arc::new(tokio::sync::RwLock::new(config)),
             config_path,
             session: Arc::new(tokio::sync::RwLock::new(session)),
@@ -313,7 +318,9 @@ impl AppState {
             library,
             reader,
             static_dir,
-            artwork_cache: Arc::new(tokio::sync::RwLock::new(ArtworkCache::with_default_capacity())),
+            artwork_cache: Arc::new(tokio::sync::RwLock::new(
+                ArtworkCache::with_default_capacity(),
+            )),
             config: Arc::new(tokio::sync::RwLock::new(config)),
             config_path,
             session: Arc::new(tokio::sync::RwLock::new(session)),
@@ -323,23 +330,36 @@ impl AppState {
     }
 }
 
+/// Query parameters for track search endpoints.
 #[derive(Deserialize)]
 pub struct SearchQuery {
     pub q: Option<String>,
 }
 
+/// Request payload for importing a single external audio track.
 #[derive(Deserialize)]
 pub struct ImportRequest {
     pub source_path: String,
     pub strategy: ImportStrategy,
 }
 
+/// Request payload for recursively importing a directory of audio tracks.
 #[derive(Deserialize)]
 pub struct ImportFolderRequest {
     pub dir_path: String,
     pub strategy: ImportStrategy,
 }
 
+/// Request payload for deleting a track via POST.
+#[derive(Deserialize)]
+pub struct DeleteTrackRequest {
+    #[serde(alias = "track_id", alias = "trackId")]
+    pub id: String,
+    #[serde(default, alias = "removeFile")]
+    pub remove_file: Option<bool>,
+}
+
+/// Request payload for updating metadata of a single track.
 #[derive(Deserialize)]
 pub struct UpdateTrackMetadataRequest {
     #[serde(alias = "trackId")]
@@ -361,6 +381,7 @@ pub struct UpdateTrackMetadataRequest {
     pub write_tags: Option<bool>,
 }
 
+/// Request payload for batch-updating an artist's name across matching tracks.
 #[derive(Deserialize)]
 pub struct UpdateArtistMetadataRequest {
     #[serde(alias = "originalName")]
@@ -373,6 +394,7 @@ pub struct UpdateArtistMetadataRequest {
     pub write_tags: Option<bool>,
 }
 
+/// Per-track metadata override within an album batch update.
 #[derive(Deserialize)]
 pub struct AlbumTrackUpdate {
     pub track_id: String,
@@ -382,6 +404,7 @@ pub struct AlbumTrackUpdate {
     pub disc_number: Option<u32>,
 }
 
+/// Request payload for batch-updating album-level and per-track metadata.
 #[derive(Deserialize)]
 pub struct UpdateAlbumMetadataRequest {
     pub album: Option<String>,
@@ -392,30 +415,154 @@ pub struct UpdateAlbumMetadataRequest {
     pub write_tags: Option<bool>,
 }
 
+/// Request payload for creating a new user playlist.
 #[derive(Deserialize)]
 pub struct CreatePlaylistRequest {
     pub name: String,
 }
 
+/// Request payload for renaming an existing user playlist.
 #[derive(Deserialize)]
 pub struct RenamePlaylistRequest {
     pub name: String,
 }
 
+/// Request payload for appending tracks to a user playlist.
 #[derive(Deserialize)]
 pub struct AddPlaylistTracksRequest {
     pub track_ids: Vec<String>,
 }
 
+/// Response payload indicating the updated liked status of a track.
 #[derive(Serialize)]
 pub struct ToggleLikeResponse {
     pub liked: bool,
 }
 
+/// Generic status response payload for mutating API operations.
 #[derive(Serialize)]
 pub struct StatusResponse {
     pub ok: bool,
     pub message: String,
+}
+
+/// Response payload for a missing-file prune sweep.
+#[derive(Serialize)]
+pub struct PruneResponse {
+    /// Number of index rows removed because their audio file no longer exists.
+    pub removed: usize,
+}
+
+/// Returns `true` if the given IP address is a loopback address (`127.0.0.0/8`, `::1`,
+/// or IPv4-mapped IPv6 loopback `::ffff:127.0.0.1`).
+#[must_use]
+pub fn is_loopback_ip(ip: std::net::IpAddr) -> bool {
+    match ip {
+        std::net::IpAddr::V4(v4) => v4.is_loopback(),
+        std::net::IpAddr::V6(v6) => {
+            v6.is_loopback() || v6.to_ipv4_mapped().is_some_and(|v4| v4.is_loopback())
+        }
+    }
+}
+
+/// Returns `true` if the given HTTP method and URI path correspond to a destructive
+/// host or library operation that must be restricted to loopback clients.
+#[must_use]
+pub fn is_destructive_endpoint(method: &axum::http::Method, path: &str) -> bool {
+    let normalized = if path.len() > 1 {
+        path.trim_end_matches('/')
+    } else {
+        path
+    };
+
+    if *method == axum::http::Method::POST {
+        matches!(
+            normalized,
+            "/api/library/rebuild"
+                | "/api/library/vacuum"
+                | "/api/library/health"
+                | "/api/library/prune"
+                | "/api/library/backup"
+                | "/api/library/scan"
+                | "/api/import"
+                | "/api/import/folder"
+                | "/api/tracks/delete"
+                | "/api/config/import"
+                | "/api/app/quit"
+                | "/api/app/close-web"
+        )
+    } else if *method == axum::http::Method::DELETE {
+        normalized
+            .strip_prefix("/api/tracks/")
+            .is_some_and(|rest| !rest.is_empty())
+    } else {
+        false
+    }
+}
+
+/// Parses an IP address string (plain IP or `ip:port` socket address).
+fn parse_ip_str(raw: &str) -> Option<std::net::IpAddr> {
+    let trimmed = raw.trim();
+    if let Ok(ip) = trimmed.parse::<std::net::IpAddr>() {
+        return Some(ip);
+    }
+    if let Ok(sock) = trimmed.parse::<std::net::SocketAddr>() {
+        return Some(sock.ip());
+    }
+    None
+}
+
+/// Determines whether an incoming HTTP request originated from a loopback interface.
+///
+/// Inspects `ConnectInfo<SocketAddr>` (or `SocketAddr`/`IpAddr` request extensions) first.
+/// When the socket peer is non-loopback, immediately returns `false` (preventing header spoofing).
+/// When `ConnectInfo` is absent (such as in-process `oneshot` unit tests) or loopback,
+/// also inspects optional `x-forwarded-for` / `x-real-ip` headers.
+fn is_request_from_loopback(req: &axum::extract::Request) -> bool {
+    let ext_ip = req
+        .extensions()
+        .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+        .map(|ci| ci.0.ip())
+        .or_else(|| {
+            req.extensions()
+                .get::<std::net::SocketAddr>()
+                .map(std::net::SocketAddr::ip)
+        })
+        .or_else(|| req.extensions().get::<std::net::IpAddr>().copied());
+
+    if let Some(ip) = ext_ip {
+        if !is_loopback_ip(ip) {
+            return false;
+        }
+    }
+
+    for header_name in ["x-forwarded-for", "x-real-ip"] {
+        if let Some(val) = req.headers().get(header_name).and_then(|v| v.to_str().ok()) {
+            if let Some(first_hop) = val.split(',').next() {
+                if let Some(hdr_ip) = parse_ip_str(first_hop) {
+                    return is_loopback_ip(hdr_ip);
+                }
+            }
+        }
+    }
+
+    ext_ip.is_none_or(is_loopback_ip)
+}
+
+/// Axum middleware that enforces the localhost security boundary by rejecting
+/// destructive endpoints with `403 Forbidden` when requested from a non-loopback address.
+pub async fn security_boundary_middleware(
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> Response {
+    if is_destructive_endpoint(req.method(), req.uri().path()) && !is_request_from_loopback(&req) {
+        let body = Json(serde_json::json!({
+            "error": "Forbidden: destructive operations are restricted to localhost",
+            "status": StatusCode::FORBIDDEN.as_u16(),
+        }));
+        return (StatusCode::FORBIDDEN, body).into_response();
+    }
+    next.run(req).await
 }
 
 /// Builds the Axum router for the local streaming server.
@@ -423,13 +570,26 @@ pub fn build_router(state: Arc<AppState>) -> Router {
     let api_router = Router::new()
         .route("/api/health", get(health_handler))
         .route("/api/tracks", get(list_tracks_handler))
-        .route("/api/tracks/{id}", get(get_track_handler).delete(delete_track_handler))
+        .route(
+            "/api/tracks/{id}",
+            get(get_track_handler).delete(delete_track_handler),
+        )
+        .route("/api/tracks/delete", post(delete_track_post_handler))
         .route("/api/tracks/{id}/artwork", get(get_artwork_handler))
+        .route("/api/tracks/{id}/waveform", get(get_waveform_handler))
         .route("/api/tracks/metadata", post(update_track_metadata_handler))
         .route("/api/albums/metadata", post(update_album_metadata_handler))
-        .route("/api/artists/metadata", post(update_artist_metadata_handler))
+        .route(
+            "/api/artists/metadata",
+            post(update_artist_metadata_handler),
+        )
         .route("/api/library/rebuild", post(rebuild_library_handler))
         .route("/api/library/vacuum", post(vacuum_library_handler))
+        .route("/api/library/stats", get(library_stats_handler))
+        .route("/api/library/health", post(library_health_handler))
+        .route("/api/library/prune", post(prune_library_handler))
+        .route("/api/library/backup", post(backup_library_handler))
+        .route("/api/library/scan", post(scan_library_handler))
         .route("/api/stream/{id}", get(stream_track_handler))
         .route("/api/import", post(import_handler))
         .route("/api/import/folder", post(import_folder_handler))
@@ -461,13 +621,17 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             "/api/playlists/{id}/tracks/{track_id}",
             delete(remove_playlist_track_handler),
         )
+        .route("/api/server/status", get(server_status_handler))
         .route(
             "/api/config",
             get(get_config_handler).post(save_config_handler),
         )
         .route("/api/config/export", get(export_config_handler))
         .route("/api/config/import", post(import_config_handler))
-        .route("/api/session", get(get_session_handler).post(save_session_handler))
+        .route(
+            "/api/session",
+            get(get_session_handler).post(save_session_handler),
+        )
         .route("/api/app/claim-playback", post(claim_playback_handler))
         .route("/api/app/switch-to-native", post(switch_to_native_handler))
         .route("/api/app/events", get(app_events_handler))
@@ -481,17 +645,17 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route("/api/discord/status", get(discord_status_handler))
         .route(
             "/api/{*path}",
-            axum::routing::any(|| async {
-                (StatusCode::NOT_FOUND, "API endpoint not found")
-            }),
+            axum::routing::any(|| async { (StatusCode::NOT_FOUND, "API endpoint not found") }),
         )
+        .layer(axum::middleware::from_fn(security_boundary_middleware))
         .layer(CorsLayer::permissive())
         .with_state(state.clone());
 
     if let Some(static_dir) = &state.static_dir {
         if static_dir.exists() {
-            let serve_dir = tower_http::services::ServeDir::new(static_dir)
-                .not_found_service(tower_http::services::ServeFile::new(static_dir.join("index.html")));
+            let serve_dir = tower_http::services::ServeDir::new(static_dir).not_found_service(
+                tower_http::services::ServeFile::new(static_dir.join("index.html")),
+            );
             return api_router.fallback_service(serve_dir);
         }
     }
@@ -667,14 +831,16 @@ pub async fn start_server_with_shutdown(
             Err(e) => return Err(e),
         }
     }
-    let listener = listener.ok_or_else(|| {
-        std::io::Error::new(std::io::ErrorKind::AddrInUse, "Port in use")
-    })?;
-    let _ = axum::serve(listener, router)
-        .with_graceful_shutdown(async move {
-            let _ = shutdown_rx.changed().await;
-        })
-        .await;
+    let listener = listener
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::AddrInUse, "Port in use"))?;
+    let _ = axum::serve(
+        listener,
+        router.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .with_graceful_shutdown(async move {
+        let _ = shutdown_rx.changed().await;
+    })
+    .await;
     Ok(())
 }
 
@@ -722,11 +888,28 @@ async fn delete_track_handler(
 ) -> Result<StatusCode, ServerError> {
     {
         let mut lib = state.library.lock().await;
-        lib.delete_track(&id, query.remove_file.unwrap_or(false)).await?;
+        lib.delete_track(&id, query.remove_file.unwrap_or(false))
+            .await?;
     }
     {
         let mut cache = state.artwork_cache.write().await;
         cache.remove(&id);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn delete_track_post_handler(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<DeleteTrackRequest>,
+) -> Result<StatusCode, ServerError> {
+    {
+        let mut lib = state.library.lock().await;
+        lib.delete_track(&req.id, req.remove_file.unwrap_or(false))
+            .await?;
+    }
+    {
+        let mut cache = state.artwork_cache.write().await;
+        cache.remove(&req.id);
     }
     Ok(StatusCode::NO_CONTENT)
 }
@@ -789,7 +972,9 @@ async fn update_track_metadata_handler(
         };
     }
 
-    let updated = lib.update_track_metadata(&req.track_id, &meta, write_tags).await?;
+    let updated = lib
+        .update_track_metadata(&req.track_id, &meta, write_tags)
+        .await?;
     Ok(Json(updated))
 }
 
@@ -822,7 +1007,8 @@ async fn update_artist_metadata_handler(
                 .as_deref()
                 .map(|a| {
                     let a_trimmed = a.trim();
-                    a_trimmed.to_lowercase() == orig_lower || (is_orig_unknown && a_trimmed.is_empty())
+                    a_trimmed.to_lowercase() == orig_lower
+                        || (is_orig_unknown && a_trimmed.is_empty())
                 })
                 .unwrap_or(false)
         } else {
@@ -844,7 +1030,9 @@ async fn update_artist_metadata_handler(
             if album_artist_match {
                 meta.album_artist = Some(req.new_name.clone());
             }
-            let updated = lib.update_track_metadata(&track_id, &meta, write_tags).await?;
+            let updated = lib
+                .update_track_metadata(&track_id, &meta, write_tags)
+                .await?;
             updated_tracks.push(updated);
         }
     }
@@ -888,7 +1076,9 @@ async fn update_album_metadata_handler(
                 meta.disc_number = Some(disc_num);
             }
 
-            let updated = lib.update_track_metadata(&track_update.track_id, &meta, write_tags).await?;
+            let updated = lib
+                .update_track_metadata(&track_update.track_id, &meta, write_tags)
+                .await?;
             updated_tracks.push(updated);
         }
     }
@@ -918,6 +1108,66 @@ async fn vacuum_library_handler(
         ok: true,
         message: "Database vacuumed and optimized successfully".to_string(),
     }))
+}
+
+async fn library_stats_handler(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<DatabaseStats>, ServerError> {
+    let artwork_cache_dir = state.config.read().await.library.cache_directory.clone();
+    let lib = state.library.lock().await;
+    Ok(Json(lib.database_stats(&artwork_cache_dir)?))
+}
+
+async fn library_health_handler(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<DatabaseHealth>, ServerError> {
+    let lib = state.library.lock().await;
+    Ok(Json(lib.database_health()?))
+}
+
+async fn prune_library_handler(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<PruneResponse>, ServerError> {
+    let mut lib = state.library.lock().await;
+    let removed = lib.prune_missing_tracks()?;
+    Ok(Json(PruneResponse { removed }))
+}
+
+async fn backup_library_handler(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<DatabaseBackup>, ServerError> {
+    let destination = {
+        let cfg = state.config.read().await;
+        let base = cfg
+            .library
+            .database_path
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| PathBuf::from("."));
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        base.join("backups")
+            .join(format!("wavery-library-backup-{now}.db"))
+    };
+
+    let lib = state.library.lock().await;
+    Ok(Json(lib.backup_database(&destination)?))
+}
+
+async fn scan_library_handler(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<Vec<Track>>, ServerError> {
+    let managed_dir = {
+        let cfg = state.config.read().await;
+        cfg.library.managed_directory.clone()
+    };
+    let mut lib = state.library.lock().await;
+    let tracks = lib
+        .import_directory(&managed_dir, ImportStrategy::Copy)
+        .await?;
+    Ok(Json(tracks))
 }
 
 async fn import_handler(
@@ -950,7 +1200,10 @@ pub struct PickDialogResponse {
 /// Native host file chooser dialog for single audio tracks.
 async fn pick_file_dialog_handler() -> Json<PickDialogResponse> {
     let file = rfd::AsyncFileDialog::new()
-        .add_filter("Audio Files", &["mp3", "flac", "ogg", "opus", "m4a", "wav", "aac"])
+        .add_filter(
+            "Audio Files",
+            &["mp3", "flac", "ogg", "opus", "m4a", "wav", "aac"],
+        )
         .set_title("Select Audio Track to Ingest")
         .pick_file()
         .await;
@@ -1120,7 +1373,8 @@ async fn get_artwork_handler(
                         res.headers_mut().insert(header::CONTENT_TYPE, mime);
                     }
                     if let Ok(cache_control) = "public, max-age=86400, immutable".parse() {
-                        res.headers_mut().insert(header::CACHE_CONTROL, cache_control);
+                        res.headers_mut()
+                            .insert(header::CACHE_CONTROL, cache_control);
                     }
                     if let Ok(etag) = format!("\"{id}\"").parse() {
                         res.headers_mut().insert(header::ETAG, etag);
@@ -1134,17 +1388,18 @@ async fn get_artwork_handler(
 
     let track_path = {
         let lib = state.library.lock().await;
-        let track = lib.get_track(&id).ok_or_else(|| ServerError::TrackNotFound(id.clone()))?;
+        let track = lib
+            .get_track(&id)
+            .ok_or_else(|| ServerError::TrackNotFound(id.clone()))?;
         track.source.path().clone()
     };
 
     let reader = state.reader.clone();
     let track_path_clone = track_path.clone();
-    let artwork_opt = tokio::task::spawn_blocking(move || {
-        reader.read_artwork(&track_path_clone).ok().flatten()
-    })
-    .await
-    .map_err(|e| ServerError::Internal(e.to_string()))?;
+    let artwork_opt =
+        tokio::task::spawn_blocking(move || reader.read_artwork(&track_path_clone).ok().flatten())
+            .await
+            .map_err(|e| ServerError::Internal(e.to_string()))?;
 
     let cached_art = artwork_opt.map(|art| CachedArtwork {
         data: Bytes::from(art.data),
@@ -1163,12 +1418,42 @@ async fn get_artwork_handler(
                 res.headers_mut().insert(header::CONTENT_TYPE, mime);
             }
             if let Ok(cache_control) = "public, max-age=86400, immutable".parse() {
-                res.headers_mut().insert(header::CACHE_CONTROL, cache_control);
+                res.headers_mut()
+                    .insert(header::CACHE_CONTROL, cache_control);
             }
             if let Ok(etag) = format!("\"{id}\"").parse() {
                 res.headers_mut().insert(header::ETAG, etag);
             }
             Ok(res)
+        }
+        None => Err(ServerError::TrackNotFound(id)),
+    }
+}
+
+/// Returns the pre-computed or on-demand 100-point waveform peak envelope for a track.
+async fn get_waveform_handler(
+    AxumPath(id): AxumPath<String>,
+    State(state): State<Arc<AppState>>,
+) -> Result<Response, ServerError> {
+    let waveform_opt = {
+        let lib = state.library.lock().await;
+        if lib.get_track(&id).is_none() {
+            return Err(ServerError::TrackNotFound(id));
+        }
+        lib.get_waveform(&id).await?
+    };
+
+    match waveform_opt {
+        Some(waveform) => {
+            let json_bytes = serde_json::to_vec(&waveform).map_err(|e| {
+                ServerError::Internal(format!("Failed to serialize waveform: {e}"))
+            })?;
+            Response::builder()
+                .status(StatusCode::OK)
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::CACHE_CONTROL, "public, max-age=604800, immutable")
+                .body(Body::from(json_bytes))
+                .map_err(|e| ServerError::Internal(e.to_string()))
         }
         None => Err(ServerError::TrackNotFound(id)),
     }
@@ -1183,7 +1468,9 @@ async fn stream_track_handler(
 ) -> Result<Response, ServerError> {
     let file_path = {
         let lib = state.library.lock().await;
-        let track = lib.get_track(&id).ok_or_else(|| ServerError::TrackNotFound(id.clone()))?;
+        let track = lib
+            .get_track(&id)
+            .ok_or_else(|| ServerError::TrackNotFound(id.clone()))?;
         track.source.path().clone()
     };
 
@@ -1206,9 +1493,11 @@ async fn stream_track_handler(
         "flac" => "audio/flac",
         "ogg" => "audio/ogg",
         "opus" => "audio/opus",
-        "m4a" => "audio/mp4",
+        "m4a" | "alac" => "audio/mp4",
         "wav" => "audio/wav",
         "aac" => "audio/aac",
+        "webm" | "weba" => "audio/webm",
+        "aiff" | "aif" => "audio/aiff",
         _ => "application/octet-stream",
     };
 
@@ -1333,7 +1622,9 @@ pub fn find_native_desktop_executable() -> Option<PathBuf> {
     #[cfg(target_os = "windows")]
     {
         if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
-            let p = PathBuf::from(local_app_data).join("Wavery").join("wavery-tauri.exe");
+            let p = PathBuf::from(local_app_data)
+                .join("Wavery")
+                .join("wavery-tauri.exe");
             if p.is_file() {
                 return Some(p);
             }
@@ -1419,9 +1710,7 @@ pub fn open_browser_url(url: &str) -> Result<(), std::io::Error> {
     }
     #[cfg(target_os = "macos")]
     {
-        let _ = std::process::Command::new("open")
-            .arg(url)
-            .spawn();
+        let _ = std::process::Command::new("open").arg(url).spawn();
     }
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
@@ -1551,6 +1840,65 @@ pub fn spawn_native_process() -> Result<(), std::io::Error> {
     Ok(())
 }
 
+/// Status and network binding configuration of the server.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServerStatusResponse {
+    /// Active bind host (e.g. "127.0.0.1" or "0.0.0.0").
+    pub host: String,
+    /// Active listen port (e.g. 4242).
+    pub port: u16,
+    /// Whether external LAN access is permitted.
+    #[serde(default)]
+    pub is_lan_enabled: bool,
+    /// CamelCase representation of `is_lan_enabled` for frontend clients.
+    #[serde(rename = "lanEnabled", default)]
+    pub lan_enabled: bool,
+    /// Primary local network IP address (e.g. "192.168.1.50") if discoverable.
+    #[serde(default)]
+    pub local_ip: Option<String>,
+    /// CamelCase representation of `local_ip` for frontend clients.
+    #[serde(rename = "localIp", default)]
+    pub local_ip_camel: Option<String>,
+    /// Full LAN streaming URL (e.g. "http://192.168.1.50:4242").
+    #[serde(default)]
+    pub lan_url: Option<String>,
+    /// CamelCase representation of `lan_url` (`streamUrl`) for frontend clients.
+    #[serde(rename = "streamUrl", default)]
+    pub stream_url: Option<String>,
+}
+
+/// Discovers the local primary network IP address via UDP socket route inspection (RFC 1122).
+pub fn get_local_ip() -> Option<String> {
+    let socket = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
+    socket.connect("8.8.8.8:80").ok()?;
+    let addr = socket.local_addr().ok()?;
+    let ip = addr.ip();
+    if ip.is_loopback() || ip.is_unspecified() {
+        None
+    } else {
+        Some(ip.to_string())
+    }
+}
+
+async fn server_status_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let cfg = state.config.read().await;
+    let is_lan = cfg.server.is_lan_enabled();
+    let host = cfg.server.host.clone();
+    let port = cfg.server.port;
+    let local_ip = get_local_ip();
+    let lan_url = local_ip.as_ref().map(|ip| format!("http://{ip}:{port}"));
+    Json(ServerStatusResponse {
+        host,
+        port,
+        is_lan_enabled: is_lan,
+        lan_enabled: is_lan,
+        local_ip_camel: local_ip.clone(),
+        local_ip,
+        stream_url: lan_url.clone(),
+        lan_url,
+    })
+}
+
 async fn get_config_handler(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<wavery_config::Config>, ServerError> {
@@ -1605,10 +1953,13 @@ async fn import_config_handler(
     State(state): State<Arc<AppState>>,
     Json(req): Json<serde_json::Value>,
 ) -> Result<Json<wavery_config::Config>, ServerError> {
-    let imported_config: wavery_config::Config = if let Some(s) = req.get("json_str").and_then(|v| v.as_str()) {
+    let imported_config: wavery_config::Config = if let Some(s) =
+        req.get("json_str").and_then(|v| v.as_str())
+    {
         serde_json::from_str(s).map_err(|e| ServerError::Internal(format!("Invalid JSON: {e}")))?
     } else {
-        serde_json::from_value(req).map_err(|e| ServerError::Internal(format!("Invalid JSON config: {e}")))?
+        serde_json::from_value(req)
+            .map_err(|e| ServerError::Internal(format!("Invalid JSON config: {e}")))?
     };
 
     wavery_config::save(&state.config_path, &imported_config)
@@ -1742,7 +2093,9 @@ async fn close_web_handler(
 async fn quit_app_handler(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<StatusResponse>, ServerError> {
-    tracing::info!("Broadcasting close signal to web clients and shutting down Wavery background server...");
+    tracing::info!(
+        "Broadcasting close signal to web clients and shutting down Wavery background server..."
+    );
     let _ = state.app_signal_tx.send("close".to_string());
     tokio::spawn(async {
         tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
@@ -1786,9 +2139,7 @@ async fn discord_set_presence_handler(
 /// `DELETE /api/discord/presence`
 ///
 /// Clears the Discord Rich Presence activity (called when playback stops).
-async fn discord_clear_presence_handler(
-    State(state): State<Arc<AppState>>,
-) -> impl IntoResponse {
+async fn discord_clear_presence_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let handle = Arc::clone(&state.discord_handle);
     tokio::task::spawn_blocking(move || {
         let lock = handle.blocking_read();
@@ -1804,6 +2155,7 @@ async fn discord_clear_presence_handler(
     Json(serde_json::json!({ "ok": true }))
 }
 
+/// Query parameters for inspecting or overriding the Discord application ID.
 #[derive(Deserialize)]
 pub struct DiscordStatusQuery {
     pub app_id: Option<String>,
@@ -1839,5 +2191,3 @@ async fn discord_status_handler(
 
 #[cfg(test)]
 mod tests;
-
-

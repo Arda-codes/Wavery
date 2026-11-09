@@ -3,10 +3,15 @@
 //! Enforces the Copy vs Move strategy: external files are either duplicated or moved
 //! into the internal managed library root directory (`~/.local/share/wavery/library/`).
 
-use crate::db::LibraryDatabase;
+use crate::db::{DatabaseBackup, DatabaseHealth, DatabaseStats, LibraryDatabase};
+use crate::m3u::{match_m3u_entries, parse_m3u};
+use crate::playlist_import::{
+    match_entries, parse_json, resolve_playlist, unmatched_preview, PlaylistImportSummary,
+};
 use crate::reader::LoftyMetadataReader;
 use async_trait::async_trait;
 use sha2::{Digest, Sha256};
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -16,14 +21,14 @@ use tokio::task::JoinSet;
 use walkdir::WalkDir;
 use wavery_core::error::LibraryError;
 use wavery_core::models::{
-    Album, Artist, ImportStrategy, Playlist, ScanProgress, ScanSummary, Track, TrackMetadata,
-    TrackSource,
+    Album, Artist, GenreInfo, ImportStrategy, Playlist, ScanProgress, ScanSummary, Track,
+    TrackMetadata, TrackSource, WaveformData,
 };
 use wavery_core::traits::{LibraryManager, MetadataReader};
 
 /// Supported audio extensions for directory discovery.
 const SUPPORTED_EXTENSIONS: &[&str] = &[
-    "mp3", "flac", "ogg", "opus", "m4a", "wav", "aac", "alac", "aiff", "wma",
+    "mp3", "flac", "ogg", "opus", "m4a", "wav", "aac", "alac", "aiff", "aif", "weba", "webm",
 ];
 
 /// Batch size for chunked parallel processing and database ingestion.
@@ -35,6 +40,11 @@ pub struct SqliteLibraryManager {
     db: Arc<LibraryDatabase>,
     reader: LoftyMetadataReader,
     tracks_cache: Vec<Track>,
+    albums_cache: Arc<Vec<Album>>,
+    artists_cache: Arc<Vec<Artist>>,
+    genres_cache: Arc<Vec<GenreInfo>>,
+    protected_artists: Vec<String>,
+    genre_mappings: HashMap<String, String>,
 }
 
 impl SqliteLibraryManager {
@@ -65,13 +75,46 @@ impl SqliteLibraryManager {
         }
 
         let tracks = db.load_all(&library_root)?;
-
-        Ok(Self {
+        let mut mgr = Self {
             library_root,
             db,
             reader,
             tracks_cache: tracks,
-        })
+            albums_cache: Arc::new(Vec::new()),
+            artists_cache: Arc::new(Vec::new()),
+            genres_cache: Arc::new(Vec::new()),
+            protected_artists: Vec::new(),
+            genre_mappings: HashMap::new(),
+        };
+        mgr.rebuild_cached_collections();
+        Ok(mgr)
+    }
+
+    /// Recomputes in-memory aggregated collections (albums, artists, genres).
+    fn rebuild_cached_collections(&mut self) {
+        let albums =
+            crate::clustering::group_tracks_by_album(&self.tracks_cache, &self.protected_artists);
+        let artists =
+            crate::clustering::group_tracks_by_artist(&self.tracks_cache, &self.protected_artists);
+        let genres = crate::clustering::extract_library_genres(
+            &self.tracks_cache,
+            Some(&self.genre_mappings),
+        );
+        self.albums_cache = Arc::new(albums);
+        self.artists_cache = Arc::new(artists);
+        self.genres_cache = Arc::new(genres);
+    }
+
+    /// Sets active protected artists and refreshes in-memory cached collections.
+    pub fn set_protected_artists(&mut self, artists: Vec<String>) {
+        self.protected_artists = artists;
+        self.rebuild_cached_collections();
+    }
+
+    /// Sets active genre mappings and refreshes in-memory cached collections.
+    pub fn set_genre_mappings(&mut self, mappings: HashMap<String, String>) {
+        self.genre_mappings = mappings;
+        self.rebuild_cached_collections();
     }
 
     /// Access the underlying `LibraryDatabase` instance.
@@ -80,14 +123,19 @@ impl SqliteLibraryManager {
         &self.db
     }
 
-    /// Query aggregated album summaries directly from SQLite.
+    /// Query pre-aggregated albums with compilation detection and track lists from memory cache.
     pub fn list_albums(&self) -> Result<Vec<Album>, LibraryError> {
-        self.db.list_albums()
+        Ok((*self.albums_cache).clone())
     }
 
-    /// Query aggregated artist summaries directly from SQLite.
+    /// Query pre-aggregated artist profiles with own albums, appearances, and track lists from memory cache.
     pub fn list_artists(&self) -> Result<Vec<Artist>, LibraryError> {
-        self.db.list_artists()
+        Ok((*self.artists_cache).clone())
+    }
+
+    /// Query pre-aggregated genres with track lists sorted descending by popularity from memory cache.
+    pub fn list_genres(&self) -> Result<Vec<GenreInfo>, LibraryError> {
+        Ok((*self.genres_cache).clone())
     }
 
     /// Query tracks for a specific album ordered by disc and track number.
@@ -107,6 +155,120 @@ impl SqliteLibraryManager {
     /// Creates a new empty playlist.
     pub fn create_playlist(&self, name: &str) -> Result<Playlist, LibraryError> {
         self.db.create_playlist(name)
+    }
+
+    /// Builds a Wavery playlist from a yt-dlp JSON file.
+    ///
+    /// Accepts both shapes yt-dlp writes: a playlist dump (`yt-dlp -J`) or a
+    /// per-video `*.info.json` sidecar. Entries are matched against tracks
+    /// already in the library; no audio is downloaded, moved, or re-tagged.
+    /// Re-importing the same playlist reuses it by name and appends only the
+    /// tracks that are not already there.
+    ///
+    /// # Errors
+    /// Returns a [`LibraryError`] when the file cannot be read or parsed, or
+    /// when none of its entries resolve to a library track.
+    fn apply_playlist_import(
+        &self,
+        name: &str,
+        total_entries: usize,
+        matched_ids: Vec<String>,
+        unmatched: Vec<String>,
+    ) -> Result<PlaylistImportSummary, LibraryError> {
+        if matched_ids.is_empty() {
+            return Err(LibraryError::TrackNotFound(format!(
+                "No tracks from \"{name}\" were found in the library. Import the matching audio files first."
+            )));
+        }
+
+        let existing = self
+            .list_playlists()?
+            .into_iter()
+            .find(|playlist| playlist.name.eq_ignore_ascii_case(name));
+
+        let (playlist, existing_ids) = match existing {
+            Some(playlist) => {
+                let track_ids = playlist.track_ids.clone();
+                (playlist, track_ids)
+            }
+            None => (self.create_playlist(name)?, Vec::new()),
+        };
+
+        let existing_set: HashSet<&str> = existing_ids.iter().map(String::as_str).collect();
+        let new_ids: Vec<String> = matched_ids
+            .iter()
+            .filter(|id| !existing_set.contains(id.as_str()))
+            .cloned()
+            .collect();
+        let already_in_playlist = matched_ids.len() - new_ids.len();
+
+        self.add_tracks_to_playlist(&playlist.id, &new_ids)?;
+
+        Ok(PlaylistImportSummary {
+            playlist_id: playlist.id,
+            playlist_name: playlist.name,
+            total_entries,
+            matched_tracks: matched_ids.len(),
+            unmatched_entries: unmatched.len(),
+            already_in_playlist,
+            unmatched_titles: unmatched_preview(unmatched),
+        })
+    }
+
+    /// Imports a playlist from an M3U or M3U8 file, matching entries against the library.
+    ///
+    /// # Errors
+    /// Returns a [`LibraryError`] when the file cannot be read or parsed, or
+    /// when none of its entries resolve to a library track.
+    pub fn import_playlist_m3u(
+        &self,
+        m3u_path: &Path,
+    ) -> Result<PlaylistImportSummary, LibraryError> {
+        let bytes = fs::read(m3u_path)?;
+        let content = String::from_utf8_lossy(&bytes);
+        let playlist = parse_m3u(m3u_path, &content)?;
+        let (matched_ids, unmatched) = match_m3u_entries(&playlist.entries, &self.tracks_cache);
+        self.apply_playlist_import(&playlist.name, playlist.entries.len(), matched_ids, unmatched)
+    }
+
+    /// Builds a Wavery playlist from a yt-dlp JSON dump or sibling `.info.json` files.
+    ///
+    /// # Errors
+    /// Returns a [`LibraryError`] when the file cannot be read or parsed, or
+    /// when none of its entries resolve to a library track.
+    pub fn import_playlist_json(
+        &self,
+        json_path: &Path,
+    ) -> Result<PlaylistImportSummary, LibraryError> {
+        let text = fs::read_to_string(json_path)?;
+        let document = parse_json(&text)?;
+        let (name, entries) = resolve_playlist(json_path, document)?;
+
+        let (matched_ids, unmatched) = match_entries(&entries, &self.tracks_cache);
+        self.apply_playlist_import(&name, entries.len(), matched_ids, unmatched)
+    }
+
+    /// Automatically routes playlist import by file extension (.m3u, .m3u8, or .json).
+    ///
+    /// # Errors
+    /// Returns a [`LibraryError`] when the file cannot be read or parsed, or
+    /// when none of its entries resolve to a library track.
+    pub fn import_playlist_file(
+        &self,
+        file_path: &Path,
+    ) -> Result<PlaylistImportSummary, LibraryError> {
+        let ext = file_path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_lowercase();
+        match ext.as_str() {
+            "m3u" | "m3u8" => self.import_playlist_m3u(file_path),
+            "json" => self.import_playlist_json(file_path),
+            _ => Err(LibraryError::IndexError(format!(
+                "Unsupported playlist file extension: \".{ext}\". Expected .m3u, .m3u8, or .json"
+            ))),
+        }
     }
 
     /// Fetches a playlist and its ordered tracks by playlist ID.
@@ -197,9 +359,7 @@ impl SqliteLibraryManager {
 
         // 3. Rescan the entire managed root directory
         let root = self.library_root.clone();
-        let scanned = self
-            .import_directory(&root, ImportStrategy::Copy)
-            .await?;
+        let scanned = self.import_directory(&root, ImportStrategy::Copy).await?;
 
         // 4. Vacuum and optimize SQLite storage
         self.db.vacuum_database()?;
@@ -210,6 +370,37 @@ impl SqliteLibraryManager {
     /// Vacuum SQLite database
     pub fn vacuum_database(&self) -> Result<(), LibraryError> {
         self.db.vacuum_database()
+    }
+
+    /// Collects database row counts and on-disk sizes for the settings control center.
+    pub fn database_stats(
+        &self,
+        artwork_cache_dir: &Path,
+    ) -> Result<DatabaseStats, LibraryError> {
+        self.db.stats(&self.library_root, artwork_cache_dir)
+    }
+
+    /// Runs a read-only integrity sweep of the database and its file references.
+    pub fn database_health(&self) -> Result<DatabaseHealth, LibraryError> {
+        self.db.health(&self.library_root)
+    }
+
+    /// Removes index rows whose managed audio file no longer exists and refreshes caches.
+    ///
+    /// Returns the number of pruned tracks. The in-memory track, album, artist,
+    /// and genre caches stay consistent with the database after the operation.
+    pub fn prune_missing_tracks(&mut self) -> Result<usize, LibraryError> {
+        let removed = self.db.prune_missing_files(&self.library_root)?;
+        if removed > 0 {
+            self.tracks_cache = self.db.load_all(&self.library_root)?;
+            self.rebuild_cached_collections();
+        }
+        Ok(removed)
+    }
+
+    /// Writes a consistent `VACUUM INTO` snapshot of the index to `destination`.
+    pub fn backup_database(&self, destination: &Path) -> Result<DatabaseBackup, LibraryError> {
+        self.db.backup_to(destination)
     }
 }
 
@@ -259,7 +450,8 @@ fn process_single_file(
                 .and_then(|s| s.to_str())
                 .unwrap_or("mp3");
             let sibling_canonical = source_path.with_file_name(format!("{base_stem}.{ext}"));
-            let managed_canonical = generate_managed_destination(library_root, source_path, &metadata);
+            let managed_canonical =
+                generate_managed_destination(library_root, source_path, &metadata);
 
             let canonical = if sibling_canonical.exists() {
                 sibling_canonical
@@ -305,11 +497,20 @@ fn process_single_file(
                 let b1 = fs::read(source_path).ok()?;
                 let b2 = fs::read(&target_dest).ok()?;
                 Some(b1 == b2)
-            })().unwrap_or(false);
+            })()
+            .unwrap_or(false);
 
             if !is_same_file {
-                let stem = target_dest.file_stem().and_then(|s| s.to_str()).unwrap_or("track").to_string();
-                let ext = target_dest.extension().and_then(|e| e.to_str()).unwrap_or("").to_string();
+                let stem = target_dest
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("track")
+                    .to_string();
+                let ext = target_dest
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .unwrap_or("")
+                    .to_string();
                 let parent = target_dest.parent().unwrap_or(library_root).to_path_buf();
                 let mut counter = 1;
                 loop {
@@ -396,12 +597,7 @@ fn generate_managed_destination(
         None => file_stem,
     };
 
-    let filename = format!(
-        "{}{}.{}",
-        track_prefix,
-        sanitize_filename(title_clean),
-        ext
-    );
+    let filename = format!("{}{}.{}", track_prefix, sanitize_filename(title_clean), ext);
 
     library_root
         .join(artist_clean)
@@ -417,10 +613,18 @@ fn compute_track_id(rel_path: &Path) -> String {
 }
 
 fn sanitize_filename(name: &str) -> String {
-    let invalid_chars = ['/', '\\', '?', '%', '*', ':', '|', '"', '<', '>', '\0', '\r', '\n', '\t'];
+    let invalid_chars = [
+        '/', '\\', '?', '%', '*', ':', '|', '"', '<', '>', '\0', '\r', '\n', '\t',
+    ];
     let mut cleaned: String = name
         .chars()
-        .map(|c| if invalid_chars.contains(&c) || c.is_control() { '_' } else { c })
+        .map(|c| {
+            if invalid_chars.contains(&c) || c.is_control() {
+                '_'
+            } else {
+                c
+            }
+        })
         .collect();
     if cleaned.trim().is_empty() {
         cleaned = "Unknown".into();
@@ -439,12 +643,7 @@ impl LibraryManager for SqliteLibraryManager {
         source_path: &Path,
         strategy: ImportStrategy,
     ) -> Result<Track, LibraryError> {
-        let track = process_single_file(
-            source_path,
-            strategy,
-            &self.library_root,
-            &self.reader,
-        )?;
+        let track = process_single_file(source_path, strategy, &self.library_root, &self.reader)?;
 
         // Persist to DB and update in-memory cache
         self.db.insert_or_update(&track, &self.library_root)?;
@@ -454,6 +653,7 @@ impl LibraryManager for SqliteLibraryManager {
         } else {
             self.tracks_cache.push(track.clone());
         }
+        self.rebuild_cached_collections();
 
         Ok(track)
     }
@@ -584,6 +784,7 @@ impl LibraryManager for SqliteLibraryManager {
             let _ = self.db.prune_missing_files(&self.library_root);
             self.tracks_cache = self.db.load_all(&self.library_root)?;
         }
+        self.rebuild_cached_collections();
 
         let summary = ScanSummary {
             scanned_files: total_files,
@@ -620,6 +821,7 @@ impl LibraryManager for SqliteLibraryManager {
         }
 
         self.tracks_cache.retain(|t| t.id != track_id);
+        self.rebuild_cached_collections();
         Ok(())
     }
 
@@ -701,7 +903,83 @@ impl LibraryManager for SqliteLibraryManager {
         self.tracks_cache[pos].metadata.year = metadata.year;
         self.tracks_cache[pos].metadata.genre = metadata.genre.clone();
         self.tracks_cache[pos].metadata.lyrics = metadata.lyrics.clone();
+        if metadata.replaygain_track_gain.is_some() {
+            self.tracks_cache[pos].metadata.replaygain_track_gain = metadata.replaygain_track_gain;
+        }
+        if metadata.replaygain_track_peak.is_some() {
+            self.tracks_cache[pos].metadata.replaygain_track_peak = metadata.replaygain_track_peak;
+        }
+        if metadata.replaygain_album_gain.is_some() {
+            self.tracks_cache[pos].metadata.replaygain_album_gain = metadata.replaygain_album_gain;
+        }
+        if metadata.replaygain_album_peak.is_some() {
+            self.tracks_cache[pos].metadata.replaygain_album_peak = metadata.replaygain_album_peak;
+        }
 
+        self.rebuild_cached_collections();
         Ok(self.tracks_cache[pos].clone())
+    }
+
+    fn list_albums(&self) -> Result<Vec<Album>, LibraryError> {
+        Ok((*self.albums_cache).clone())
+    }
+
+    fn list_artists(&self) -> Result<Vec<Artist>, LibraryError> {
+        Ok((*self.artists_cache).clone())
+    }
+
+    fn list_genres(&self) -> Result<Vec<GenreInfo>, LibraryError> {
+        Ok((*self.genres_cache).clone())
+    }
+
+    async fn get_waveform(&self, track_id: &str) -> Result<Option<WaveformData>, LibraryError> {
+        if let Some(cached) = self.db.get_waveform(track_id)? {
+            return Ok(Some(cached));
+        }
+
+        let track_path = self
+            .get_track(track_id)
+            .map(|t| t.source.path().clone())
+            .or_else(|| {
+                self.db
+                    .get_track(track_id, &self.library_root)
+                    .ok()
+                    .flatten()
+                    .map(|t| t.source.path().clone())
+            });
+
+        let Some(rel_or_abs) = track_path else {
+            return Ok(None);
+        };
+
+        let full_path = if rel_or_abs.is_absolute() {
+            rel_or_abs
+        } else {
+            self.library_root.join(rel_or_abs)
+        };
+
+        if !full_path.is_file() {
+            return Ok(None);
+        }
+
+        let tid = track_id.to_string();
+        let db = Arc::clone(&self.db);
+        let computed = tokio::task::spawn_blocking(move || {
+            match crate::waveform::compute_waveform_peaks(&tid, &full_path) {
+                Ok(wf) => {
+                    let _ = db.save_waveform(&wf);
+                    Some(wf)
+                }
+                Err(_) => None,
+            }
+        })
+        .await
+        .map_err(|e| LibraryError::IndexError(format!("Waveform task join error: {e}")))?;
+
+        Ok(computed)
+    }
+
+    async fn save_waveform(&mut self, waveform: &WaveformData) -> Result<(), LibraryError> {
+        self.db.save_waveform(waveform)
     }
 }

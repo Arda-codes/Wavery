@@ -10,8 +10,11 @@ description = "File scanning, tag reading (lofty), and SQLite database for Waver
 wavery-core = { workspace = true }
 rusqlite = { version = "0.33", features = ["bundled"] }
 lofty = "0.21"
+symphonia = { version = "0.5", default-features = false, features = ["aac", "adpcm", "aiff", "alac", "flac", "isomp4", "mkv", "mp3", "pcm", "vorbis", "wav"] }
 uuid = { workspace = true }
 async-trait = { workspace = true }
 walkdir = "2.5"
 sha2 = "0.10"
+serde = { workspace = true }
+serde_json = { workspace = true }
 tokio = { workspace = true }

@@ -2,7 +2,10 @@ import { create } from "zustand";
 import { playerAdapter } from "../services/adapter";
 import {
   DEFAULT_PROTECTED_ARTISTS,
+  DEFAULT_GENRE_MAPPINGS,
   setProtectedArtists as setLibProtectedArtists,
+  setHiddenArtists as setLibHiddenArtists,
+  setGenreMappings as setLibGenreMappings,
 } from "../utils/library";
 import { useLibraryStore } from "./libraryStore";
 
@@ -18,12 +21,28 @@ export type ThemeMode =
   | "macchiato"
   | "frappe"
   | "latte"
+  | "nord"
+  | "snow"
+  | "solarized"
+  | "sand"
+  | "tokyo"
+  | "dawn"
+  | "gruvbox"
+  | "parchment"
+  | "rosepine"
+  | "bloom"
   | "system"
   | "custom";
 
 export type ReplayGainMode = "off" | "track" | "album";
 export type AlbumGridSize = "compact" | "medium" | "spacious";
 export type RowDensity = "comfortable" | "compact";
+/**
+ * How the collapsed mobile mini player exposes track skipping:
+ * `"buttons"` shows previous/next either side of play, `"swipe"` hides them
+ * and a horizontal swipe on the card skips instead.
+ */
+export type MiniPlayerControls = "buttons" | "swipe";
 
 export interface CustomTheme {
   id: string;
@@ -42,11 +61,13 @@ export interface CustomTheme {
   accentColor: string;
 }
 
+export type ThemeCategory = "Standard" | "Atmospheric" | "Catppuccin" | "Ecosystem" | "Special";
+
 export interface ThemePresetDefinition {
   id: ThemeMode;
   name: string;
   desc: string;
-  category: "Standard" | "Atmospheric" | "Catppuccin" | "Special";
+  category: ThemeCategory;
   isLight: boolean;
   bg: string;
   surface: string;
@@ -102,10 +123,10 @@ export const THEME_PRESETS: Record<string, ThemePresetDefinition> = {
     surface: "#FFFFFF",
     deck: "rgba(235, 236, 240, 0.96)",
     sidebar: "rgba(240, 241, 245, 0.98)",
-    border: "rgba(0, 0, 0, 0.09)",
+    border: "rgba(0, 0, 0, 0.10)",
     textPrimary: "#18181B",
-    textSecondary: "#52525B",
-    textMuted: "#71717A",
+    textSecondary: "#3F3F46",
+    textMuted: "#5A5A62",
     accentColor: "#0A84FF",
   },
   dark: {
@@ -246,11 +267,171 @@ export const THEME_PRESETS: Record<string, ThemePresetDefinition> = {
     surface: "#FFFFFF",
     deck: "rgba(230, 233, 239, 0.96)",
     sidebar: "rgba(239, 241, 245, 0.98)",
-    border: "rgba(30, 102, 245, 0.15)",
+    border: "rgba(30, 102, 245, 0.16)",
     textPrimary: "#4C4F69",
-    textSecondary: "#5C5F77",
-    textMuted: "#8C8FA1",
+    textSecondary: "#43465D",
+    textMuted: "#565970",
     accentColor: "#1E66F5",
+  },
+  nord: {
+    id: "nord",
+    name: "Nord",
+    desc: "Arctic nocturnal slate with Frost cyan glow",
+    category: "Ecosystem",
+    isLight: false,
+    bg: "#2E3440",
+    surface: "#3B4252",
+    deck: "rgba(46, 52, 64, 0.95)",
+    sidebar: "rgba(36, 41, 51, 0.98)",
+    border: "rgba(136, 192, 208, 0.18)",
+    textPrimary: "#ECEFF4",
+    textSecondary: "#D8DEE9",
+    textMuted: "#81A1C1",
+    accentColor: "#88C0D0",
+  },
+  snow: {
+    id: "snow",
+    name: "Snowstorm",
+    desc: "Pure Scandinavian polar winter frost with Ice blue",
+    category: "Ecosystem",
+    isLight: true,
+    bg: "#ECEFF4",
+    surface: "#FFFFFF",
+    deck: "rgba(229, 233, 240, 0.96)",
+    sidebar: "rgba(236, 239, 244, 0.98)",
+    border: "rgba(94, 129, 172, 0.18)",
+    textPrimary: "#2E3440",
+    textSecondary: "#3B4252",
+    textMuted: "#4C566A",
+    accentColor: "#5E81AC",
+  },
+  solarized: {
+    id: "solarized",
+    name: "Solarized Dark",
+    desc: "Ethan Schoonover's calibrated deep teal with Solar amber",
+    category: "Ecosystem",
+    isLight: false,
+    bg: "#002B36",
+    surface: "#073642",
+    deck: "rgba(0, 38, 48, 0.95)",
+    sidebar: "rgba(0, 31, 39, 0.98)",
+    border: "rgba(42, 161, 152, 0.20)",
+    textPrimary: "#93A1A1",
+    textSecondary: "#839496",
+    textMuted: "#586E75",
+    accentColor: "#2AA198",
+  },
+  sand: {
+    id: "sand",
+    name: "Solarized Sand",
+    desc: "Warm ivory parchment paper with calibrated amber",
+    category: "Ecosystem",
+    isLight: true,
+    bg: "#FDF6E3",
+    surface: "#FFFFFF",
+    deck: "rgba(238, 232, 213, 0.96)",
+    sidebar: "rgba(247, 241, 226, 0.98)",
+    border: "rgba(181, 137, 0, 0.20)",
+    textPrimary: "#073642",
+    textSecondary: "#2A4B54",
+    textMuted: "#476068",
+    accentColor: "#B58900",
+  },
+  tokyo: {
+    id: "tokyo",
+    name: "Tokyo Night",
+    desc: "Shibuya metropolitan midnight with electric cyan & neon violet",
+    category: "Ecosystem",
+    isLight: false,
+    bg: "#1A1B26",
+    surface: "#24283B",
+    deck: "rgba(26, 27, 38, 0.95)",
+    sidebar: "rgba(19, 20, 29, 0.98)",
+    border: "rgba(122, 162, 247, 0.20)",
+    textPrimary: "#C0CAF5",
+    textSecondary: "#9AA5CE",
+    textMuted: "#565F89",
+    accentColor: "#7AA2F7",
+  },
+  dawn: {
+    id: "dawn",
+    name: "Tokyo Dawn",
+    desc: "Crisp early daylight in Tokyo with deep azure accents",
+    category: "Ecosystem",
+    isLight: true,
+    bg: "#E1E2E7",
+    surface: "#FFFFFF",
+    deck: "rgba(220, 222, 229, 0.96)",
+    sidebar: "rgba(229, 230, 236, 0.98)",
+    border: "rgba(46, 125, 233, 0.18)",
+    textPrimary: "#2E303E",
+    textSecondary: "#3B4058",
+    textMuted: "#525875",
+    accentColor: "#2E7DE9",
+  },
+  gruvbox: {
+    id: "gruvbox",
+    name: "Gruvbox Dark",
+    desc: "Retro groove warm charcoal basalt with golden ember orange",
+    category: "Ecosystem",
+    isLight: false,
+    bg: "#282828",
+    surface: "#32302F",
+    deck: "rgba(37, 35, 34, 0.95)",
+    sidebar: "rgba(29, 27, 26, 0.98)",
+    border: "rgba(254, 128, 25, 0.18)",
+    textPrimary: "#EBDBB2",
+    textSecondary: "#D5C4A1",
+    textMuted: "#928374",
+    accentColor: "#FE8019",
+  },
+  parchment: {
+    id: "parchment",
+    name: "Parchment",
+    desc: "Warm retro linen paper with burnt terracotta accent",
+    category: "Ecosystem",
+    isLight: true,
+    bg: "#FBF1C7",
+    surface: "#FFFFFF",
+    deck: "rgba(242, 229, 188, 0.96)",
+    sidebar: "rgba(247, 238, 203, 0.98)",
+    border: "rgba(175, 58, 3, 0.18)",
+    textPrimary: "#3C3836",
+    textSecondary: "#504945",
+    textMuted: "#665C54",
+    accentColor: "#AF3A03",
+  },
+  rosepine: {
+    id: "rosepine",
+    name: "Rosé Pine",
+    desc: "All-natural pine needles with soothing warm dusty rose",
+    category: "Ecosystem",
+    isLight: false,
+    bg: "#191724",
+    surface: "#1F1D2E",
+    deck: "rgba(25, 23, 36, 0.95)",
+    sidebar: "rgba(18, 16, 26, 0.98)",
+    border: "rgba(235, 188, 186, 0.18)",
+    textPrimary: "#E0DEF4",
+    textSecondary: "#908CAA",
+    textMuted: "#6E6A86",
+    accentColor: "#EBBCBA",
+  },
+  bloom: {
+    id: "bloom",
+    name: "Bloom",
+    desc: "Delicate morning dawn pastel with blooming rose coral",
+    category: "Ecosystem",
+    isLight: true,
+    bg: "#FAF4ED",
+    surface: "#FFFFFF",
+    deck: "rgba(242, 233, 222, 0.96)",
+    sidebar: "rgba(247, 240, 231, 0.98)",
+    border: "rgba(215, 130, 126, 0.20)",
+    textPrimary: "#575279",
+    textSecondary: "#484358",
+    textMuted: "#656075",
+    accentColor: "#D7827E",
   },
 };
 
@@ -315,6 +496,26 @@ export const GRADIENT_ACCENT_PRESETS: GradientAccentPreset[] = [
     gradient: "linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%)",
     primary: "#3B82F6",
   },
+  {
+    name: "Nordic Borealis",
+    gradient: "linear-gradient(135deg, #88C0D0 0%, #5E81AC 100%)",
+    primary: "#88C0D0",
+  },
+  {
+    name: "Solar Flare",
+    gradient: "linear-gradient(135deg, #B58900 0%, #CB4B16 100%)",
+    primary: "#B58900",
+  },
+  {
+    name: "Tokyo Shibuya",
+    gradient: "linear-gradient(135deg, #7AA2F7 0%, #BB9AF7 100%)",
+    primary: "#7AA2F7",
+  },
+  {
+    name: "Rosé Dawn",
+    gradient: "linear-gradient(135deg, #EBBCBA 0%, #D7827E 50%, #908CAA 100%)",
+    primary: "#EBBCBA",
+  },
 ];
 
 interface SettingsData {
@@ -341,6 +542,7 @@ interface SettingsData {
   savedCustomThemes: CustomTheme[];
   albumGridSize: AlbumGridSize;
   rowDensity: RowDensity;
+  miniPlayerControls: MiniPlayerControls;
   showVisualizer: boolean;
   showLyricsSmoothScroll: boolean;
   simplifyMode: boolean;
@@ -349,8 +551,13 @@ interface SettingsData {
 
   // Library & Metadata
   protectedArtists: string[];
+  hiddenArtists: string[];
+  genreMappings: Record<string, string>;
   managedDirectory: string;
   databasePath: string;
+
+  // Server & Network
+  allowLanStreaming: boolean;
 
   // Integrations
   enableMediaSession: boolean;
@@ -376,6 +583,15 @@ interface SettingsState extends SettingsData {
   addProtectedArtist: (artist: string) => void;
   removeProtectedArtist: (artist: string) => void;
   resetProtectedArtists: () => void;
+  setHiddenArtists: (artists: string[]) => void;
+  hideArtist: (artist: string) => void;
+  unhideArtist: (artist: string) => void;
+  toggleHideArtist: (artist: string) => void;
+  isArtistHidden: (artist: string) => boolean;
+  setGenreMappings: (mappings: Record<string, string>) => void;
+  setGenreMapping: (alias: string, canonical: string) => void;
+  removeGenreMapping: (alias: string) => void;
+  resetGenreMappings: () => void;
   addCustomColor: (color: string) => void;
   removeCustomColor: (color: string) => void;
   resetToDefaults: () => void;
@@ -418,6 +634,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
   savedCustomThemes: [],
   albumGridSize: "medium",
   rowDensity: "comfortable",
+  miniPlayerControls: "buttons",
   showVisualizer: true,
   showLyricsSmoothScroll: true,
   simplifyMode: false,
@@ -425,8 +642,12 @@ export const DEFAULT_SETTINGS: SettingsData = {
   enableGradients: true,
 
   protectedArtists: [...DEFAULT_PROTECTED_ARTISTS],
+  hiddenArtists: [],
+  genreMappings: { ...DEFAULT_GENRE_MAPPINGS },
   managedDirectory: "",
   databasePath: "",
+
+  allowLanStreaming: false,
 
   enableMediaSession: true,
   enableDiscordRpc: false,
@@ -466,6 +687,8 @@ export interface BackendConfig {
     supported_extensions?: string[];
     scan_on_startup?: boolean;
     protected_artists?: string[];
+    hidden_artists?: string[];
+    genre_mappings?: Record<string, string>;
   };
   server?: {
     host?: string;
@@ -482,6 +705,7 @@ export interface BackendConfig {
     show_wave_visualizer?: boolean;
     album_grid_size?: string;
     row_density?: string;
+    mini_player_controls?: string;
     show_visualizer?: boolean;
     show_lyrics_smooth_scroll?: boolean;
     simplify_mode?: boolean;
@@ -540,6 +764,15 @@ function mapBackendConfigToSettings(backendCfg: BackendConfig | null | undefined
         (a: unknown) => typeof a === "string" && (a as string).trim().length > 0
       );
     }
+    if (Array.isArray(backendCfg.library.hidden_artists)) {
+      s.hiddenArtists = backendCfg.library.hidden_artists.filter(
+        (a: unknown) => typeof a === "string" && (a as string).trim().length > 0
+      );
+    }
+    if (backendCfg.library.genre_mappings && typeof backendCfg.library.genre_mappings === "object") {
+      s.genreMappings = { ...backendCfg.library.genre_mappings };
+      setLibGenreMappings(s.genreMappings);
+    }
   }
 
   if (backendCfg.audio) {
@@ -566,7 +799,9 @@ function mapBackendConfigToSettings(backendCfg: BackendConfig | null | undefined
       const validModes: ThemeMode[] = [
         "dark", "light", "oled", "midnight", "ocean",
         "purple", "forest", "mocha", "macchiato",
-        "frappe", "latte", "system", "custom"
+        "frappe", "latte", "nord", "snow", "solarized",
+        "sand", "tokyo", "dawn", "gruvbox", "parchment",
+        "rosepine", "bloom", "system", "custom"
       ];
       if (validModes.includes(mode as ThemeMode)) {
         s.themeMode = mode as ThemeMode;
@@ -595,6 +830,12 @@ function mapBackendConfigToSettings(backendCfg: BackendConfig | null | undefined
     }
     if (typeof backendCfg.ui.row_density === "string") {
       s.rowDensity = backendCfg.ui.row_density as RowDensity;
+    }
+    if (
+      backendCfg.ui.mini_player_controls === "buttons" ||
+      backendCfg.ui.mini_player_controls === "swipe"
+    ) {
+      s.miniPlayerControls = backendCfg.ui.mini_player_controls;
     }
     if (typeof backendCfg.ui.show_visualizer === "boolean") {
       s.showVisualizer = backendCfg.ui.show_visualizer;
@@ -650,6 +891,13 @@ function mapBackendConfigToSettings(backendCfg: BackendConfig | null | undefined
     }
   }
 
+  if (backendCfg.server) {
+    if (typeof backendCfg.server.host === "string") {
+      const h = backendCfg.server.host.trim();
+      s.allowLanStreaming = h === "0.0.0.0" || h === "::";
+    }
+  }
+
   return s;
 }
 
@@ -688,9 +936,11 @@ function mapSettingsToBackendConfig(data: SettingsData): BackendConfig {
       ],
       scan_on_startup: data.autoScanOnStartup,
       protected_artists: data.protectedArtists || [...DEFAULT_PROTECTED_ARTISTS],
+      hidden_artists: data.hiddenArtists || [],
+      genre_mappings: data.genreMappings || { ...DEFAULT_GENRE_MAPPINGS },
     },
     server: {
-      host: cachedBackendConfig?.server?.host || "127.0.0.1",
+      host: data.allowLanStreaming ? "0.0.0.0" : "127.0.0.1",
       port: cachedBackendConfig?.server?.port || 4242,
       enable_browser_client: cachedBackendConfig?.server?.enable_browser_client ?? true,
     },
@@ -704,6 +954,7 @@ function mapSettingsToBackendConfig(data: SettingsData): BackendConfig {
       show_wave_visualizer: data.showVisualizer,
       album_grid_size: data.albumGridSize,
       row_density: data.rowDensity,
+      mini_player_controls: data.miniPlayerControls,
       show_visualizer: data.showVisualizer,
       show_lyrics_smooth_scroll: data.showLyricsSmoothScroll,
       simplify_mode: data.simplifyMode,
@@ -749,6 +1000,8 @@ function loadPersistedSettings(): SettingsData {
 
   if (typeof localStorage === "undefined") {
     setLibProtectedArtists(settings.protectedArtists);
+    setLibHiddenArtists(settings.hiddenArtists || []);
+    setLibGenreMappings(settings.genreMappings || { ...DEFAULT_GENRE_MAPPINGS });
     return settings;
   }
 
@@ -791,6 +1044,8 @@ function loadPersistedSettings(): SettingsData {
   }
 
   setLibProtectedArtists(settings.protectedArtists || [...DEFAULT_PROTECTED_ARTISTS]);
+  setLibHiddenArtists(settings.hiddenArtists || []);
+  setLibGenreMappings(settings.genreMappings || { ...DEFAULT_GENRE_MAPPINGS });
   return settings;
 }
 
@@ -835,108 +1090,163 @@ function ensureSystemMediaListener() {
   }
 }
 
+let isInitialBoot = true;
+let themeTransitionTimer: ReturnType<typeof setTimeout> | null = null;
+
 function applyDomClasses(
   simplify: boolean,
   theme: ThemeMode,
   accent: string,
   customTheme?: CustomTheme | null,
   enableGradients: boolean = true,
-  accentGradient?: string
+  accentGradient?: string,
+  onCommit?: () => void
 ) {
-  if (typeof document === "undefined" || !document.documentElement) return;
+  if (typeof document === "undefined" || !document.documentElement) {
+    if (onCommit) onCommit();
+    return;
+  }
 
   ensureSystemMediaListener();
 
-  if (document.documentElement.classList) {
-    if (simplify) {
-      document.documentElement.classList.add("simplify-mode");
-    } else {
-      document.documentElement.classList.remove("simplify-mode");
+  const performDomUpdate = () => {
+    if (document.documentElement.classList) {
+      if (simplify) {
+        document.documentElement.classList.add("simplify-mode");
+      } else {
+        document.documentElement.classList.remove("simplify-mode");
+      }
+      if (enableGradients) {
+        document.documentElement.classList.remove("no-gradients");
+      } else {
+        document.documentElement.classList.add("no-gradients");
+      }
     }
-    if (enableGradients) {
-      document.documentElement.classList.remove("no-gradients");
-    } else {
-      document.documentElement.classList.add("no-gradients");
+
+    let effectiveTheme: string = theme;
+    let isLight = false;
+
+    if (theme === "system") {
+      const prefersDark =
+        typeof window !== "undefined" &&
+        window.matchMedia &&
+        window.matchMedia("(prefers-color-scheme: dark)").matches;
+      effectiveTheme = prefersDark ? "dark" : "light";
+      isLight = !prefersDark;
+    } else if (THEME_PRESETS[theme]) {
+      isLight = THEME_PRESETS[theme].isLight;
+    } else if (theme === "light" || theme === "latte") {
+      isLight = true;
+    } else if (theme === "custom" && customTheme) {
+      isLight = !!customTheme.isLight;
     }
+
+    if (typeof document.documentElement.setAttribute === "function") {
+      document.documentElement.setAttribute("data-theme", effectiveTheme);
+      document.documentElement.setAttribute("data-light-mode", isLight ? "true" : "false");
+    }
+
+    const style = document.documentElement.style;
+    if (style && typeof style.setProperty === "function") {
+      let baseColor = accent;
+      if (baseColor && baseColor.includes("gradient")) {
+        const hexMatch = baseColor.match(/#(?:[0-9a-fA-F]{3,8})/);
+        baseColor = hexMatch ? hexMatch[0] : "#FA586A";
+      }
+
+      style.setProperty("--accent-color", baseColor);
+      style.setProperty("--color-accent", baseColor);
+      style.setProperty("--color-primary", baseColor);
+      style.setProperty("--color-accent-hover", `color-mix(in srgb, ${baseColor} 85%, black)`);
+
+      const toLinear = (c: number) =>
+        c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+      const hexClean = baseColor.replace("#", "").trim();
+      let onAccent = "#FFFFFF";
+      if (hexClean.length >= 6) {
+        const r = parseInt(hexClean.substring(0, 2), 16) / 255;
+        const g = parseInt(hexClean.substring(2, 4), 16) / 255;
+        const b = parseInt(hexClean.substring(4, 6), 16) / 255;
+        if (!isNaN(r) && !isNaN(g) && !isNaN(b)) {
+          const lum = 0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b);
+          onAccent = lum > 0.45 ? "#18181B" : "#FFFFFF";
+        }
+      }
+      style.setProperty("--color-on-accent", onAccent);
+
+      const grad = accentGradient || (accent && accent.includes("gradient") ? accent : "");
+      if (grad && enableGradients) {
+        style.setProperty("--accent-gradient", grad);
+      } else {
+        style.removeProperty("--accent-gradient");
+      }
+
+      if (theme === "custom" && customTheme) {
+        style.setProperty("--color-bg", customTheme.bg);
+        style.setProperty("--color-surface", customTheme.surface);
+        style.setProperty(
+          "--color-surface-hover",
+          customTheme.surfaceHover ||
+            `color-mix(in srgb, ${customTheme.surface} 85%, ${customTheme.isLight ? "black" : "white"})`
+        );
+        style.setProperty(
+          "--color-surface-active",
+          customTheme.surfaceActive ||
+            `color-mix(in srgb, ${customTheme.surface} 75%, ${customTheme.isLight ? "black" : "white"})`
+        );
+        style.setProperty("--color-deck", customTheme.deck);
+        style.setProperty("--color-sidebar", customTheme.sidebar);
+        style.setProperty("--color-border", customTheme.border);
+        style.setProperty(
+          "--color-border-subtle",
+          `color-mix(in srgb, ${customTheme.border} 50%, transparent)`
+        );
+        style.setProperty("--color-text-primary", customTheme.textPrimary);
+        style.setProperty("--color-text-secondary", customTheme.textSecondary);
+        style.setProperty("--color-text-muted", customTheme.textMuted);
+      } else {
+        style.removeProperty("--color-bg");
+        style.removeProperty("--color-surface");
+        style.removeProperty("--color-surface-hover");
+        style.removeProperty("--color-surface-active");
+        style.removeProperty("--color-deck");
+        style.removeProperty("--color-sidebar");
+        style.removeProperty("--color-border");
+        style.removeProperty("--color-border-subtle");
+        style.removeProperty("--color-text-primary");
+        style.removeProperty("--color-text-secondary");
+        style.removeProperty("--color-text-muted");
+      }
+    }
+
+    if (onCommit) {
+      onCommit();
+    }
+  };
+
+  // If initial application or reduced motion requested, apply synchronously without transition
+  const prefersReducedMotion =
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+
+  if (isInitialBoot || prefersReducedMotion) {
+    isInitialBoot = false;
+    performDomUpdate();
+    return;
   }
 
-  let effectiveTheme: string = theme;
-  let isLight = false;
-
-  if (theme === "system") {
-    const prefersDark =
-      typeof window !== "undefined" &&
-      window.matchMedia &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches;
-    effectiveTheme = prefersDark ? "dark" : "light";
-    isLight = !prefersDark;
-  } else if (theme === "light" || theme === "latte") {
-    isLight = true;
-  } else if (theme === "custom" && customTheme) {
-    isLight = !!customTheme.isLight;
-  }
-
-  if (typeof document.documentElement.setAttribute === "function") {
-    document.documentElement.setAttribute("data-theme", effectiveTheme);
-    document.documentElement.setAttribute("data-light-mode", isLight ? "true" : "false");
-  }
-
-  const style = document.documentElement.style;
-  if (style && typeof style.setProperty === "function") {
-    let baseColor = accent;
-    if (baseColor && baseColor.includes("gradient")) {
-      const hexMatch = baseColor.match(/#(?:[0-9a-fA-F]{3,8})/);
-      baseColor = hexMatch ? hexMatch[0] : "#FA586A";
-    }
-
-    style.setProperty("--accent-color", baseColor);
-    style.setProperty("--color-accent", baseColor);
-    style.setProperty("--color-primary", baseColor);
-    style.setProperty("--color-accent-hover", `color-mix(in srgb, ${baseColor} 85%, black)`);
-
-    const grad = accentGradient || (accent && accent.includes("gradient") ? accent : "");
-    if (grad && enableGradients) {
-      style.setProperty("--accent-gradient", grad);
-    } else {
-      style.removeProperty("--accent-gradient");
-    }
-
-    if (theme === "custom" && customTheme) {
-      style.setProperty("--color-bg", customTheme.bg);
-      style.setProperty("--color-surface", customTheme.surface);
-      style.setProperty(
-        "--color-surface-hover",
-        customTheme.surfaceHover ||
-          `color-mix(in srgb, ${customTheme.surface} 85%, ${customTheme.isLight ? "black" : "white"})`
-      );
-      style.setProperty(
-        "--color-surface-active",
-        customTheme.surfaceActive ||
-          `color-mix(in srgb, ${customTheme.surface} 75%, ${customTheme.isLight ? "black" : "white"})`
-      );
-      style.setProperty("--color-deck", customTheme.deck);
-      style.setProperty("--color-sidebar", customTheme.sidebar);
-      style.setProperty("--color-border", customTheme.border);
-      style.setProperty(
-        "--color-border-subtle",
-        `color-mix(in srgb, ${customTheme.border} 50%, transparent)`
-      );
-      style.setProperty("--color-text-primary", customTheme.textPrimary);
-      style.setProperty("--color-text-secondary", customTheme.textSecondary);
-      style.setProperty("--color-text-muted", customTheme.textMuted);
-    } else {
-      style.removeProperty("--color-bg");
-      style.removeProperty("--color-surface");
-      style.removeProperty("--color-surface-hover");
-      style.removeProperty("--color-surface-active");
-      style.removeProperty("--color-deck");
-      style.removeProperty("--color-sidebar");
-      style.removeProperty("--color-border");
-      style.removeProperty("--color-border-subtle");
-      style.removeProperty("--color-text-primary");
-      style.removeProperty("--color-text-secondary");
-      style.removeProperty("--color-text-muted");
-    }
+  // Cross-fade transitions via theme-transitioning CSS class.
+  // Note: document.startViewTransition is intentionally avoided because WebKitGTK 2.45+ (libwebkit2gtk-4.1)
+  // crashes WebKitWebProcess with FrameRenderer::graphicsLayerFactory assertion failures.
+  if (typeof document !== "undefined" && document.documentElement?.classList) {
+    document.documentElement.classList.add("theme-transitioning");
+    performDomUpdate();
+    if (themeTransitionTimer) clearTimeout(themeTransitionTimer);
+    themeTransitionTimer = setTimeout(() => {
+      document.documentElement.classList.remove("theme-transitioning");
+    }, 240);
+  } else {
+    performDomUpdate();
   }
 }
 
@@ -951,22 +1261,49 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
       const next = !get().simplifyMode;
       const updated: SettingsData = { ...get(), simplifyMode: next };
       persistSettings(updated);
-      applyDomClasses(next, updated.themeMode, updated.accentColor, updated.customTheme, updated.enableGradients);
-      set({ simplifyMode: next });
+      applyDomClasses(
+        next,
+        updated.themeMode,
+        updated.accentColor,
+        updated.customTheme,
+        updated.enableGradients,
+        undefined,
+        () => {
+          set({ simplifyMode: next });
+        }
+      );
     },
 
     setSimplifyMode: (enabled: boolean) => {
       const updated: SettingsData = { ...get(), simplifyMode: enabled };
       persistSettings(updated);
-      applyDomClasses(enabled, updated.themeMode, updated.accentColor, updated.customTheme, updated.enableGradients);
-      set({ simplifyMode: enabled });
+      applyDomClasses(
+        enabled,
+        updated.themeMode,
+        updated.accentColor,
+        updated.customTheme,
+        updated.enableGradients,
+        undefined,
+        () => {
+          set({ simplifyMode: enabled });
+        }
+      );
     },
 
     setEnableGradients: (enabled: boolean) => {
       const updated: SettingsData = { ...get(), enableGradients: enabled };
       persistSettings(updated);
-      applyDomClasses(updated.simplifyMode, updated.themeMode, updated.accentColor, updated.customTheme, enabled);
-      set({ enableGradients: enabled });
+      applyDomClasses(
+        updated.simplifyMode,
+        updated.themeMode,
+        updated.accentColor,
+        updated.customTheme,
+        enabled,
+        undefined,
+        () => {
+          set({ enableGradients: enabled });
+        }
+      );
     },
 
     dismissLinuxBanner: () => {
@@ -983,6 +1320,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
 
     setSetting: <K extends keyof SettingsData>(key: K, value: SettingsData[K]) => {
       const current = get();
+      if (current[key] === value) return;
       const updated: SettingsData = {
         ...current,
         [key]: value,
@@ -1003,17 +1341,23 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
           updated.accentColor,
           updated.customTheme,
           updated.enableGradients,
-          updated.accentGradient
+          updated.accentGradient,
+          () => {
+            set({ [key]: value } as unknown as Partial<SettingsState>);
+          }
         );
+      } else {
+        set({ [key]: value } as unknown as Partial<SettingsState>);
       }
-
-      set({ [key]: value } as unknown as Partial<SettingsState>);
     },
 
     setThemePreset: (presetId: ThemeMode) => {
       const preset = THEME_PRESETS[presetId];
       const current = get();
       if (preset) {
+        if (current.themeMode === preset.id && current.accentColor === preset.accentColor) {
+          return;
+        }
         const updated: SettingsData = {
           ...current,
           themeMode: preset.id,
@@ -1027,25 +1371,40 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
           updated.accentColor,
           updated.customTheme,
           updated.enableGradients,
-          updated.accentGradient
+          updated.accentGradient,
+          () => {
+            set({
+              themeMode: preset.id,
+              accentColor: preset.accentColor,
+              accentGradient: "",
+            });
+          }
         );
-        set({
-          themeMode: preset.id,
-          accentColor: preset.accentColor,
-        });
       } else if (presetId === "custom") {
         const customAccent = current.customTheme?.accentColor || current.accentColor;
+        if (current.themeMode === "custom" && current.accentColor === customAccent) {
+          return;
+        }
         const updated: SettingsData = {
           ...current,
           themeMode: "custom",
           accentColor: customAccent,
         };
         persistSettings(updated);
-        applyDomClasses(updated.simplifyMode, "custom", customAccent, updated.customTheme, updated.enableGradients);
-        set({
-          themeMode: "custom",
-          accentColor: customAccent,
-        });
+        applyDomClasses(
+          updated.simplifyMode,
+          "custom",
+          customAccent,
+          updated.customTheme,
+          updated.enableGradients,
+          undefined,
+          () => {
+            set({
+              themeMode: "custom",
+              accentColor: customAccent,
+            });
+          }
+        );
       }
     },
 
@@ -1068,13 +1427,22 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
         accentColor: theme.accentColor,
       };
       persistSettings(updated);
-      applyDomClasses(updated.simplifyMode, "custom", theme.accentColor, theme, updated.enableGradients);
-      set({
-        customTheme: theme,
-        savedCustomThemes: updatedSaved,
-        themeMode: "custom",
-        accentColor: theme.accentColor,
-      });
+      applyDomClasses(
+        updated.simplifyMode,
+        "custom",
+        theme.accentColor,
+        theme,
+        updated.enableGradients,
+        undefined,
+        () => {
+          set({
+            customTheme: theme,
+            savedCustomThemes: updatedSaved,
+            themeMode: "custom",
+            accentColor: theme.accentColor,
+          });
+        }
+      );
     },
 
     deleteCustomTheme: (id: string) => {
@@ -1097,13 +1465,22 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
         accentColor: nextAccent,
       };
       persistSettings(updated);
-      applyDomClasses(updated.simplifyMode, nextMode, nextAccent, nextCustom, updated.enableGradients);
-      set({
-        customTheme: nextCustom,
-        savedCustomThemes: updatedSaved,
-        themeMode: nextMode,
-        accentColor: nextAccent,
-      });
+      applyDomClasses(
+        updated.simplifyMode,
+        nextMode,
+        nextAccent,
+        nextCustom,
+        updated.enableGradients,
+        undefined,
+        () => {
+          set({
+            customTheme: nextCustom,
+            savedCustomThemes: updatedSaved,
+            themeMode: nextMode,
+            accentColor: nextAccent,
+          });
+        }
+      );
     },
 
     applyCustomTheme: (theme: CustomTheme) => {
@@ -1115,12 +1492,21 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
         accentColor: theme.accentColor,
       };
       persistSettings(updated);
-      applyDomClasses(updated.simplifyMode, "custom", theme.accentColor, theme, updated.enableGradients);
-      set({
-        customTheme: theme,
-        themeMode: "custom",
-        accentColor: theme.accentColor,
-      });
+      applyDomClasses(
+        updated.simplifyMode,
+        "custom",
+        theme.accentColor,
+        theme,
+        updated.enableGradients,
+        undefined,
+        () => {
+          set({
+            customTheme: theme,
+            themeMode: "custom",
+            accentColor: theme.accentColor,
+          });
+        }
+      );
     },
 
     setProtectedArtists: (artists: string[]) => {
@@ -1156,6 +1542,82 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
       get().setProtectedArtists([...DEFAULT_PROTECTED_ARTISTS]);
     },
 
+    setHiddenArtists: (artists: string[]) => {
+      setLibHiddenArtists(artists);
+      const updated: SettingsData = { ...get(), hiddenArtists: artists };
+      persistSettings(updated);
+      set({ hiddenArtists: artists });
+      const lib = useLibraryStore.getState();
+      if (lib.tracks && lib.tracks.length > 0) {
+        lib.setTracks(lib.tracks);
+      }
+    },
+
+    hideArtist: (artist: string) => {
+      const trimmed = artist.trim();
+      if (!trimmed) return;
+      const current = get().hiddenArtists || [];
+      const lower = trimmed.toLowerCase();
+      if (!current.some((a) => a.toLowerCase() === lower)) {
+        const next = [...current, trimmed];
+        get().setHiddenArtists(next);
+      }
+    },
+
+    unhideArtist: (artist: string) => {
+      const trimmed = artist.trim().toLowerCase();
+      const current = get().hiddenArtists || [];
+      const next = current.filter((a) => a.trim().toLowerCase() !== trimmed);
+      get().setHiddenArtists(next);
+    },
+
+    toggleHideArtist: (artist: string) => {
+      const trimmed = artist.trim();
+      if (!trimmed) return;
+      if (get().isArtistHidden(trimmed)) {
+        get().unhideArtist(trimmed);
+      } else {
+        get().hideArtist(trimmed);
+      }
+    },
+
+    isArtistHidden: (artist: string) => {
+      if (!artist) return false;
+      const lower = artist.trim().toLowerCase();
+      return (get().hiddenArtists || []).some((a) => a.toLowerCase() === lower);
+    },
+
+    setGenreMappings: (mappings: Record<string, string>) => {
+      setLibGenreMappings(mappings);
+      const updated: SettingsData = { ...get(), genreMappings: mappings };
+      persistSettings(updated);
+      set({ genreMappings: mappings });
+      const lib = useLibraryStore.getState();
+      if (lib.tracks && lib.tracks.length > 0) {
+        lib.setTracks(lib.tracks);
+      }
+    },
+
+    setGenreMapping: (alias: string, canonical: string) => {
+      const a = alias.trim().toLowerCase();
+      const c = canonical.trim();
+      if (!a || !c) return;
+      const current = { ...(get().genreMappings || DEFAULT_GENRE_MAPPINGS) };
+      current[a] = c;
+      get().setGenreMappings(current);
+    },
+
+    removeGenreMapping: (alias: string) => {
+      const a = alias.trim().toLowerCase();
+      const current = { ...(get().genreMappings || DEFAULT_GENRE_MAPPINGS) };
+      delete current[a];
+      get().setGenreMappings(current);
+    },
+
+    resetGenreMappings: () => {
+      get().setGenreMappings({ ...DEFAULT_GENRE_MAPPINGS });
+    },
+
     addCustomColor: (color: string) => {
       const normalized = color.trim().toUpperCase();
       if (!/^#[0-9A-F]{6}$/i.test(normalized)) return;
@@ -1183,6 +1645,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
     resetToDefaults: () => {
       const reset = { ...DEFAULT_SETTINGS };
       setLibProtectedArtists(reset.protectedArtists);
+      setLibHiddenArtists(reset.hiddenArtists);
+      setLibGenreMappings(reset.genreMappings);
       persistSettings(reset);
       applyDomClasses(reset.simplifyMode, reset.themeMode, reset.accentColor, reset.customTheme, reset.enableGradients);
       set({ ...reset });
@@ -1212,14 +1676,18 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
         savedCustomThemes: state.savedCustomThemes || [],
         albumGridSize: state.albumGridSize,
         rowDensity: state.rowDensity,
+        miniPlayerControls: state.miniPlayerControls,
         showVisualizer: state.showVisualizer,
         showLyricsSmoothScroll: state.showLyricsSmoothScroll,
         simplifyMode: state.simplifyMode,
         isLinuxBannerDismissed: state.isLinuxBannerDismissed,
         enableGradients: state.enableGradients,
         protectedArtists: state.protectedArtists,
+        hiddenArtists: state.hiddenArtists || [],
+        genreMappings: state.genreMappings || { ...DEFAULT_GENRE_MAPPINGS },
         managedDirectory: state.managedDirectory || "",
         databasePath: state.databasePath || "",
+        allowLanStreaming: state.allowLanStreaming,
         enableMediaSession: state.enableMediaSession,
         enableDiscordRpc: state.enableDiscordRpc,
         discordAppId: state.discordAppId,
@@ -1244,6 +1712,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
 
         if (merged.protectedArtists) {
           setLibProtectedArtists(merged.protectedArtists);
+        }
+        if (merged.hiddenArtists) {
+          setLibHiddenArtists(merged.hiddenArtists);
+        }
+        if (merged.genreMappings) {
+          setLibGenreMappings(merged.genreMappings);
         }
 
         persistSettings(merged);
@@ -1278,6 +1752,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
             };
             if (merged.protectedArtists) {
               setLibProtectedArtists(merged.protectedArtists);
+            }
+            if (merged.hiddenArtists) {
+              setLibHiddenArtists(merged.hiddenArtists);
             }
             applyDomClasses(merged.simplifyMode, merged.themeMode, merged.accentColor, merged.customTheme, merged.enableGradients);
             if (typeof localStorage !== "undefined") {

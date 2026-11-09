@@ -30,6 +30,7 @@ fn make_test_track(id: &str, title: &str) -> Track {
             channels: Some(2),
             format: "FLAC".into(),
             lyrics: None,
+            ..Default::default()
         },
         date_added: 0,
     }

@@ -1,12 +1,12 @@
 import React, { useState, useCallback } from "react";
 import { AlbumInfo } from "../types";
-import { Play, Disc, ListPlus, CornerDownRight, ListMusic, User, Pencil, Copy, Sparkles } from "lucide-react";
+import { Play, Disc, ListPlus, CornerDownRight, ListMusic, User, Pencil, Copy, EyeOff, Eye } from "lucide-react";
 import { useArtwork } from "../utils/useArtwork";
 import { ArtistLinks } from "./ArtistLinks";
 import { useLibraryStore } from "../stores/libraryStore";
 import { usePlayerStore } from "../stores/playerStore";
+import { useSettingsStore } from "../stores/settingsStore";
 import { useContextMenuStore, ContextMenuItem } from "../stores/contextMenuStore";
-import { useEnrichmentStore } from "../stores/enrichmentStore";
 
 interface AlbumCardProps {
   album: AlbumInfo;
@@ -29,16 +29,15 @@ const AlbumCardInner: React.FC<AlbumCardProps> = ({
   const artworkUrl = propArtworkUrl || fetchedArtwork;
   const [imgError, setImgError] = useState(false);
 
-  const playlists = useLibraryStore((s) => s.playlists);
-  const addTracksToPlaylist = useLibraryStore((s) => s.addTracksToPlaylist);
-  const insertAfterCurrent = usePlayerStore((s) => s.insertAfterCurrent);
-  const addToQueue = usePlayerStore((s) => s.addToQueue);
-  const openContextMenu = useContextMenuStore((s) => s.openContextMenu);
-
   const handleContextMenu = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
+
+      const { playlists, addTracksToPlaylist } = useLibraryStore.getState();
+      const { insertAfterCurrent, addToQueue } = usePlayerStore.getState();
+      const { isArtistHidden, toggleHideArtist } = useSettingsStore.getState();
+      const openContextMenu = useContextMenuStore.getState().openContextMenu;
 
       const trackIds = album.tracks.map((t) => t.id);
 
@@ -110,6 +109,18 @@ const AlbumCardInner: React.FC<AlbumCardProps> = ({
         }
       );
 
+      if (album.artist && album.artist !== "Unknown Artist") {
+        const isHidden = isArtistHidden(album.artist);
+        menuItems.push({
+          id: "toggle-hide-artist",
+          label: isHidden ? `Unhide Artist (${album.artist})` : `Hide Artist (${album.artist})`,
+          icon: isHidden ? Eye : EyeOff,
+          onClick: () => {
+            toggleHideArtist(album.artist);
+          },
+        });
+      }
+
       if (onEditMetadata) {
         menuItems.push({
           id: "edit-metadata",
@@ -118,15 +129,6 @@ const AlbumCardInner: React.FC<AlbumCardProps> = ({
           onClick: () => onEditMetadata(album),
         });
       }
-
-      menuItems.push({
-        id: "pull-online-album",
-        label: "Pull Online Metadata & Lyrics...",
-        icon: Sparkles,
-        onClick: () => {
-          useEnrichmentStore.getState().openModal(album.tracks, album.title);
-        },
-      });
 
       menuItems.push(
         {
@@ -156,14 +158,9 @@ const AlbumCardInner: React.FC<AlbumCardProps> = ({
     },
     [
       album,
-      playlists,
       onPlayAlbum,
       onSelectArtist,
       onEditMetadata,
-      insertAfterCurrent,
-      addToQueue,
-      addTracksToPlaylist,
-      openContextMenu,
     ]
   );
 
@@ -171,7 +168,6 @@ const AlbumCardInner: React.FC<AlbumCardProps> = ({
     <div
       onClick={() => onSelectAlbum(album.title, album.artist)}
       onContextMenu={handleContextMenu}
-      style={{ contain: "content" }}
       className="group cursor-pointer bg-surface hover:bg-surfaceHover border border-white/[0.06] hover:border-white/[0.12] rounded-2xl p-4 flex flex-col transition-[background-color,border-color,box-shadow,transform] duration-250 ease-[cubic-bezier(0.16,1,0.3,1)] shadow-sm hover:shadow-xl hover:-translate-y-0.5 select-none"
     >
       {/* Cover Art */}
@@ -194,10 +190,10 @@ const AlbumCardInner: React.FC<AlbumCardProps> = ({
             e.stopPropagation();
             onPlayAlbum(album);
           }}
-          className="absolute bottom-2.5 right-2.5 w-10 h-10 rounded-full bg-accent-fill text-white flex items-center justify-center opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-250 ease-[cubic-bezier(0.16,1,0.3,1)] shadow-xl shadow-black/60 hover:scale-105 active:scale-95 z-10"
-          title="Play Album"
+          className="absolute bottom-2.5 right-2.5 w-10 h-10 rounded-full bg-accent-fill text-white flex items-center justify-center opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 focus-visible:opacity-100 focus-visible:translate-y-0 transition-[opacity,transform,background-color] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] shadow-xl shadow-black/60 active:scale-[0.92] focus:outline-none focus-visible:ring-2 focus-visible:ring-white z-10"
+          aria-label="Play Album"
         >
-          <Play className="w-4 h-4 fill-white ml-1" />
+          <Play className="w-4 h-4 fill-white" />
         </button>
       </div>
 

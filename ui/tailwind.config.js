@@ -99,6 +99,11 @@ export default {
         border: withOpacity("--color-border", "rgba(255, 255, 255, 0.08)"),
         borderSubtle: withOpacity("--color-border-subtle", "rgba(255, 255, 255, 0.04)"),
       },
+      transitionDuration: {
+        240: "240ms",
+        250: "250ms",
+        350: "350ms",
+      },
     },
   },
   plugins: [],

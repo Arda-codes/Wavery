@@ -7,6 +7,12 @@ These rules are binding for every agent session working on this codebase.
 
 ## 1. Modular Architecture & Hard Boundaries
 
+# Agent Context & Exploration Rules
+
+1. **Never read raw file bodies upfront:** Do not use `cat` or `head -100` on source files to explore the project.
+2. **Use the repository map:** Run `./run_to_map_repo.sh` to locate definitions, interfaces, and exported types.
+3. **Targeted reads only:** Only inspect specific line ranges (e.g., using `sed` or targeted line queries) for the exact files you are actively modifying.
+
 ### Workspace Crate Layout
 
 ```text
@@ -106,7 +112,13 @@ All implementations must conform strictly to the trait signatures in `crates/cor
   - **Depth & Materials**: Translucent surfaces, frosted glass layering, subtle 1px border outlines (`rgba(255, 255, 255, 0.08)` / `rgba(0, 0, 0, 0.08)`).
   - **Spatial Rhythm**: Strictly follow the 4px/8px rhythm (`4, 8, 12, 16, 20, 24, 32, 48, 64px`).
 - **Impeccable Design Quality & Hardening**:
-  - **Anti-AI-Slop**: Zero gratuitous purple/cyan gradients. Single focal point per view. 3-tier contrast system.
+  - **Anti-AI-Slop & Craft Standards**:
+    - Zero gratuitous purple/cyan gradients. Single focal point per view. 3-tier contrast system.
+    - **No Metric Pill Clutter**: Never decorate section titles, view headers, or shelf titles with redundant count badges (e.g., `8 Artists`, `10 Picks`, `5 Genres`). Clean typography speaks for itself.
+    - **No Kicker Eyebrows**: Do not place tiny uppercase tracking-widest kicker tags above clear headings (`OVERVIEW`, `FEATURED CONTENT`).
+    - **No Repetitive Icon Stamping**: Do not repeat the same icon across every item in a list or grid (e.g., identical flames, stars, or sparkles).
+    - **No Redundant Badges**: Never badge cards with their own category name when they are already inside that categorized section (e.g., no `GENRE` badge inside an *Explore Genres* section).
+    - **The 3-Second Subtraction Rule**: Before adding any badge, subtitle, icon, or container border, verify: *"If this element is deleted, does the user fail to understand or use the feature?"* If the answer is no, omit it.
   - **5-State Completeness**: Every interactive button, row, and input must define `Default`, `Hover`, `Active`, `Focused`, and `Disabled` states.
   - **Graceful Fallbacks**: Smart string truncation with tooltips, fallback artwork placeholders, clear actionable empty states, and non-blocking toast notifications.
 
@@ -131,5 +143,9 @@ npm --prefix ui test
 
 # 5. Frontend TypeScript Typecheck & Production Build
 npm --prefix ui run build
+
+# 6. Build & Launch Production Desktop Release (Every Time)
+cargo build --release -p wavery-tauri
+./target/release/wavery-tauri
 ```
 

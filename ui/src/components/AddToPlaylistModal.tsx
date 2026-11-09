@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { Playlist, Track } from "../types";
 import { ListMusic, Plus, X, Check } from "lucide-react";
+import { useTransitionMount } from "../utils/useTransitionMount";
 
 interface AddToPlaylistModalProps {
   isOpen: boolean;
@@ -23,11 +24,18 @@ export const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
   const [isCreating, setIsCreating] = useState(false);
   const [addedPlaylistIds, setAddedPlaylistIds] = useState<Set<string>>(new Set());
 
-  if (!isOpen || !track) return null;
+  const { isRendered, isExiting } = useTransitionMount(isOpen && !!track, 160);
+  const lastTrackRef = useRef(track);
+  if (track) {
+    lastTrackRef.current = track;
+  }
+  const displayTrack = track || lastTrackRef.current;
+
+  if (!isRendered || !displayTrack) return null;
 
   const handleAdd = async (playlistId: string) => {
     try {
-      await onAddToPlaylist(playlistId, track.id);
+      await onAddToPlaylist(playlistId, displayTrack.id);
       setAddedPlaylistIds((prev) => new Set(prev).add(playlistId));
       setTimeout(() => {
         onClose();
@@ -44,7 +52,7 @@ export const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
 
     try {
       setIsCreating(true);
-      await onCreateAndAdd(newPlaylistName.trim(), track.id);
+      await onCreateAndAdd(newPlaylistName.trim(), displayTrack.id);
       setNewPlaylistName("");
       onClose();
     } catch (err) {
@@ -55,18 +63,24 @@ export const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fadeIn">
-      <div className="bg-surface border border-white/[0.12] rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-scaleUp">
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 ${
+        isExiting ? "animate-backdrop-out" : "animate-backdrop-in"
+      }`}
+    >
+      <div
+        className={`bg-surface border border-white/[0.12] rounded-2xl w-full max-w-md overflow-hidden shadow-2xl ${
+          isExiting ? "animate-scale-down pointer-events-none" : "animate-scale-up"
+        }`}
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.08]">
           <div className="flex items-center space-x-3 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-accent flex items-center justify-center text-white shadow-sm flex-shrink-0">
-              <ListMusic className="w-4 h-4" />
-            </div>
+            <ListMusic className="w-5 h-5 text-accent flex-shrink-0" />
             <div className="min-w-0">
-              <h2 className="text-sm font-bold text-white truncate">Add to Playlist</h2>
+              <h2 className="text-sm font-semibold text-white truncate">Add to Playlist</h2>
               <p className="text-2xs text-textMuted truncate font-medium">
-                {track.metadata.title || "Untitled Track"}
+                {displayTrack.metadata.title || "Untitled Track"}
               </p>
             </div>
           </div>
@@ -82,11 +96,11 @@ export const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
         <div className="p-4 max-h-60 overflow-y-auto space-y-1">
           {playlists.length === 0 ? (
             <p className="text-xs text-textMuted text-center py-4">
-              No playlists found. Create one below to add this track.
+              You haven't created any playlists yet. Enter a name below to create one and add this track.
             </p>
           ) : (
             playlists.map((pl) => {
-              const alreadyContains = pl.track_ids.includes(track.id);
+              const alreadyContains = pl.track_ids.includes(displayTrack.id);
               const justAdded = addedPlaylistIds.has(pl.id);
 
               return (
@@ -134,7 +148,7 @@ export const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
               className="flex items-center space-x-1 px-4 py-2 bg-accent-fill hover:bg-accentHover disabled:opacity-40 text-white rounded-xl text-xs font-bold shadow-md shadow-accent/20 transition flex-shrink-0"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>Create & Add</span>
+              <span>{isCreating ? "Adding..." : "Create & Add Track"}</span>
             </button>
           </form>
         </div>

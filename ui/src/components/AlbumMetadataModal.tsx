@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { AlbumInfo, Track } from "../types";
 import { playerAdapter } from "../services/adapter";
 import { useLibraryStore } from "../stores/libraryStore";
 import { usePlayerStore } from "../stores/playerStore";
 import { useArtwork } from "../utils/useArtwork";
-import { X, Save, Disc, Check, AlertCircle, Loader2 } from "lucide-react";
+import { X, Save, Disc, Check, AlertCircle, Loader2, Globe } from "lucide-react";
+import { searchAppleMusicAlbum } from "../services/appleMusic";
+import { useTransitionMount } from "../utils/useTransitionMount";
 
 interface AlbumMetadataModalProps {
   album: AlbumInfo | null;
@@ -39,6 +41,8 @@ export const AlbumMetadataModal: React.FC<AlbumMetadataModalProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [isFetchingAppleMusic, setIsFetchingAppleMusic] = useState(false);
+  const [onlineNotice, setOnlineNotice] = useState<string | null>(null);
 
   useEffect(() => {
     if (album) {
@@ -47,6 +51,7 @@ export const AlbumMetadataModal: React.FC<AlbumMetadataModalProps> = ({
       setYear(album.year ? album.year.toString() : "");
       setGenre(album.tracks[0]?.metadata.genre || "");
       setErrorMessage(null);
+      setOnlineNotice(null);
       setSuccess(false);
 
       const rows: EditableTrackRow[] = album.tracks.map((t, idx) => ({
@@ -59,6 +64,60 @@ export const AlbumMetadataModal: React.FC<AlbumMetadataModalProps> = ({
       setTrackRows(rows);
     }
   }, [album, isOpen]);
+
+  const handleAutoFillAppleMusic = async () => {
+    if (!album) return;
+    setIsFetchingAppleMusic(true);
+    setOnlineNotice(null);
+    setErrorMessage(null);
+
+    try {
+      const queryAlbum = albumTitle.trim() || album.title;
+      const queryArtist = albumArtist.trim() || album.albumArtist || album.artist || "";
+      const result = await searchAppleMusicAlbum(queryAlbum, queryArtist);
+
+      if (!result) {
+        setErrorMessage(`No matching album found on Apple Music for "${queryAlbum}". Check album title and artist spelling.`);
+        return;
+      }
+
+      if (result.albumName) setAlbumTitle(result.albumName);
+      if (result.artistName) setAlbumArtist(result.artistName);
+      if (result.year) setYear(result.year.toString());
+      if (result.genre) setGenre(result.genre);
+
+      // Match and update track rows by trackNumber or title
+      if (result.tracks && result.tracks.length > 0) {
+        setTrackRows((prev) =>
+          prev.map((row) => {
+            const matchedAppleTrack =
+              result.tracks.find(
+                (at) =>
+                  (at.trackNumber && at.trackNumber === row.trackNumber) ||
+                  (at.title && row.title && at.title.toLowerCase() === row.title.toLowerCase())
+              ) || null;
+
+            if (matchedAppleTrack) {
+              return {
+                ...row,
+                title: matchedAppleTrack.title || row.title,
+                artist: matchedAppleTrack.artist || row.artist,
+                trackNumber: matchedAppleTrack.trackNumber ?? row.trackNumber,
+                discNumber: matchedAppleTrack.discNumber ?? row.discNumber,
+              };
+            }
+            return row;
+          })
+        );
+      }
+
+      setOnlineNotice(`Metadata loaded from Apple Music (${result.albumName})`);
+    } catch {
+      setErrorMessage("Unable to connect to Apple Music. Check your internet connection.");
+    } finally {
+      setIsFetchingAppleMusic(false);
+    }
+  };
 
   const handleTrackChange = useCallback(
     (index: number, field: keyof EditableTrackRow, value: string | number) => {
@@ -144,17 +203,30 @@ export const AlbumMetadataModal: React.FC<AlbumMetadataModalProps> = ({
     }
   };
 
-  if (!isOpen || !album) return null;
+  const { isRendered, isExiting } = useTransitionMount(isOpen && !!album, 160);
+  const lastAlbumRef = useRef(album);
+  if (album) {
+    lastAlbumRef.current = album;
+  }
+  const displayAlbum = album || lastAlbumRef.current;
+
+  if (!isRendered || !displayAlbum) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md ${
+        isExiting ? "animate-backdrop-out" : "animate-backdrop-in"
+      }`}
+    >
       <div
-        className="bg-surface border border-white/[0.08] w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-scaleUp"
+        className={`bg-surface border border-white/[0.08] w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden ${
+          isExiting ? "animate-scale-down pointer-events-none" : "animate-scale-up"
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-white/[0.06] flex-shrink-0">
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-4 min-w-0">
             <div className="w-10 h-10 rounded-xl bg-surfaceHover overflow-hidden flex items-center justify-center flex-shrink-0 border border-white/[0.08]">
               {artworkUrl ? (
                 <img src={artworkUrl} alt="" className="w-full h-full object-cover" />
@@ -162,22 +234,50 @@ export const AlbumMetadataModal: React.FC<AlbumMetadataModalProps> = ({
                 <Disc className="w-5 h-5 text-textMuted" />
               )}
             </div>
-            <div>
+            <div className="min-w-0">
               <h2 className="text-sm font-bold text-white">Edit Album Metadata</h2>
-              <p className="text-xs text-textMuted truncate max-w-sm">{album.title}</p>
+              <p className="text-xs text-textMuted truncate max-w-sm">{displayAlbum.title}</p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white/[0.06] hover:bg-white/[0.12] text-textMuted hover:text-white flex items-center justify-center transition"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center space-x-2">
+            <button
+              type="button"
+              onClick={handleAutoFillAppleMusic}
+              disabled={isFetchingAppleMusic}
+              className="inline-flex items-center gap-2 px-3 py-1 rounded-xl text-xs font-semibold text-white bg-accent/15 hover:bg-accent/25 border border-accent/30 hover:border-accent/50 active:scale-95 transition disabled:opacity-50"
+              title="Query Apple Music / iTunes to auto-fill album info and track listing"
+            >
+              {isFetchingAppleMusic ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-accent" />
+                  <span>Searching...</span>
+                </>
+              ) : (
+                <>
+                  <Globe className="w-3.5 h-3.5 text-accent" />
+                  <span>Auto-Fill from Apple Music</span>
+                </>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-8 h-8 rounded-full bg-white/[0.06] hover:bg-white/[0.12] text-textMuted hover:text-white flex items-center justify-center transition"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Form Body */}
         <form onSubmit={handleSave} className="flex-1 flex flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+            {onlineNotice && (
+              <div className="flex items-center space-x-2 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-xs animate-fade-in">
+                <Check className="w-4 h-4 flex-shrink-0" />
+                <span>{onlineNotice}</span>
+              </div>
+            )}
             {errorMessage && (
               <div className="flex items-center space-x-2 p-3 bg-danger/10 border border-danger/20 rounded-xl text-danger text-xs">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -247,8 +347,8 @@ export const AlbumMetadataModal: React.FC<AlbumMetadataModalProps> = ({
             {/* Tracklist Editor Table */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-white">
-                  Album Tracks ({trackRows.length})
+                <h3 className="text-xs font-semibold text-white">
+                  Album Tracks
                 </h3>
                 <span className="text-2xs text-textMuted">
                   Edit song titles and artists

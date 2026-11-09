@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Track } from "../types";
 import { playerAdapter } from "../services/adapter";
 import { useLibraryStore } from "../stores/libraryStore";
 import { usePlayerStore } from "../stores/playerStore";
 import { useArtwork } from "../utils/useArtwork";
-import { X, Save, Music, Check, AlertCircle, Loader2, FileText, Sparkles, Mic2 } from "lucide-react";
+import { X, Save, Music, Check, AlertCircle, Loader2, FileText, Globe, Mic2 } from "lucide-react";
 import { searchAppleMusicTrack } from "../services/appleMusic";
 import { fetchLyrics } from "../services/lyrics";
+import { useTransitionMount } from "../utils/useTransitionMount";
 
 interface SongMetadataModalProps {
   track: Track | null;
@@ -61,16 +62,16 @@ export const SongMetadataModal: React.FC<SongMetadataModalProps> = ({
         if (match.artist) setArtist(match.artist);
         if (match.album) setAlbum(match.album);
         if (match.albumArtist) setAlbumArtist(match.albumArtist);
-        if (match.year) setYear(match.year.toString());
+        if (match.year != null) setYear(String(match.year));
         if (match.genre) setGenre(match.genre);
-        if (match.trackNumber) setTrackNumber(match.trackNumber.toString());
-        if (match.discNumber) setDiscNumber(match.discNumber.toString());
-        setOnlineNotice("Matched & auto-filled from Apple Music!");
+        if (match.trackNumber != null) setTrackNumber(String(match.trackNumber));
+        if (match.discNumber != null) setDiscNumber(String(match.discNumber));
+        setOnlineNotice("Metadata loaded from Apple Music");
       } else {
-        setErrorMessage("No matching track found on Apple Music");
+        setErrorMessage("No matching track found on Apple Music. Check title and artist spelling.");
       }
     } catch {
-      setErrorMessage("Failed to query Apple Music");
+      setErrorMessage("Unable to connect to Apple Music. Check your internet connection.");
     } finally {
       setIsFetchingAppleMusic(false);
     }
@@ -84,38 +85,51 @@ export const SongMetadataModal: React.FC<SongMetadataModalProps> = ({
 
     try {
       const lyricsRes = await fetchLyrics(
-        artist || track.metadata.artist || "",
-        title || track.metadata.title || "",
-        album || track.metadata.album || "",
-        track.metadata.duration.secs
+        artist || track.metadata?.artist || "",
+        title || track.metadata?.title || "",
+        album || track.metadata?.album || "",
+        track.metadata?.duration?.secs || 0,
+        true // forceRefresh on manual user click
       );
 
       if (lyricsRes?.bestLyrics) {
         setLyrics(lyricsRes.bestLyrics);
         setOnlineNotice(
           lyricsRes.syncedLyrics
-            ? "Fetched time-synced lyrics from LRCLIB!"
-            : "Fetched plain text lyrics from LRCLIB!"
+            ? "Loaded time-synced lyrics from LRCLIB"
+            : "Loaded plain text lyrics from LRCLIB"
         );
       } else {
         setErrorMessage("No lyrics found on LRCLIB for this track");
       }
     } catch {
-      setErrorMessage("Failed to query LRCLIB");
+      setErrorMessage("Unable to connect to LRCLIB. Check your internet connection.");
     } finally {
       setIsFetchingLyrics(false);
     }
   };
 
   useEffect(() => {
-    if (track) {
-      setTitle(track.metadata.title || "");
-      setArtist(track.metadata.artist || "");
+    if (track && track.metadata) {
+      let initTitle = track.metadata.title || "";
+      let initArtist = track.metadata.artist || "";
+
+      // Auto-detect "Artist - Title" patterns for untagged / raw filenames (e.g. "femtanyl - HEAD UP")
+      if ((!initArtist || initArtist === "Unknown Artist") && initTitle.includes(" - ")) {
+        const parts = initTitle.split(" - ");
+        if (parts.length === 2 && parts[0].trim() && parts[1].trim()) {
+          initArtist = parts[0].trim();
+          initTitle = parts[1].trim();
+        }
+      }
+
+      setTitle(initTitle);
+      setArtist(initArtist);
       setAlbum(track.metadata.album || "");
       setAlbumArtist(track.metadata.album_artist || "");
-      setTrackNumber(track.metadata.track_number !== undefined ? track.metadata.track_number.toString() : "");
-      setDiscNumber(track.metadata.disc_number !== undefined ? track.metadata.disc_number.toString() : "");
-      setYear(track.metadata.year !== undefined ? track.metadata.year.toString() : "");
+      setTrackNumber(track.metadata.track_number != null ? String(track.metadata.track_number) : "");
+      setDiscNumber(track.metadata.disc_number != null ? String(track.metadata.disc_number) : "");
+      setYear(track.metadata.year != null ? String(track.metadata.year) : "");
       setGenre(track.metadata.genre || "");
       setLyrics(track.metadata.lyrics || "");
       setWriteTags(true);
@@ -184,12 +198,25 @@ export const SongMetadataModal: React.FC<SongMetadataModalProps> = ({
     }
   };
 
-  if (!isOpen || !track) return null;
+  const { isRendered, isExiting } = useTransitionMount(isOpen && !!track, 160);
+  const lastTrackRef = useRef(track);
+  if (track) {
+    lastTrackRef.current = track;
+  }
+  const displayTrack = track || lastTrackRef.current;
+
+  if (!isRendered || !displayTrack) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md ${
+        isExiting ? "animate-backdrop-out" : "animate-backdrop-in"
+      }`}
+    >
       <div
-        className="bg-surface border border-white/[0.08] w-full max-w-xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-scaleUp"
+        className={`bg-surface border border-white/[0.08] w-full max-w-xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden ${
+          isExiting ? "animate-scale-down pointer-events-none" : "animate-scale-up"
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
@@ -205,7 +232,7 @@ export const SongMetadataModal: React.FC<SongMetadataModalProps> = ({
             <div>
               <h2 className="text-sm font-bold text-white">Edit Song Metadata</h2>
               <p className="text-xs text-textMuted truncate max-w-xs sm:max-w-sm">
-                {track.metadata.title || "Untitled Track"} — {track.metadata.artist || "Unknown Artist"}
+                {title || displayTrack.metadata.title || "Untitled Track"} — {artist || displayTrack.metadata.artist || "Unknown Artist"}
               </p>
             </div>
           </div>
@@ -224,8 +251,8 @@ export const SongMetadataModal: React.FC<SongMetadataModalProps> = ({
                 </>
               ) : (
                 <>
-                  <Sparkles className="w-3.5 h-3.5 text-accent" />
-                  <span>Auto-Fill Apple Music</span>
+                  <Globe className="w-3.5 h-3.5 text-accent" />
+                  <span>Auto-Fill from Apple Music</span>
                 </>
               )}
             </button>

@@ -59,7 +59,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let managed_dir = config.library.managed_directory.clone();
         tokio::spawn(async move {
             let mut lib = scan_lib.lock().await;
-            match lib.import_directory(&managed_dir, ImportStrategy::Copy).await {
+            match lib
+                .import_directory(&managed_dir, ImportStrategy::Copy)
+                .await
+            {
                 Ok(tracks) => info!("Startup scan complete: {} tracks indexed", tracks.len()),
                 Err(e) => eprintln!("[wavery-server] Startup scan error: {e}"),
             }
@@ -84,9 +87,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Err(e) => return Err(Box::new(e) as Box<dyn std::error::Error>),
         }
     }
-    let listener = listener.ok_or_else(|| {
-        std::io::Error::new(std::io::ErrorKind::AddrInUse, "Port in use")
-    })?;
+    let listener = listener
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::AddrInUse, "Port in use"))?;
 
     info!("Wavery Server running at http://{}", addr);
     println!("\n╔════════════════════════════════════════════════════════════╗");
@@ -105,9 +107,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // Serve HTTP requests with graceful termination signal handling
-    if let Err(e) = axum::serve(listener, router)
-        .with_graceful_shutdown(shutdown_signal())
-        .await
+    if let Err(e) = axum::serve(
+        listener,
+        router.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .await
     {
         eprintln!("[wavery-server] Server error: {e}");
     }

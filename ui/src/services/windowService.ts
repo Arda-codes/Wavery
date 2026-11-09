@@ -39,8 +39,8 @@ export interface WindowService {
   startHeaderDrag(screenX?: number, screenY?: number): Promise<void>;
   startResize(direction: ResizeDirection): Promise<void>;
   getWindowState(): WindowState;
-  onWindowStateChange(callback: (state: WindowState) => void): () => void;
-  onWindowResize?(callback: (size: { width: number; height: number }) => void): () => void;
+  onWindowStateChange(callback: (state: WindowState) => void, emitCurrent?: boolean): () => void;
+  onWindowResize?(callback: (size: { width: number; height: number }) => void, emitCurrent?: boolean): () => void;
 }
 
 class DesktopWindowService implements WindowService {
@@ -60,7 +60,7 @@ class DesktopWindowService implements WindowService {
   }
 
   private initListeners() {
-    if (typeof window === "undefined" || this.initialized) return;
+    if (typeof window === "undefined" || typeof window.addEventListener !== "function" || this.initialized) return;
     this.initialized = true;
 
     // 1. Viewport resize listener (throttled to 60fps via requestAnimationFrame)
@@ -117,6 +117,15 @@ class DesktopWindowService implements WindowService {
             .catch(() => {});
         })
         .catch(() => {});
+    } else {
+      // Browser mode: listen for HTML5 Fullscreen API state changes
+      if (typeof document !== "undefined") {
+        document.addEventListener("fullscreenchange", () => {
+          this.updateState({
+            isFullscreen: Boolean(document.fullscreenElement),
+          });
+        });
+      }
     }
   }
 
@@ -197,17 +206,21 @@ class DesktopWindowService implements WindowService {
     return this.currentState;
   }
 
-  onWindowStateChange(callback: (state: WindowState) => void): () => void {
+  onWindowStateChange(callback: (state: WindowState) => void, emitCurrent = false): () => void {
     this.listeners.add(callback);
-    callback(this.currentState);
+    if (emitCurrent) {
+      callback(this.currentState);
+    }
     return () => {
       this.listeners.delete(callback);
     };
   }
 
-  onWindowResize(callback: (size: { width: number; height: number }) => void): () => void {
+  onWindowResize(callback: (size: { width: number; height: number }) => void, emitCurrent = false): () => void {
     this.resizeListeners.add(callback);
-    callback({ width: this.currentState.width, height: this.currentState.height });
+    if (emitCurrent) {
+      callback({ width: this.currentState.width, height: this.currentState.height });
+    }
     return () => {
       this.resizeListeners.delete(callback);
     };

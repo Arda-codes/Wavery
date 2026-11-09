@@ -4,9 +4,9 @@
 //! different display targets (Web Browser client or Tauri Native Desktop window),
 //! triggering background library scans, and managing server lifecycle.
 
+use crate::AppState;
 #[cfg(target_os = "linux")]
 use crate::{open_browser_url, spawn_native_process};
-use crate::AppState;
 use std::sync::Arc;
 
 #[cfg(target_os = "linux")]
@@ -37,7 +37,10 @@ impl WaveryServerTray {
     }
 
     /// Creates a new `WaveryServerTray` with an explicit Tokio runtime handle.
-    pub fn with_handle(state: Arc<AppState>, _tokio_handle: Option<tokio::runtime::Handle>) -> Self {
+    pub fn with_handle(
+        state: Arc<AppState>,
+        _tokio_handle: Option<tokio::runtime::Handle>,
+    ) -> Self {
         Self {
             state,
             #[cfg(target_os = "linux")]
@@ -142,13 +145,21 @@ impl Tray for WaveryServerTray {
                     let lib_arc = state_rescan.library.clone();
                     let managed_dir = {
                         let guard = state_rescan.config.try_read();
-                        guard.map(|c| c.library.managed_directory.clone()).unwrap_or_default()
+                        guard
+                            .map(|c| c.library.managed_directory.clone())
+                            .unwrap_or_default()
                     };
                     let task = async move {
                         let mut lib = lib_arc.lock().await;
-                        match lib.import_directory(&managed_dir, ImportStrategy::Copy).await {
+                        match lib
+                            .import_directory(&managed_dir, ImportStrategy::Copy)
+                            .await
+                        {
                             Ok(tracks) => {
-                                info!("Background library scan finished: {} tracks indexed", tracks.len());
+                                info!(
+                                    "Background library scan finished: {} tracks indexed",
+                                    tracks.len()
+                                );
                             }
                             Err(e) => {
                                 error!("Background library scan error: {e}");
@@ -178,7 +189,10 @@ impl Tray for WaveryServerTray {
                             Ok(tracks) => {
                                 let mut cache = art_cache.write().await;
                                 cache.clear();
-                                info!("Library rebuild complete: {} tracks re-indexed", tracks.len());
+                                info!(
+                                    "Library rebuild complete: {} tracks re-indexed",
+                                    tracks.len()
+                                );
                             }
                             Err(e) => {
                                 error!("Library rebuild failed: {e}");

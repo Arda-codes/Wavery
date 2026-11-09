@@ -1,15 +1,103 @@
 //! SQLite persistence layer for Wavery's music library.
 
 use rusqlite::{params, Connection, Row};
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use wavery_core::error::LibraryError;
-use wavery_core::models::{Album, Artist, Playlist, Track, TrackMetadata, TrackSource};
+use wavery_core::models::{
+    Album, Artist, Playlist, Track, TrackMetadata, TrackSource, WaveformData,
+};
 
-/// Database wrapper around a thread-safe Mutex<Connection>.
+/// Aggregate row counts, on-disk sizes, and consistency counters for the library database.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DatabaseStats {
+    /// Absolute path of the live SQLite database file.
+    pub database_path: String,
+    /// Absolute path of the managed music folder.
+    pub library_path: String,
+    /// Absolute path of the artwork cache folder.
+    pub artwork_cache_path: String,
+    /// Size of the main database file in bytes.
+    pub database_bytes: u64,
+    /// Size of the write-ahead log (`-wal`) in bytes.
+    pub wal_bytes: u64,
+    /// Size of the shared-memory index (`-shm`) in bytes.
+    pub shared_memory_bytes: u64,
+    /// Recursive size of the managed music folder in bytes.
+    pub library_bytes: u64,
+    /// Recursive size of the artwork cache folder in bytes.
+    pub artwork_cache_bytes: u64,
+    /// Number of indexed tracks.
+    pub track_count: u64,
+    /// Number of distinct albums in the index.
+    pub album_count: u64,
+    /// Number of distinct album artists in the index.
+    pub artist_count: u64,
+    /// Number of user playlists.
+    pub playlist_count: u64,
+    /// Number of liked tracks.
+    pub liked_count: u64,
+    /// Number of cached waveform envelopes.
+    pub waveform_count: u64,
+    /// Number of indexed tracks whose audio file is no longer on disk.
+    pub missing_file_count: u64,
+    /// Unused bytes reserved inside the database file (freelist).
+    pub free_bytes: u64,
+    /// SQLite page size in bytes.
+    pub page_size: u64,
+    /// Allocated database pages.
+    pub page_count: u64,
+    /// Active SQLite journal mode (normally `wal`).
+    pub journal_mode: String,
+}
+
+/// Result of a read-only integrity sweep of the library database.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DatabaseHealth {
+    /// `true` when integrity, foreign keys, FTS coverage, and file references all pass.
+    pub is_healthy: bool,
+    /// Raw `PRAGMA quick_check` output (`ok` when the b-tree is sound).
+    pub quick_check: String,
+    /// Number of `PRAGMA foreign_key_check` violations.
+    pub foreign_key_violations: u64,
+    /// Number of rows visible through the FTS5 search index.
+    pub fts_indexed_tracks: u64,
+    /// Indexed tracks missing from the FTS5 search index.
+    pub fts_missing_tracks: u64,
+    /// Indexed tracks whose audio file no longer exists on disk.
+    pub missing_file_count: u64,
+    /// Active SQLite journal mode.
+    pub journal_mode: String,
+    /// Allocated database pages.
+    pub page_count: u64,
+    /// Unused bytes reserved inside the database file (freelist).
+    pub free_bytes: u64,
+    /// Unix timestamp (seconds) when the health sweep ran.
+    pub checked_at: u64,
+    /// Human-readable issues discovered during the sweep.
+    pub issues: Vec<String>,
+}
+
+/// Description of a completed database backup.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DatabaseBackup {
+    /// Absolute path of the written backup file.
+    pub path: String,
+    /// Size of the backup file in bytes.
+    pub bytes: u64,
+    /// Unix timestamp (seconds) when the backup was created.
+    pub created_at: u64,
+}
+
+/// Database wrapper around a thread-safe `Mutex<Connection>`.
 pub struct LibraryDatabase {
     conn: Mutex<Connection>,
+    db_path: PathBuf,
 }
 
 impl LibraryDatabase {
@@ -55,7 +143,11 @@ impl LibraryDatabase {
                 channels INTEGER,
                 format TEXT NOT NULL,
                 date_added INTEGER NOT NULL,
-                lyrics TEXT
+                lyrics TEXT,
+                replaygain_track_gain REAL,
+                replaygain_track_peak REAL,
+                replaygain_album_gain REAL,
+                replaygain_album_peak REAL
             );
 
             CREATE INDEX IF NOT EXISTS idx_tracks_artist ON tracks(artist);
@@ -92,6 +184,14 @@ impl LibraryDatabase {
             );
 
             CREATE INDEX IF NOT EXISTS idx_liked_tracks_created ON liked_tracks(created_at DESC);
+
+            CREATE TABLE IF NOT EXISTS track_waveforms (
+                track_id TEXT PRIMARY KEY,
+                version INTEGER NOT NULL DEFAULT 1,
+                peaks_blob BLOB NOT NULL,
+                updated_at INTEGER NOT NULL,
+                FOREIGN KEY (track_id) REFERENCES tracks(id) ON DELETE CASCADE
+            );
 
             CREATE VIRTUAL TABLE IF NOT EXISTS tracks_fts USING fts5(
                 title,
@@ -137,29 +237,47 @@ impl LibraryDatabase {
             let _ = conn.execute("INSERT INTO tracks_fts(tracks_fts) VALUES('rebuild')", []);
         }
 
-        // Ensure lyrics column exists for pre-existing databases
-        let has_lyrics: bool = conn
+        // Ensure optional columns exist for pre-existing databases
+        let existing_columns: Vec<String> = conn
             .prepare("PRAGMA table_info(tracks)")
             .and_then(|mut stmt| {
                 let mut rows = stmt.query([])?;
+                let mut cols = Vec::new();
                 while let Some(row) = rows.next()? {
                     let col_name: String = row.get(1)?;
-                    if col_name == "lyrics" {
-                        return Ok(true);
-                    }
+                    cols.push(col_name);
                 }
-                Ok(false)
+                Ok(cols)
             })
-            .unwrap_or(false);
+            .unwrap_or_default();
 
-        if !has_lyrics {
-            conn.execute("ALTER TABLE tracks ADD COLUMN lyrics TEXT;", [])
-                .map_err(|e| LibraryError::IndexError(format!("Failed to add lyrics column: {e}")))?;
+        let required_migrations = [
+            ("lyrics", "TEXT"),
+            ("replaygain_track_gain", "REAL"),
+            ("replaygain_track_peak", "REAL"),
+            ("replaygain_album_gain", "REAL"),
+            ("replaygain_album_peak", "REAL"),
+        ];
+
+        for (col_name, col_type) in required_migrations {
+            if !existing_columns.iter().any(|c| c == col_name) {
+                let sql = format!("ALTER TABLE tracks ADD COLUMN {col_name} {col_type};");
+                conn.execute(&sql, []).map_err(|e| {
+                    LibraryError::IndexError(format!("Failed to add {col_name} column: {e}"))
+                })?;
+            }
         }
 
         Ok(Self {
             conn: Mutex::new(conn),
+            db_path: db_path.to_path_buf(),
         })
+    }
+
+    /// Returns the absolute path of the live SQLite database file.
+    #[must_use]
+    pub fn path(&self) -> &Path {
+        &self.db_path
     }
 
     /// Upserts a single track into the database.
@@ -192,9 +310,12 @@ impl LibraryDatabase {
                     "INSERT INTO tracks (
                         id, relative_path, title, artist, album, album_artist,
                         track_number, disc_number, year, genre, duration_secs,
-                        sample_rate, bit_depth, channels, format, date_added, lyrics
+                        sample_rate, bit_depth, channels, format, date_added, lyrics,
+                        replaygain_track_gain, replaygain_track_peak,
+                        replaygain_album_gain, replaygain_album_peak
                     ) VALUES (
-                        ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17
+                        ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17,
+                        ?18, ?19, ?20, ?21
                     )
                     ON CONFLICT(id) DO UPDATE SET
                         relative_path = excluded.relative_path,
@@ -212,9 +333,15 @@ impl LibraryDatabase {
                         channels = excluded.channels,
                         format = excluded.format,
                         date_added = excluded.date_added,
-                        lyrics = excluded.lyrics",
+                        lyrics = excluded.lyrics,
+                        replaygain_track_gain = excluded.replaygain_track_gain,
+                        replaygain_track_peak = excluded.replaygain_track_peak,
+                        replaygain_album_gain = excluded.replaygain_album_gain,
+                        replaygain_album_peak = excluded.replaygain_album_peak",
                 )
-                .map_err(|e| LibraryError::IndexError(format!("Failed to prepare cached statement: {e}")))?;
+                .map_err(|e| {
+                    LibraryError::IndexError(format!("Failed to prepare cached statement: {e}"))
+                })?;
 
             for track in tracks {
                 let full_path = track.source.path();
@@ -242,6 +369,10 @@ impl LibraryDatabase {
                     track.metadata.format,
                     track.date_added as i64,
                     track.metadata.lyrics,
+                    track.metadata.replaygain_track_gain.map(f64::from),
+                    track.metadata.replaygain_track_peak.map(f64::from),
+                    track.metadata.replaygain_album_gain.map(f64::from),
+                    track.metadata.replaygain_album_peak.map(f64::from),
                 ])
                 .map_err(|e| LibraryError::IndexError(format!("Failed to insert track: {e}")))?;
             }
@@ -268,8 +399,14 @@ impl LibraryDatabase {
             .query(params![track_id])
             .map_err(|e| LibraryError::IndexError(e.to_string()))?;
 
-        let rel_path: Option<String> = if let Some(row) = rows.next().map_err(|e| LibraryError::IndexError(e.to_string()))? {
-            Some(row.get(0).map_err(|e| LibraryError::IndexError(e.to_string()))?)
+        let rel_path: Option<String> = if let Some(row) = rows
+            .next()
+            .map_err(|e| LibraryError::IndexError(e.to_string()))?
+        {
+            Some(
+                row.get(0)
+                    .map_err(|e| LibraryError::IndexError(e.to_string()))?,
+            )
         } else {
             None
         };
@@ -364,10 +501,187 @@ impl LibraryDatabase {
             }
         }
 
-        tx.commit()
-            .map_err(|e| LibraryError::IndexError(format!("Failed to commit prune transaction: {e}")))?;
+        tx.commit().map_err(|e| {
+            LibraryError::IndexError(format!("Failed to commit prune transaction: {e}"))
+        })?;
 
         Ok(missing_ids.len())
+    }
+
+    /// Collects row counts and on-disk sizes for the database control center.
+    ///
+    /// `managed_root` is scanned recursively for the music-folder size, and
+    /// `artwork_cache_dir` for the artwork cache size. Missing files are counted
+    /// against the live file system so the UI can offer a prune action.
+    pub fn stats(
+        &self,
+        managed_root: &Path,
+        artwork_cache_dir: &Path,
+    ) -> Result<DatabaseStats, LibraryError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| LibraryError::IndexError("Database mutex poisoned".into()))?;
+
+        let track_count = query_count(&conn, "SELECT COUNT(*) FROM tracks")?;
+        let album_count = query_count(
+            &conn,
+            "SELECT COUNT(*) FROM (
+                SELECT DISTINCT album, COALESCE(NULLIF(album_artist, ''), artist)
+                FROM tracks
+                WHERE album IS NOT NULL AND album <> ''
+            )",
+        )?;
+        let artist_count = query_count(
+            &conn,
+            "SELECT COUNT(*) FROM (
+                SELECT DISTINCT COALESCE(NULLIF(album_artist, ''), artist)
+                FROM tracks
+                WHERE COALESCE(NULLIF(album_artist, ''), artist) IS NOT NULL
+                  AND COALESCE(NULLIF(album_artist, ''), artist) <> ''
+            )",
+        )?;
+        let playlist_count = query_count(&conn, "SELECT COUNT(*) FROM playlists")?;
+        let liked_count = query_count(&conn, "SELECT COUNT(*) FROM liked_tracks")?;
+        let waveform_count = query_count(&conn, "SELECT COUNT(*) FROM track_waveforms")?;
+        let missing_file_count = count_missing_files(&conn, managed_root)?;
+
+        let page_count = query_u64(&conn, "PRAGMA page_count")?;
+        let page_size = query_u64(&conn, "PRAGMA page_size")?;
+        let free_pages = query_u64(&conn, "PRAGMA freelist_count")?;
+        let journal_mode = query_string(&conn, "PRAGMA journal_mode")?;
+
+        Ok(DatabaseStats {
+            database_path: self.db_path.display().to_string(),
+            library_path: managed_root.display().to_string(),
+            artwork_cache_path: artwork_cache_dir.display().to_string(),
+            database_bytes: file_size(&self.db_path),
+            wal_bytes: file_size(&sidecar_path(&self.db_path, "-wal")),
+            shared_memory_bytes: file_size(&sidecar_path(&self.db_path, "-shm")),
+            library_bytes: directory_size(managed_root),
+            artwork_cache_bytes: directory_size(artwork_cache_dir),
+            track_count,
+            album_count,
+            artist_count,
+            playlist_count,
+            liked_count,
+            waveform_count,
+            missing_file_count,
+            free_bytes: free_pages.saturating_mul(page_size),
+            page_size,
+            page_count,
+            journal_mode,
+        })
+    }
+
+    /// Runs a read-only integrity sweep covering the b-tree, foreign keys,
+    /// full-text index coverage, and indexed file references.
+    pub fn health(&self, managed_root: &Path) -> Result<DatabaseHealth, LibraryError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| LibraryError::IndexError("Database mutex poisoned".into()))?;
+
+        let mut messages = Vec::new();
+        {
+            let mut stmt = conn
+                .prepare("PRAGMA quick_check")
+                .map_err(|e| LibraryError::IndexError(format!("quick_check failed: {e}")))?;
+            let rows = stmt
+                .query_map([], |row| row.get::<_, String>(0))
+                .map_err(|e| LibraryError::IndexError(format!("quick_check failed: {e}")))?;
+            for message in rows.filter_map(Result::ok) {
+                messages.push(message);
+            }
+        }
+        let quick_check = if messages.is_empty() {
+            "no response".to_string()
+        } else {
+            messages.join("; ")
+        };
+
+        let foreign_key_violations =
+            query_count(&conn, "SELECT COUNT(*) FROM pragma_foreign_key_check")?;
+        let track_count = query_count(&conn, "SELECT COUNT(*) FROM tracks")?;
+        let fts_indexed_tracks = query_count(&conn, "SELECT COUNT(*) FROM tracks_fts")?;
+        let fts_missing_tracks = track_count.saturating_sub(fts_indexed_tracks);
+        let missing_file_count = count_missing_files(&conn, managed_root)?;
+        let page_count = query_u64(&conn, "PRAGMA page_count")?;
+        let page_size = query_u64(&conn, "PRAGMA page_size")?;
+        let free_pages = query_u64(&conn, "PRAGMA freelist_count")?;
+        let journal_mode = query_string(&conn, "PRAGMA journal_mode")?;
+
+        let mut issues = Vec::new();
+        if quick_check.to_lowercase() != "ok" {
+            issues.push(format!("Integrity check reported: {quick_check}"));
+        }
+        if foreign_key_violations > 0 {
+            issues.push(format!(
+                "{foreign_key_violations} foreign-key violation(s) found"
+            ));
+        }
+        if fts_missing_tracks > 0 {
+            issues.push(format!(
+                "{fts_missing_tracks} track(s) missing from the search index"
+            ));
+        }
+        if missing_file_count > 0 {
+            issues.push(format!(
+                "{missing_file_count} indexed file(s) no longer exist on disk"
+            ));
+        }
+        if journal_mode.to_lowercase() != "wal" {
+            issues.push(format!("Journal mode is {journal_mode}, expected wal"));
+        }
+
+        Ok(DatabaseHealth {
+            is_healthy: issues.is_empty(),
+            quick_check,
+            foreign_key_violations,
+            fts_indexed_tracks,
+            fts_missing_tracks,
+            missing_file_count,
+            journal_mode,
+            page_count,
+            free_bytes: free_pages.saturating_mul(page_size),
+            checked_at: unix_now(),
+            issues,
+        })
+    }
+
+    /// Writes a consistent snapshot of the database with `VACUUM INTO`.
+    ///
+    /// The destination file is replaced when it already exists. The live
+    /// database path is rejected so a backup can never overwrite the index
+    /// that Wavery is actively using.
+    pub fn backup_to(&self, destination: &Path) -> Result<DatabaseBackup, LibraryError> {
+        if destination == self.db_path {
+            return Err(LibraryError::IndexError(
+                "Backup destination cannot be the live database file".into(),
+            ));
+        }
+        if let Some(parent) = destination.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        if destination.exists() {
+            std::fs::remove_file(destination)?;
+        }
+
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| LibraryError::IndexError("Database mutex poisoned".into()))?;
+        let destination_str = destination
+            .to_str()
+            .ok_or_else(|| LibraryError::IndexError("Backup path is not valid UTF-8".into()))?;
+        conn.execute("VACUUM INTO ?1", params![destination_str])
+            .map_err(|e| LibraryError::IndexError(format!("Failed to back up database: {e}")))?;
+
+        Ok(DatabaseBackup {
+            path: destination.display().to_string(),
+            bytes: file_size(destination),
+            created_at: unix_now(),
+        })
     }
 
     /// Updates track metadata fields in SQLite.
@@ -391,8 +705,12 @@ impl LibraryDatabase {
                 disc_number = ?6,
                 year = ?7,
                 genre = ?8,
-                lyrics = ?9
-             WHERE id = ?10",
+                lyrics = ?9,
+                replaygain_track_gain = COALESCE(?10, replaygain_track_gain),
+                replaygain_track_peak = COALESCE(?11, replaygain_track_peak),
+                replaygain_album_gain = COALESCE(?12, replaygain_album_gain),
+                replaygain_album_peak = COALESCE(?13, replaygain_album_peak)
+             WHERE id = ?14",
             params![
                 metadata.title,
                 metadata.artist,
@@ -403,6 +721,10 @@ impl LibraryDatabase {
                 metadata.year,
                 metadata.genre,
                 metadata.lyrics,
+                metadata.replaygain_track_gain.map(f64::from),
+                metadata.replaygain_track_peak.map(f64::from),
+                metadata.replaygain_album_gain.map(f64::from),
+                metadata.replaygain_album_peak.map(f64::from),
                 track_id,
             ],
         );
@@ -420,8 +742,12 @@ impl LibraryDatabase {
                     disc_number = ?6,
                     year = ?7,
                     genre = ?8,
-                    lyrics = ?9
-                 WHERE id = ?10",
+                    lyrics = ?9,
+                    replaygain_track_gain = COALESCE(?10, replaygain_track_gain),
+                    replaygain_track_peak = COALESCE(?11, replaygain_track_peak),
+                    replaygain_album_gain = COALESCE(?12, replaygain_album_gain),
+                    replaygain_album_peak = COALESCE(?13, replaygain_album_peak)
+                 WHERE id = ?14",
                 params![
                     metadata.title,
                     metadata.artist,
@@ -432,11 +758,17 @@ impl LibraryDatabase {
                     metadata.year,
                     metadata.genre,
                     metadata.lyrics,
+                    metadata.replaygain_track_gain.map(f64::from),
+                    metadata.replaygain_track_peak.map(f64::from),
+                    metadata.replaygain_album_gain.map(f64::from),
+                    metadata.replaygain_album_peak.map(f64::from),
                     track_id,
                 ],
             )
             .map_err(|retry_err| {
-                LibraryError::IndexError(format!("Failed to update track metadata: {retry_err} (initial: {e})"))
+                LibraryError::IndexError(format!(
+                    "Failed to update track metadata: {retry_err} (initial: {e})"
+                ))
             })?;
         }
 
@@ -483,24 +815,35 @@ impl LibraryDatabase {
     }
 
     /// Fetches a single track by its ID.
-    pub fn get_track(&self, track_id: &str, managed_root: &Path) -> Result<Option<Track>, LibraryError> {
+    pub fn get_track(
+        &self,
+        track_id: &str,
+        managed_root: &Path,
+    ) -> Result<Option<Track>, LibraryError> {
         let conn = self
             .conn
             .lock()
             .map_err(|_| LibraryError::IndexError("Database mutex poisoned".into()))?;
 
-        let mut stmt = conn.prepare(
-            "SELECT id, relative_path, title, artist, album, album_artist,
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, relative_path, title, artist, album, album_artist,
                     track_number, disc_number, year, genre, duration_secs,
-                    sample_rate, bit_depth, channels, format, date_added, lyrics
+                    sample_rate, bit_depth, channels, format, date_added, lyrics,
+                    replaygain_track_gain, replaygain_track_peak,
+                    replaygain_album_gain, replaygain_album_peak
              FROM tracks WHERE id = ?1",
-        ).map_err(|e| LibraryError::IndexError(e.to_string()))?;
+            )
+            .map_err(|e| LibraryError::IndexError(e.to_string()))?;
 
         let mut rows = stmt
             .query(params![track_id])
             .map_err(|e| LibraryError::IndexError(e.to_string()))?;
 
-        if let Some(row) = rows.next().map_err(|e| LibraryError::IndexError(e.to_string()))? {
+        if let Some(row) = rows
+            .next()
+            .map_err(|e| LibraryError::IndexError(e.to_string()))?
+        {
             let track = row_to_track(row, managed_root)
                 .map_err(|e| LibraryError::IndexError(e.to_string()))?;
             Ok(Some(track))
@@ -520,12 +863,16 @@ impl LibraryDatabase {
             .query_row("SELECT COUNT(*) FROM tracks", [], |row| row.get(0))
             .unwrap_or(0);
 
-        let mut stmt = conn.prepare(
-            "SELECT id, relative_path, title, artist, album, album_artist,
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, relative_path, title, artist, album, album_artist,
                     track_number, disc_number, year, genre, duration_secs,
-                    sample_rate, bit_depth, channels, format, date_added, lyrics
+                    sample_rate, bit_depth, channels, format, date_added, lyrics,
+                    replaygain_track_gain, replaygain_track_peak,
+                    replaygain_album_gain, replaygain_album_peak
              FROM tracks ORDER BY artist, album, track_number, title",
-        ).map_err(|e| LibraryError::IndexError(e.to_string()))?;
+            )
+            .map_err(|e| LibraryError::IndexError(e.to_string()))?;
 
         let track_iter = stmt
             .query_map([], |row| row_to_track(row, managed_root))
@@ -568,19 +915,27 @@ impl LibraryDatabase {
                 let track_count: usize = row.get(4)?;
                 let total_duration_secs: f64 = row.get(5)?;
 
-                let total_duration = if total_duration_secs.is_finite() && total_duration_secs >= 0.0 && total_duration_secs <= (u64::MAX as f64) {
+                let total_duration = if total_duration_secs.is_finite()
+                    && total_duration_secs >= 0.0
+                    && total_duration_secs <= (u64::MAX as f64)
+                {
                     Duration::from_secs_f64(total_duration_secs)
                 } else {
                     Duration::ZERO
                 };
 
+                let total_duration_secs_u64 = total_duration.as_secs();
                 Ok(Album {
                     title,
                     artist,
+                    album_artist: None,
+                    is_compilation: false,
                     year,
                     artwork_track_id,
+                    tracks: Vec::new(),
                     track_count,
                     total_duration,
+                    total_duration_secs: total_duration_secs_u64,
                 })
             })
             .map_err(|e| LibraryError::IndexError(e.to_string()))?;
@@ -600,8 +955,9 @@ impl LibraryDatabase {
             .lock()
             .map_err(|_| LibraryError::IndexError("Database mutex poisoned".into()))?;
 
-        let mut stmt = conn.prepare(
-            "SELECT 
+        let mut stmt = conn
+            .prepare(
+                "SELECT 
                  COALESCE(NULLIF(artist, ''), 'Unknown Artist') AS artist_name,
                  COUNT(DISTINCT LOWER(COALESCE(NULLIF(album, ''), 'Unknown Album'))) AS album_count,
                  COUNT(*) AS track_count,
@@ -609,7 +965,10 @@ impl LibraryDatabase {
              FROM tracks
              GROUP BY LOWER(COALESCE(NULLIF(artist, ''), 'Unknown Artist'))
              ORDER BY artist_name COLLATE NOCASE ASC",
-        ).map_err(|e| LibraryError::IndexError(format!("Failed to prepare list_artists: {e}")))?;
+            )
+            .map_err(|e| {
+                LibraryError::IndexError(format!("Failed to prepare list_artists: {e}"))
+            })?;
 
         let artist_iter = stmt
             .query_map([], |row| {
@@ -620,6 +979,9 @@ impl LibraryDatabase {
 
                 Ok(Artist {
                     name,
+                    albums: Vec::new(),
+                    appears_on: Vec::new(),
+                    tracks: Vec::new(),
                     album_count,
                     track_count,
                     artwork_track_id,
@@ -649,14 +1011,18 @@ impl LibraryDatabase {
 
         let mut tracks = Vec::new();
         if let Some(art) = artist {
-            let mut stmt = conn.prepare(
-                "SELECT id, relative_path, title, artist, album, album_artist,
+            let mut stmt = conn
+                .prepare(
+                    "SELECT id, relative_path, title, artist, album, album_artist,
                         track_number, disc_number, year, genre, duration_secs,
-                        sample_rate, bit_depth, channels, format, date_added, lyrics
+                        sample_rate, bit_depth, channels, format, date_added, lyrics,
+                        replaygain_track_gain, replaygain_track_peak,
+                        replaygain_album_gain, replaygain_album_peak
                  FROM tracks
                  WHERE album = ?1 AND (artist = ?2 OR album_artist = ?2)
                  ORDER BY COALESCE(disc_number, 1) ASC, COALESCE(track_number, 0) ASC, title ASC",
-            ).map_err(|e| LibraryError::IndexError(e.to_string()))?;
+                )
+                .map_err(|e| LibraryError::IndexError(e.to_string()))?;
 
             let iter = stmt
                 .query_map(params![album, art], |row| row_to_track(row, managed_root))
@@ -666,14 +1032,18 @@ impl LibraryDatabase {
                 tracks.push(item.map_err(|e| LibraryError::IndexError(e.to_string()))?);
             }
         } else {
-            let mut stmt = conn.prepare(
-                "SELECT id, relative_path, title, artist, album, album_artist,
+            let mut stmt = conn
+                .prepare(
+                    "SELECT id, relative_path, title, artist, album, album_artist,
                         track_number, disc_number, year, genre, duration_secs,
-                        sample_rate, bit_depth, channels, format, date_added, lyrics
+                        sample_rate, bit_depth, channels, format, date_added, lyrics,
+                        replaygain_track_gain, replaygain_track_peak,
+                        replaygain_album_gain, replaygain_album_peak
                  FROM tracks
                  WHERE album = ?1
                  ORDER BY COALESCE(disc_number, 1) ASC, COALESCE(track_number, 0) ASC, title ASC",
-            ).map_err(|e| LibraryError::IndexError(e.to_string()))?;
+                )
+                .map_err(|e| LibraryError::IndexError(e.to_string()))?;
 
             let iter = stmt
                 .query_map(params![album], |row| row_to_track(row, managed_root))
@@ -706,16 +1076,20 @@ impl LibraryDatabase {
             .lock()
             .map_err(|_| LibraryError::IndexError("Database mutex poisoned".into()))?;
 
-        let mut stmt = conn.prepare(
-            "SELECT t.id, t.relative_path, t.title, t.artist, t.album, t.album_artist,
+        let mut stmt = conn
+            .prepare(
+                "SELECT t.id, t.relative_path, t.title, t.artist, t.album, t.album_artist,
                     t.track_number, t.disc_number, t.year, t.genre, t.duration_secs,
-                    t.sample_rate, t.bit_depth, t.channels, t.format, t.date_added, t.lyrics
+                    t.sample_rate, t.bit_depth, t.channels, t.format, t.date_added, t.lyrics,
+                    t.replaygain_track_gain, t.replaygain_track_peak,
+                    t.replaygain_album_gain, t.replaygain_album_peak
              FROM tracks t
              JOIN tracks_fts fts ON fts.rowid = t.rowid
              WHERE tracks_fts MATCH ?1
              ORDER BY bm25(tracks_fts, 10.0, 5.0, 3.0, 2.0, 1.0) ASC
              LIMIT 100",
-        ).map_err(|e| LibraryError::IndexError(format!("Failed to prepare FTS query: {e}")))?;
+            )
+            .map_err(|e| LibraryError::IndexError(format!("Failed to prepare FTS query: {e}")))?;
 
         let track_iter = stmt
             .query_map(params![fts_query], |row| row_to_track(row, managed_root))
@@ -772,11 +1146,22 @@ impl LibraryDatabase {
             .query(params![id])
             .map_err(|e| LibraryError::IndexError(e.to_string()))?;
 
-        let playlist_opt = if let Some(row) = rows.next().map_err(|e| LibraryError::IndexError(e.to_string()))? {
-            let p_id: String = row.get(0).map_err(|e| LibraryError::IndexError(e.to_string()))?;
-            let name: String = row.get(1).map_err(|e| LibraryError::IndexError(e.to_string()))?;
-            let created_at: i64 = row.get(2).map_err(|e| LibraryError::IndexError(e.to_string()))?;
-            let updated_at: i64 = row.get(3).map_err(|e| LibraryError::IndexError(e.to_string()))?;
+        let playlist_opt = if let Some(row) = rows
+            .next()
+            .map_err(|e| LibraryError::IndexError(e.to_string()))?
+        {
+            let p_id: String = row
+                .get(0)
+                .map_err(|e| LibraryError::IndexError(e.to_string()))?;
+            let name: String = row
+                .get(1)
+                .map_err(|e| LibraryError::IndexError(e.to_string()))?;
+            let created_at: i64 = row
+                .get(2)
+                .map_err(|e| LibraryError::IndexError(e.to_string()))?;
+            let updated_at: i64 = row
+                .get(3)
+                .map_err(|e| LibraryError::IndexError(e.to_string()))?;
             Some((p_id, name, created_at, updated_at))
         } else {
             None
@@ -839,7 +1224,9 @@ impl LibraryDatabase {
 
         let mut playlists = Vec::with_capacity(headers.len());
         let mut track_stmt = conn
-            .prepare("SELECT track_id FROM playlist_tracks WHERE playlist_id = ?1 ORDER BY position ASC")
+            .prepare(
+                "SELECT track_id FROM playlist_tracks WHERE playlist_id = ?1 ORDER BY position ASC",
+            )
             .map_err(|e| LibraryError::IndexError(e.to_string()))?;
 
         for (p_id, name, created_at, updated_at) in headers {
@@ -900,12 +1287,15 @@ impl LibraryDatabase {
 
             for (pos, track_id) in playlist.track_ids.iter().enumerate() {
                 stmt.execute(params![playlist.id, track_id, pos as i64])
-                    .map_err(|e| LibraryError::IndexError(format!("Failed to insert playlist track: {e}")))?;
+                    .map_err(|e| {
+                        LibraryError::IndexError(format!("Failed to insert playlist track: {e}"))
+                    })?;
             }
         }
 
-        tx.commit()
-            .map_err(|e| LibraryError::IndexError(format!("Failed to commit playlist save: {e}")))?;
+        tx.commit().map_err(|e| {
+            LibraryError::IndexError(format!("Failed to commit playlist save: {e}"))
+        })?;
 
         Ok(())
     }
@@ -958,7 +1348,11 @@ impl LibraryDatabase {
             for (idx, track_id) in track_ids.iter().enumerate() {
                 let next_pos = max_pos + 1 + idx as i64;
                 stmt.execute(params![playlist_id, track_id, next_pos])
-                    .map_err(|e| LibraryError::IndexError(format!("Failed to insert track into playlist: {e}")))?;
+                    .map_err(|e| {
+                        LibraryError::IndexError(format!(
+                            "Failed to insert track into playlist: {e}"
+                        ))
+                    })?;
             }
         }
 
@@ -971,10 +1365,13 @@ impl LibraryDatabase {
             "UPDATE playlists SET updated_at = ?1 WHERE id = ?2",
             params![now, playlist_id],
         )
-        .map_err(|e| LibraryError::IndexError(format!("Failed to update playlist timestamp: {e}")))?;
+        .map_err(|e| {
+            LibraryError::IndexError(format!("Failed to update playlist timestamp: {e}"))
+        })?;
 
-        tx.commit()
-            .map_err(|e| LibraryError::IndexError(format!("Failed to commit adding tracks: {e}")))?;
+        tx.commit().map_err(|e| {
+            LibraryError::IndexError(format!("Failed to commit adding tracks: {e}"))
+        })?;
 
         Ok(())
     }
@@ -990,15 +1387,19 @@ impl LibraryDatabase {
             .lock()
             .map_err(|_| LibraryError::IndexError("Database mutex poisoned".into()))?;
 
-        let mut stmt = conn.prepare(
-            "SELECT t.id, t.relative_path, t.title, t.artist, t.album, t.album_artist,
+        let mut stmt = conn
+            .prepare(
+                "SELECT t.id, t.relative_path, t.title, t.artist, t.album, t.album_artist,
                     t.track_number, t.disc_number, t.year, t.genre, t.duration_secs,
-                    t.sample_rate, t.bit_depth, t.channels, t.format, t.date_added, t.lyrics
+                    t.sample_rate, t.bit_depth, t.channels, t.format, t.date_added, t.lyrics,
+                    t.replaygain_track_gain, t.replaygain_track_peak,
+                    t.replaygain_album_gain, t.replaygain_album_peak
              FROM tracks t
              JOIN playlist_tracks pt ON pt.track_id = t.id
              WHERE pt.playlist_id = ?1
              ORDER BY pt.position ASC",
-        ).map_err(|e| LibraryError::IndexError(e.to_string()))?;
+            )
+            .map_err(|e| LibraryError::IndexError(e.to_string()))?;
 
         let track_iter = stmt
             .query_map(params![playlist_id], |row| row_to_track(row, managed_root))
@@ -1032,7 +1433,9 @@ impl LibraryDatabase {
             .map_err(|e| LibraryError::IndexError(format!("Failed to rename playlist: {e}")))?;
 
         if rows_affected == 0 {
-            return Err(LibraryError::IndexError(format!("Playlist with ID '{playlist_id}' not found")));
+            return Err(LibraryError::IndexError(format!(
+                "Playlist with ID '{playlist_id}' not found"
+            )));
         }
 
         Ok(())
@@ -1058,11 +1461,15 @@ impl LibraryDatabase {
             "DELETE FROM playlist_tracks WHERE playlist_id = ?1 AND track_id = ?2",
             params![playlist_id, track_id],
         )
-        .map_err(|e| LibraryError::IndexError(format!("Failed to remove track from playlist: {e}")))?;
+        .map_err(|e| {
+            LibraryError::IndexError(format!("Failed to remove track from playlist: {e}"))
+        })?;
 
         // 2. Compact remaining positions
         let mut select_stmt = tx
-            .prepare("SELECT track_id FROM playlist_tracks WHERE playlist_id = ?1 ORDER BY position ASC")
+            .prepare(
+                "SELECT track_id FROM playlist_tracks WHERE playlist_id = ?1 ORDER BY position ASC",
+            )
             .map_err(|e| LibraryError::IndexError(e.to_string()))?;
 
         let track_ids: Vec<String> = select_stmt
@@ -1100,7 +1507,9 @@ impl LibraryDatabase {
             "UPDATE playlists SET updated_at = ?1 WHERE id = ?2",
             params![now, playlist_id],
         )
-        .map_err(|e| LibraryError::IndexError(format!("Failed to update playlist timestamp: {e}")))?;
+        .map_err(|e| {
+            LibraryError::IndexError(format!("Failed to update playlist timestamp: {e}"))
+        })?;
 
         tx.commit()
             .map_err(|e| LibraryError::IndexError(format!("Failed to commit remove track: {e}")))?;
@@ -1232,14 +1641,18 @@ impl LibraryDatabase {
             .lock()
             .map_err(|_| LibraryError::IndexError("Database mutex poisoned".into()))?;
 
-        let mut stmt = conn.prepare(
-            "SELECT t.id, t.relative_path, t.title, t.artist, t.album, t.album_artist,
+        let mut stmt = conn
+            .prepare(
+                "SELECT t.id, t.relative_path, t.title, t.artist, t.album, t.album_artist,
                     t.track_number, t.disc_number, t.year, t.genre, t.duration_secs,
-                    t.sample_rate, t.bit_depth, t.channels, t.format, t.date_added, t.lyrics
+                    t.sample_rate, t.bit_depth, t.channels, t.format, t.date_added, t.lyrics,
+                    t.replaygain_track_gain, t.replaygain_track_peak,
+                    t.replaygain_album_gain, t.replaygain_album_peak
              FROM tracks t
              JOIN liked_tracks lt ON lt.track_id = t.id
              ORDER BY lt.created_at DESC",
-        ).map_err(|e| LibraryError::IndexError(e.to_string()))?;
+            )
+            .map_err(|e| LibraryError::IndexError(e.to_string()))?;
 
         let track_iter = stmt
             .query_map([], |row| row_to_track(row, managed_root))
@@ -1252,6 +1665,102 @@ impl LibraryDatabase {
 
         Ok(tracks)
     }
+
+    /// Queries the persisted 100-point waveform peak envelope for `track_id`.
+    ///
+    /// Returns `Ok(None)` if no waveform is cached or if the stored BLOB is corrupted.
+    pub fn get_waveform(&self, track_id: &str) -> Result<Option<WaveformData>, LibraryError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| LibraryError::IndexError("Database mutex poisoned".into()))?;
+
+        let mut stmt = conn
+            .prepare("SELECT version, peaks_blob FROM track_waveforms WHERE track_id = ?1")
+            .map_err(|e| LibraryError::IndexError(e.to_string()))?;
+
+        let mut rows = stmt
+            .query(params![track_id])
+            .map_err(|e| LibraryError::IndexError(e.to_string()))?;
+
+        let Some(row) = rows
+            .next()
+            .map_err(|e| LibraryError::IndexError(e.to_string()))?
+        else {
+            return Ok(None);
+        };
+
+        let version: i64 = row
+            .get(0)
+            .map_err(|e| LibraryError::IndexError(e.to_string()))?;
+        let blob: Vec<u8> = row
+            .get(1)
+            .map_err(|e| LibraryError::IndexError(e.to_string()))?;
+
+        let expected_bytes = crate::waveform::WAVEFORM_POINT_COUNT * 4;
+        if blob.len() != expected_bytes {
+            return Ok(None);
+        }
+
+        let mut points = Vec::with_capacity(crate::waveform::WAVEFORM_POINT_COUNT);
+        for &chunk in blob.as_chunks::<4>().0 {
+            let val = f32::from_le_bytes(chunk);
+            if !val.is_finite() {
+                return Ok(None);
+            }
+            points.push(val.clamp(0.0, 1.0));
+        }
+
+        Ok(Some(WaveformData {
+            track_id: track_id.to_string(),
+            version: version.max(1) as u32,
+            points,
+        }))
+    }
+
+    /// Persists or updates a track's 100-point waveform peak envelope as a 400-byte little-endian BLOB.
+    pub fn save_waveform(&self, waveform: &WaveformData) -> Result<(), LibraryError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| LibraryError::IndexError("Database mutex poisoned".into()))?;
+
+        let normalized_points: Vec<f32> =
+            if waveform.points.len() == crate::waveform::WAVEFORM_POINT_COUNT {
+                waveform
+                    .points
+                    .iter()
+                    .map(|&v| if v.is_finite() { v.clamp(0.0, 1.0) } else { 0.0 })
+                    .collect()
+            } else {
+                crate::waveform::resample_peaks_to_100(&waveform.points)
+            };
+
+        let mut blob = Vec::with_capacity(crate::waveform::WAVEFORM_POINT_COUNT * 4);
+        for &pt in &normalized_points {
+            blob.extend_from_slice(&pt.to_le_bytes());
+        }
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+
+        let version = waveform.version.max(1) as i64;
+
+        conn.execute(
+            "INSERT INTO track_waveforms (track_id, version, peaks_blob, updated_at)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(track_id) DO UPDATE SET
+                 version = excluded.version,
+                 peaks_blob = excluded.peaks_blob,
+                 updated_at = excluded.updated_at",
+            params![waveform.track_id, version, blob, now],
+        )
+        .map_err(|e| LibraryError::IndexError(format!("Failed to save waveform: {e}")))?;
+
+        Ok(())
+    }
 }
 
 fn row_to_track(row: &Row, managed_root: &Path) -> rusqlite::Result<Track> {
@@ -1261,8 +1770,12 @@ fn row_to_track(row: &Row, managed_root: &Path) -> rusqlite::Result<Track> {
     let artist: Option<String> = row.get(3)?;
     let album: Option<String> = row.get(4)?;
     let album_artist: Option<String> = row.get(5)?;
-    let track_number: Option<u32> = row.get::<_, Option<i64>>(6)?.and_then(|n| if n >= 0 { Some(n as u32) } else { None });
-    let disc_number: Option<u32> = row.get::<_, Option<i64>>(7)?.and_then(|n| if n >= 0 { Some(n as u32) } else { None });
+    let track_number: Option<u32> =
+        row.get::<_, Option<i64>>(6)?
+            .and_then(|n| if n >= 0 { Some(n as u32) } else { None });
+    let disc_number: Option<u32> =
+        row.get::<_, Option<i64>>(7)?
+            .and_then(|n| if n >= 0 { Some(n as u32) } else { None });
     let year: Option<i32> = row.get(8)?;
     let genre: Option<String> = row.get(9)?;
     let duration_secs: f64 = row.get(10)?;
@@ -1271,11 +1784,28 @@ fn row_to_track(row: &Row, managed_root: &Path) -> rusqlite::Result<Track> {
     let channels: Option<u16> = row.get(13)?;
     let format: String = row.get(14)?;
     let date_added: i64 = row.get(15)?;
-    let lyrics: Option<String> = row.get::<_, Option<String>>(16)?.filter(|l| !l.trim().is_empty());
+    let lyrics: Option<String> = row
+        .get::<_, Option<String>>(16)?
+        .filter(|l| !l.trim().is_empty());
+    let replaygain_track_gain: Option<f32> = row
+        .get::<_, Option<f64>>(17)?
+        .and_then(|v| if v.is_finite() { Some(v as f32) } else { None });
+    let replaygain_track_peak: Option<f32> = row
+        .get::<_, Option<f64>>(18)?
+        .and_then(|v| if v.is_finite() { Some(v as f32) } else { None });
+    let replaygain_album_gain: Option<f32> = row
+        .get::<_, Option<f64>>(19)?
+        .and_then(|v| if v.is_finite() { Some(v as f32) } else { None });
+    let replaygain_album_peak: Option<f32> = row
+        .get::<_, Option<f64>>(20)?
+        .and_then(|v| if v.is_finite() { Some(v as f32) } else { None });
 
     let full_path = managed_root.join(&rel_path);
 
-    let duration = if duration_secs.is_finite() && duration_secs >= 0.0 && duration_secs <= (u64::MAX as f64) {
+    let duration = if duration_secs.is_finite()
+        && duration_secs >= 0.0
+        && duration_secs <= (u64::MAX as f64)
+    {
         Duration::from_secs_f64(duration_secs)
     } else {
         Duration::ZERO
@@ -1299,7 +1829,86 @@ fn row_to_track(row: &Row, managed_root: &Path) -> rusqlite::Result<Track> {
             channels,
             format,
             lyrics,
+            replaygain_track_gain,
+            replaygain_track_peak,
+            replaygain_album_gain,
+            replaygain_album_peak,
         },
         date_added: date_added as u64,
     })
+}
+
+/// Reads a single integer count from `sql`, treating negative or missing values as zero.
+fn query_count(conn: &Connection, sql: &str) -> Result<u64, LibraryError> {
+    let value: i64 = conn
+        .query_row(sql, [], |row| row.get(0))
+        .map_err(|e| LibraryError::IndexError(format!("Count query failed: {e}")))?;
+    Ok(u64::try_from(value).unwrap_or(0))
+}
+
+/// Reads a single unsigned PRAGMA value.
+fn query_u64(conn: &Connection, pragma: &str) -> Result<u64, LibraryError> {
+    let value: i64 = conn
+        .query_row(pragma, [], |row| row.get(0))
+        .map_err(|e| LibraryError::IndexError(format!("PRAGMA failed: {e}")))?;
+    Ok(u64::try_from(value).unwrap_or(0))
+}
+
+/// Reads a single string PRAGMA value.
+fn query_string(conn: &Connection, pragma: &str) -> Result<String, LibraryError> {
+    conn.query_row(pragma, [], |row| row.get(0))
+        .map_err(|e| LibraryError::IndexError(format!("PRAGMA failed: {e}")))
+}
+
+/// Counts indexed tracks whose managed file is missing from disk.
+fn count_missing_files(conn: &Connection, managed_root: &Path) -> Result<u64, LibraryError> {
+    let mut stmt = conn
+        .prepare("SELECT relative_path FROM tracks")
+        .map_err(|e| LibraryError::IndexError(format!("Failed to read track paths: {e}")))?;
+    let rows = stmt
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(|e| LibraryError::IndexError(format!("Failed to read track paths: {e}")))?;
+
+    let mut missing = 0u64;
+    for relative_path in rows.filter_map(Result::ok) {
+        if !managed_root.join(relative_path).exists() {
+            missing += 1;
+        }
+    }
+    Ok(missing)
+}
+
+/// Returns the size of a file in bytes, or zero when it does not exist.
+fn file_size(path: &Path) -> u64 {
+    std::fs::metadata(path).map(|meta| meta.len()).unwrap_or(0)
+}
+
+/// Builds a SQLite sidecar path such as `library.db-wal`.
+fn sidecar_path(db_path: &Path, suffix: &str) -> PathBuf {
+    let mut value = db_path.as_os_str().to_os_string();
+    value.push(suffix);
+    PathBuf::from(value)
+}
+
+/// Recursively sums regular file sizes below `root`, ignoring unreadable entries.
+fn directory_size(root: &Path) -> u64 {
+    if !root.is_dir() {
+        return 0;
+    }
+    walkdir::WalkDir::new(root)
+        .follow_links(false)
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_type().is_file())
+        .filter_map(|entry| entry.metadata().ok())
+        .map(|meta| meta.len())
+        .sum()
+}
+
+/// Current Unix timestamp in seconds.
+fn unix_now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
 }

@@ -2,6 +2,7 @@
 
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -60,6 +61,41 @@ pub struct AudioConfig {
     pub replay_gain_mode: String,
 }
 
+impl AudioConfig {
+    /// Returns true if replay gain normalization is enabled (mode is "track" or "album").
+    #[must_use]
+    pub fn is_replay_gain_enabled(&self) -> bool {
+        self.replay_gain_mode == "track" || self.replay_gain_mode == "album"
+    }
+
+    /// Sanitizes audio configuration fields, clamping numerical ranges and validating replay gain mode.
+    pub fn sanitize(&mut self) {
+        if self.default_volume.is_nan() || self.default_volume < 0.0 {
+            self.default_volume = 0.0;
+        } else if self.default_volume > 1.0 {
+            self.default_volume = 1.0;
+        }
+
+        if self.volume_step.is_nan()
+            || self.volume_step <= 0.0
+            || self.volume_step > 1.0
+        {
+            self.volume_step = 0.05;
+        }
+
+        if self.buffer_size_frames < 256 || self.buffer_size_frames > 65536 {
+            self.buffer_size_frames = 2048;
+        }
+
+        let mode_lower = self.replay_gain_mode.trim().to_lowercase();
+        if mode_lower == "track" || mode_lower == "album" || mode_lower == "off" {
+            self.replay_gain_mode = mode_lower;
+        } else {
+            self.replay_gain_mode = "off".to_string();
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AudioBackendKind {
@@ -76,6 +112,7 @@ pub struct LibraryConfig {
     pub supported_extensions: Vec<String>,
     pub scan_on_startup: bool,
     pub protected_artists: Vec<String>,
+    pub genre_mappings: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -84,6 +121,39 @@ pub struct ServerConfig {
     pub host: String,
     pub port: u16,
     pub enable_browser_client: bool,
+}
+
+impl ServerConfig {
+    /// Checks whether the server is configured to bind on all network interfaces (LAN mode).
+    #[must_use]
+    pub fn is_lan_enabled(&self) -> bool {
+        let trimmed = self.host.trim();
+        trimmed == "0.0.0.0" || trimmed == "::"
+    }
+
+    /// Configures the server host to listen on all interfaces (`0.0.0.0`) when enabled,
+    /// or restricted to local loopback (`127.0.0.1`) when disabled.
+    pub fn set_lan_enabled(&mut self, enabled: bool) {
+        if enabled {
+            self.host = "0.0.0.0".to_string();
+        } else {
+            self.host = "127.0.0.1".to_string();
+        }
+    }
+
+    /// Sanitizes server configuration fields, restoring defaults for invalid or empty values.
+    pub fn sanitize(&mut self) {
+        let trimmed = self.host.trim();
+        if trimmed.is_empty() {
+            self.host = "127.0.0.1".to_string();
+        } else {
+            self.host = trimmed.to_string();
+        }
+
+        if self.port == 0 {
+            self.port = 4242;
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -157,6 +227,10 @@ pub struct UiConfig {
     pub simplify_mode: bool,
     pub is_linux_banner_dismissed: bool,
     pub enable_gradients: bool,
+    /// Transport affordance on the collapsed mobile mini player:
+    /// `"buttons"` shows previous/next, `"swipe"` hides them and skips on
+    /// horizontal swipe instead.
+    pub mini_player_controls: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -243,6 +317,14 @@ pub fn default_protected_artists() -> Vec<String> {
     ]
 }
 
+/// Returns the default multilingual and transliterated genre alias mapping.
+pub fn default_genre_mappings() -> HashMap<String, String> {
+    wavery_core::heuristics::DEFAULT_GENRE_MAPPINGS
+        .iter()
+        .map(|&(k, v)| (k.to_string(), v.to_string()))
+        .collect()
+}
+
 impl Default for GeneralConfig {
     fn default() -> Self {
         Self {
@@ -288,6 +370,7 @@ impl Default for UiConfig {
             simplify_mode: false,
             is_linux_banner_dismissed: false,
             enable_gradients: true,
+            mini_player_controls: "buttons".into(),
         }
     }
 }
@@ -309,6 +392,7 @@ impl Default for LibraryConfig {
             ],
             scan_on_startup: true,
             protected_artists: default_protected_artists(),
+            genre_mappings: default_genre_mappings(),
         }
     }
 }
@@ -401,30 +485,35 @@ impl Config {
             ];
         }
 
-        // Sanitize audio numerical fields
-        if self.audio.default_volume.is_nan() || self.audio.default_volume < 0.0 {
-            self.audio.default_volume = 0.0;
-        } else if self.audio.default_volume > 1.0 {
-            self.audio.default_volume = 1.0;
+        if self.library.protected_artists.is_empty() {
+            self.library.protected_artists = default_protected_artists();
+        }
+        if self.library.genre_mappings.is_empty() {
+            self.library.genre_mappings = default_genre_mappings();
         }
 
-        if self.audio.volume_step.is_nan() || self.audio.volume_step <= 0.0 || self.audio.volume_step > 1.0 {
-            self.audio.volume_step = 0.05;
-        }
+        // Sanitize audio settings
+        self.audio.sanitize();
 
-        if self.audio.buffer_size_frames < 256 || self.audio.buffer_size_frames > 65536 {
-            self.audio.buffer_size_frames = 2048;
-        }
-
-        // Sanitize server port
-        if self.server.port == 0 {
-            self.server.port = 4242;
-        }
+        // Sanitize server settings
+        self.server.sanitize();
 
         // Sanitize UI scale factor
         if self.ui.scale_factor.is_nan() || self.ui.scale_factor < 0.25 || self.ui.scale_factor > 4.0 {
             self.ui.scale_factor = 1.0;
         }
+    }
+
+    /// Checks whether the server is configured to bind on all network interfaces (LAN mode).
+    #[must_use]
+    pub fn is_lan_enabled(&self) -> bool {
+        self.server.is_lan_enabled()
+    }
+
+    /// Configures the server host to listen on all interfaces (`0.0.0.0`) when enabled,
+    /// or restricted to local loopback (`127.0.0.1`) when disabled.
+    pub fn set_lan_enabled(&mut self, enabled: bool) {
+        self.server.set_lan_enabled(enabled);
     }
 }
 

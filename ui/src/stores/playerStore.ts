@@ -11,9 +11,10 @@
  */
 
 import { create } from "zustand";
-import { PlayerStatus, Track, PlaybackContext, PlayHistoryEntry } from "../types";
+import { PlayerStatus, Track, PlaybackContext, PlayHistoryEntry, QueueStateSnapshot } from "../types";
 import { playerAdapter } from "../services/adapter";
 import { useSettingsStore } from "./settingsStore";
+import { useLibraryStore } from "./libraryStore";
 import { showTrackNotification } from "../utils/notifications";
 import {
   updateMediaSessionMetadata,
@@ -22,8 +23,13 @@ import {
   clearMediaSession,
   registerMediaSessionHandlers,
 } from "../utils/mediaSession";
-import { updateDiscordPresence, clearDiscordPresence } from "../utils/discordRpc";
+import {
+  updateDiscordPresence,
+  clearDiscordPresence,
+  scheduleClearDiscordPresence,
+} from "../utils/discordRpc";
 import { fetchLyrics } from "../services/lyrics";
+import { hasLrcTimestamps } from "../utils/lyrics";
 
 function notifyIfEnabled(track?: Track) {
   if (!track) return;
@@ -76,10 +82,7 @@ export function getAutoplayNextTrack(
   libraryTracks: Track[]
 ): Track | null {
   if (!libraryTracks || libraryTracks.length === 0) {
-    if (currentQueue && currentQueue.length > 0) {
-      return currentQueue[0];
-    }
-    return null;
+    return currentQueue && currentQueue.length > 0 ? currentQueue[0] : null;
   }
 
   const queuedIds = new Set(currentQueue.map((t) => t.id));
@@ -102,7 +105,7 @@ export function getAutoplayNextTrack(
       const sameArtist = unqueued.filter(
         (t) => t.metadata?.artist?.trim().toLowerCase() === artist
       );
-      if (sameArtist.length > 0 && Math.random() < 0.5) {
+      if (sameArtist.length > 0) {
         return sameArtist[Math.floor(Math.random() * sameArtist.length)];
       }
     }
@@ -112,7 +115,7 @@ export function getAutoplayNextTrack(
       const sameGenre = unqueued.filter(
         (t) => t.metadata?.genre?.trim().toLowerCase() === genre
       );
-      if (sameGenre.length > 0 && Math.random() < 0.6) {
+      if (sameGenre.length > 0) {
         return sameGenre[Math.floor(Math.random() * sameGenre.length)];
       }
     }
@@ -459,6 +462,93 @@ interface PlayerStoreState {
   restoreSession: () => Promise<void>;
 }
 
+/**
+ * Canonical helper to atomically apply backend QueueStateSnapshot to reactive store state.
+ * Supports both camelCase (Tauri serde) and snake_case (legacy/internal) properties.
+ */
+export function applyQueueSnapshot(
+  set: (partial: Partial<PlayerStoreState> | ((state: PlayerStoreState) => Partial<PlayerStoreState>)) => void,
+  snapshot: QueueStateSnapshot
+): void {
+  const currentTrack = (snapshot.currentTrack ?? snapshot.current_track);
+  const currentTrackId = currentTrack?.id;
+  const queue = snapshot.queue ?? [];
+  const rawIdx = snapshot.currentIndex ?? snapshot.current_index;
+  const queueIndex = typeof rawIdx === "number" ? rawIdx : -1;
+  const userQueue = snapshot.userQueue ?? snapshot.user_queue ?? [];
+  const contextQueue = snapshot.contextQueue ?? snapshot.context_queue ?? [];
+  const rawCtxIdx = snapshot.contextIndex ?? snapshot.context_index;
+  const contextIndex = typeof rawCtxIdx === "number" ? rawCtxIdx : -1;
+  const isShuffle = snapshot.isShuffle ?? snapshot.is_shuffle ?? false;
+  const loopMode = (snapshot.loopMode ?? snapshot.loop_mode ?? "Off") as "Off" | "Queue" | "Track";
+  const isAutoplay = snapshot.isAutoplay ?? snapshot.is_autoplay ?? true;
+  const sessionHistory = snapshot.history ?? [];
+  const rawShuffleIndices =
+    snapshot.shuffleIndices ?? snapshot.shuffled_indices ?? snapshot.shuffle_indices;
+  const rawShufflePos = snapshot.shufflePos ?? snapshot.shuffle_pos;
+
+  set((state) => {
+    let shuffleIndices: number[] = [];
+    let shufflePos = 0;
+
+    if (isShuffle && queue.length > 0) {
+      if (Array.isArray(rawShuffleIndices) && rawShuffleIndices.length === queue.length) {
+        shuffleIndices = rawShuffleIndices;
+        shufflePos = typeof rawShufflePos === "number" ? rawShufflePos : 0;
+      } else if (state.shuffleIndices.length === queue.length) {
+        shuffleIndices = state.shuffleIndices;
+        const pos = queueIndex >= 0 ? shuffleIndices.indexOf(queueIndex) : -1;
+        shufflePos = pos !== -1 ? pos : state.shufflePos;
+      } else {
+        shuffleIndices = generateShuffleIndices(queue.length, queueIndex >= 0 ? queueIndex : 0);
+        shufflePos = 0;
+      }
+    }
+
+    return {
+      currentTrack: currentTrack !== undefined && currentTrack !== null ? currentTrack : state.currentTrack,
+      currentTrackId: currentTrackId ?? (currentTrack === null ? state.currentTrackId : undefined),
+      queue,
+      queueIndex,
+      userQueue,
+      contextQueue,
+      contextIndex,
+      isShuffle,
+      shuffleIndices,
+      shufflePos,
+      loopMode,
+      isAutoplay,
+      sessionHistory: sessionHistory.length > 0 ? sessionHistory : state.sessionHistory,
+      status: {
+        ...state.status,
+        loop_mode: loopMode,
+        ...(currentTrack ? { current_track: currentTrack } : {}),
+        ...(state.status.state === "Stopped" && currentTrack ? { state: "Playing" } : {}),
+      },
+    };
+  });
+}
+
+/**
+ * Deduplicated session saver that captures the full reactive queue state.
+ */
+function saveSessionFromStore(state: PlayerStoreState): void {
+  saveSession({
+    queue: state.queue,
+    queueIndex: state.queueIndex,
+    currentTrackId: state.currentTrackId,
+    playbackContext: state.playbackContext,
+    isShuffle: state.isShuffle,
+    isAutoplay: state.isAutoplay,
+    loopMode: state.loopMode,
+    positionSecs: state.status.position_secs,
+    userQueue: state.userQueue,
+    contextQueue: state.contextQueue,
+    contextIndex: state.contextIndex,
+    sessionHistory: state.sessionHistory,
+  });
+}
+
 const DEFAULT_STATUS: PlayerStatus = {
   state: "Stopped",
   volume: 0.8,
@@ -471,6 +561,8 @@ let volumeRafId: number | null = null;
 let pendingVolume: number | null = null;
 let lastDispatchedVolume: number | null = null;
 let lastUserVolumeChangeTime = 0;
+let pendingSeekTarget: number | null = null;
+let pendingSeekTime = 0;
 
 function flushVolumeDispatcher() {
   volumeRafId = null;
@@ -561,70 +653,50 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
 
     let unsubExternalPause = () => {};
     let unsubTrackChanged = () => {};
+    // True after another client (web/phone) claimed playback. While set, this client
+    // must not clear the shared Discord presence that the new client now owns.
+    let handedOffToOtherClient = false;
     if (playerAdapter.isTauri()) {
       import("@tauri-apps/api/event")
         .then(({ listen }) => {
           const u1 = listen("external-pause", () => {
+            handedOffToOtherClient = true;
             set((state) => ({
               isManualStop: true,
               status: { ...state.status, state: "Paused" },
             }));
           });
-          const u2 = listen("queue-track-changed", (event: { payload?: Track }) => {
+          const u2 = listen("queue-track-changed", async (event: { payload?: Track }) => {
             const track = event?.payload;
             if (!track) return;
             const s = get();
             if (s.currentTrackId === track.id) return;
-            if (s.userQueue.length > 0 && s.userQueue[0].id === track.id) {
-              const nextUser = s.userQueue.slice(1);
-              const nextHist = s.currentTrack ? [...s.sessionHistory, s.currentTrack].slice(-50) : s.sessionHistory;
-              const { queue, queueIndex } = computeQueueState(
-                s.contextQueue,
-                s.contextIndex,
-                nextUser,
-                track,
-                s.isShuffle,
-                s.shuffleIndices,
-                s.shufflePos
-              );
-              set({
-                userQueue: nextUser,
-                currentTrack: track,
-                currentTrackId: track.id,
-                sessionHistory: nextHist,
-                queue,
-                queueIndex,
-                status: { ...s.status, state: "Playing", current_track: track },
-              });
-            } else {
-              const idx = s.contextQueue.findIndex((t) => t.id === track.id);
-              const nextHist = s.currentTrack ? [...s.sessionHistory, s.currentTrack].slice(-50) : s.sessionHistory;
-              const nextContextIdx = idx >= 0 ? idx : s.contextIndex;
-              let nextShufflePos = s.shufflePos;
-              if (s.isShuffle && s.shuffleIndices.length > 0 && idx >= 0) {
-                const sPos = s.shuffleIndices.indexOf(idx);
-                if (sPos >= 0) nextShufflePos = sPos;
+
+            // Fetch authoritative state snapshot from backend
+            if (playerAdapter.queueGetState) {
+              try {
+                const snapshot = await playerAdapter.queueGetState();
+                applyQueueSnapshot(set, snapshot);
+                set((prev) => ({
+                  status: { ...prev.status, state: "Playing", current_track: track },
+                }));
+                notifyIfEnabled(track);
+                get().recordTrackPlay(track.id);
+                saveSessionFromStore(get());
+                return;
+              } catch (err) {
+                console.warn("queueGetState error on queue-track-changed:", err);
               }
-              const { queue, queueIndex } = computeQueueState(
-                s.contextQueue,
-                nextContextIdx,
-                s.userQueue,
-                track,
-                s.isShuffle,
-                s.shuffleIndices,
-                nextShufflePos
-              );
-              set({
-                contextIndex: nextContextIdx,
-                shufflePos: nextShufflePos,
-                currentTrack: track,
-                currentTrackId: track.id,
-                sessionHistory: nextHist,
-                queue,
-                queueIndex,
-                status: { ...s.status, state: "Playing", current_track: track },
-              });
             }
+
+            // Fallback for minimal/offline harness
+            set((prev) => ({
+              currentTrack: track,
+              currentTrackId: track.id,
+              status: { ...prev.status, state: "Playing", current_track: track },
+            }));
+            notifyIfEnabled(track);
+            get().recordTrackPlay(track.id);
           });
           return Promise.all([u1, u2]);
         })
@@ -666,13 +738,16 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
         const wasPlaying = prev.status.state === "Playing";
         const isNowStopped = s.state === "Stopped";
 
-        const newTrackId = s.current_track?.id;
-        const trackChanged = prev.currentTrackId !== newTrackId;
+        const incomingTrackId = s.current_track?.id;
+        // Don't wipe existing loaded/restored track if backend is simply idle on startup
+        const trackChanged = incomingTrackId
+          ? prev.currentTrackId !== incomingTrackId
+          : (wasPlaying && prev.currentTrackId !== undefined);
 
-        if (trackChanged || currentPollingTrackId !== newTrackId) {
-          currentPollingTrackId = newTrackId;
-          if (newTrackId && s.state === "Playing") {
-            get().recordTrackPlay(newTrackId);
+        if (trackChanged || currentPollingTrackId !== incomingTrackId) {
+          currentPollingTrackId = incomingTrackId;
+          if (incomingTrackId && s.state === "Playing") {
+            get().recordTrackPlay(incomingTrackId);
           }
           // Only reset autoCrossfadeTriggered once the incoming track is playing or not in transient stopped state
           if (s.position_secs > 0 || s.state === "Playing") {
@@ -682,23 +757,42 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
 
         // Check if any status field changed (preserving client-side loop_mode)
         const stateChanged = prev.status.state !== s.state;
-        const posChanged = prev.status.position_secs !== s.position_secs;
+        let effectivePositionSecs = s.position_secs;
+        if (pendingSeekTarget !== null) {
+          const elapsed = (Date.now() - pendingSeekTime) / 1000;
+          const target = pendingSeekTarget;
+          const hasSettled =
+            Math.abs(s.position_secs - target) < 1.5 ||
+            Math.abs(s.position_secs - (target + elapsed)) < 1.5;
+
+          if (hasSettled || elapsed > 1.2) {
+            pendingSeekTarget = null;
+            effectivePositionSecs = s.position_secs;
+          } else {
+            // Still in flight; smoothly extrapolate from target position so it never snaps back
+            effectivePositionSecs = target + (s.state === "Playing" ? elapsed : 0);
+          }
+        }
+        const posChanged = Math.abs(prev.status.position_secs - effectivePositionSecs) > 0.05;
         const isRecentUserVolume = Date.now() - lastUserVolumeChangeTime < 1500;
         const volChanged = !isRecentUserVolume && Math.abs(prev.status.volume - s.volume) > 0.001;
         const durChanged = prev.status.duration_secs !== s.duration_secs;
         const statusChanged = stateChanged || posChanged || volChanged || durChanged;
 
         if (statusChanged || trackChanged) {
+          const effectiveTrack = s.current_track ?? (isNowStopped && !wasPlaying ? prev.currentTrack : undefined);
           set({
             status: {
               ...s,
+              position_secs: effectivePositionSecs,
               volume: isRecentUserVolume ? prev.status.volume : s.volume,
               loop_mode: get().loopMode,
+              current_track: effectiveTrack,
             },
             ...(trackChanged
               ? {
-                  currentTrack: s.current_track,
-                  currentTrackId: newTrackId,
+                  currentTrack: effectiveTrack,
+                  currentTrackId: effectiveTrack?.id,
                 }
               : {}),
           });
@@ -713,13 +807,25 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
         // ---------------------------------------------------------------
         const integrationSettings = useSettingsStore.getState();
 
+        // This client is active again, so it owns the Discord presence once more.
+        if (s.state === "Playing") {
+          handedOffToOtherClient = false;
+        }
+
         if (s.state === "Stopped") {
-          // Clear all integrations on stop
-          if (integrationSettings.enableMediaSession) {
-            clearMediaSession();
-          }
-          if (integrationSettings.enableDiscordRpc) {
-            clearDiscordPresence();
+          // Clear integrations only on the transition into Stopped. The Discord
+          // connection is shared by every client (desktop + web/phone), so clearing
+          // on every idle poll would wipe the presence set by whichever client is playing.
+          if (stateChanged) {
+            if (integrationSettings.enableMediaSession) {
+              clearMediaSession();
+            }
+            if (integrationSettings.enableDiscordRpc && !handedOffToOtherClient) {
+              // Deferred: a track that just ended is followed by the next one
+              // within a poll or two, and clearing at once makes the Discord
+              // card blink between tracks.
+              scheduleClearDiscordPresence();
+            }
           }
         } else if (s.current_track) {
           const track = s.current_track;
@@ -738,28 +844,42 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
             }
           }
 
-          // Discord Rich Presence — debounced, posted to local server bridge
-          const seeked = Math.abs(prev.status.position_secs - s.position_secs) > 2.0;
-          if (integrationSettings.enableDiscordRpc && (trackChanged || stateChanged || seeked)) {
-            updateDiscordPresence({
-              title: track.metadata.title ?? "Unknown Title",
-              artist: track.metadata.artist ?? "Unknown Artist",
-              album: track.metadata.album ?? "",
-              position_secs: positionSecs,
-              duration_secs: durationSecs,
-              is_playing: isPlaying,
-            });
+          // Discord Rich Presence — posted to the local bridge.
+          //
+          // Offered on every poll rather than only on transitions: the helper
+          // deduplicates linear playback and coalesces bursts, and polling is
+          // what lets it notice a cold start (restored session, app launched
+          // mid-track) and a scrub. The engine's own position is passed, and
+          // it is the only clock the Discord timestamps may trust.
+          if (integrationSettings.enableDiscordRpc && !handedOffToOtherClient) {
+            if (isPlaying) {
+              updateDiscordPresence({
+                title: track.metadata.title ?? "Unknown Title",
+                artist: track.metadata.artist ?? "Unknown Artist",
+                album: track.metadata.album ?? "",
+                position_secs: positionSecs,
+                duration_secs: durationSecs,
+                is_playing: true,
+              });
+            } else {
+              scheduleClearDiscordPresence(1000);
+            }
           }
 
-          // Auto-fetch missing lyrics from LRCLIB in background on track change
-          if (trackChanged && (!track.metadata.lyrics || !track.metadata.lyrics.trim())) {
+          // Auto-fetch missing lyrics or upgrade unsynced plain lyrics from LRCLIB in background on track change
+          const rawLyrics = track.metadata.lyrics;
+          const isMissingLyrics = !rawLyrics || !rawLyrics.trim();
+          const isPlainOnly = rawLyrics && !hasLrcTimestamps(rawLyrics);
+
+          if (trackChanged && (isMissingLyrics || isPlainOnly)) {
             fetchLyrics(
               track.metadata.artist || "",
               track.metadata.title || "",
               track.metadata.album,
-              durationSecs
-            ).then((lyricsRes) => {
-              if (lyricsRes?.bestLyrics) {
+              durationSecs,
+              Boolean(isPlainOnly) // force refresh if looking to upgrade from plain text
+            ).then(async (lyricsRes) => {
+              if (lyricsRes?.bestLyrics && (isMissingLyrics || lyricsRes.syncedLyrics)) {
                 const current = usePlayerStore.getState().currentTrack;
                 if (current && current.id === track.id) {
                   usePlayerStore.setState({
@@ -771,6 +891,15 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
                       },
                     },
                   });
+
+                  // If we got synced lyrics, persist them to the database
+                  if (lyricsRes.syncedLyrics) {
+                    playerAdapter.updateTrackMetadata({
+                      track_id: track.id,
+                      lyrics: lyricsRes.syncedLyrics,
+                      write_tags: false,
+                    }).catch(() => {});
+                  }
                 }
               }
             }).catch(() => {});
@@ -803,7 +932,12 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
               const hasNext =
                 currentLoop === "Track" ||
                 currentLoop === "Queue" ||
-                (prev.queueIndex >= 0 && prev.queueIndex < prev.queue.length - 1) ||
+                prev.userQueue.length > 0 ||
+                (prev.isShuffle
+                  ? (prev.shuffleIndices.length > 0
+                      ? prev.shufflePos < prev.shuffleIndices.length - 1
+                      : prev.queue.length > 1)
+                  : prev.queueIndex >= 0 && prev.queueIndex < prev.queue.length - 1) ||
                 prev.isAutoplay;
 
               if (hasNext) {
@@ -862,7 +996,7 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
   },
 
   playTrack: async (track: Track, context?: PlaybackContext) => {
-    const { contextQueue, userQueue, isShuffle, playbackContext: existingContext } = get();
+    const { contextQueue, playbackContext: existingContext } = get();
     const effectiveContext =
       context ||
       existingContext ||
@@ -877,61 +1011,23 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
             name: "All Tracks",
           });
 
-    let nextContext = contextQueue;
-    let nextContextIdx = contextQueue.findIndex((t) => t.id === track.id);
-    if (nextContextIdx === -1) {
-      nextContext = [track];
-      nextContextIdx = 0;
-    }
+    set({ playbackContext: effectiveContext, isManualStop: false });
 
-    const shuffleIndices = isShuffle ? generateShuffleIndices(nextContext.length, nextContextIdx) : [];
-    const shufflePos = 0;
-    const { queue, queueIndex } = computeQueueState(
-      nextContext,
-      nextContextIdx,
-      userQueue,
-      track,
-      isShuffle,
-      shuffleIndices,
-      shufflePos
-    );
-
-    set({
-      contextQueue: nextContext,
-      contextIndex: nextContextIdx,
-      shuffleIndices,
-      shufflePos,
-      queue,
-      queueIndex,
-      currentTrack: track,
-      currentTrackId: track.id,
-      playbackContext: effectiveContext,
-      isManualStop: false,
-    });
-
-    try {
-      get().recordTrackPlay(track.id);
+    const cIdx = contextQueue.findIndex((t) => t.id === track.id);
+    if (cIdx !== -1 && playerAdapter.queueJumpToContextTrack) {
+      const snapshot = await playerAdapter.queueJumpToContextTrack(cIdx);
+      applyQueueSnapshot(set, snapshot);
+    } else if (playerAdapter.queueSetContext) {
+      const snapshot = await playerAdapter.queueSetContext([track], 0);
+      applyQueueSnapshot(set, snapshot);
+    } else {
       await playerAdapter.playTrack(track);
-      notifyIfEnabled(track);
-      const s = get();
-      syncWithBackend(s);
-      saveSession({
-        queue: s.queue,
-        queueIndex: s.queueIndex,
-        currentTrackId: s.currentTrackId,
-        playbackContext: s.playbackContext,
-        isShuffle: s.isShuffle,
-        isAutoplay: s.isAutoplay,
-        loopMode: s.loopMode,
-        positionSecs: 0,
-        userQueue: s.userQueue,
-        contextQueue: s.contextQueue,
-        contextIndex: s.contextIndex,
-        sessionHistory: s.sessionHistory,
-      });
-    } catch (e) {
-      console.error("Failed to play track:", e);
+      set({ currentTrack: track, currentTrackId: track.id });
     }
+
+    get().recordTrackPlay(track.id);
+    notifyIfEnabled(track);
+    saveSessionFromStore(get());
   },
 
   setQueue: async (tracks: Track[], startIndex: number = 0, context?: PlaybackContext) => {
@@ -953,60 +1049,34 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
             name: "All Tracks",
           });
 
+    set({ playbackContext: effectiveContext, isManualStop: false });
+
+    if (playerAdapter.queueSetContext) {
+      const snapshot = await playerAdapter.queueSetContext(tracks, validIndex);
+      applyQueueSnapshot(set, snapshot);
+      notifyIfEnabled(targetTrack);
+      saveSessionFromStore(get());
+      return;
+    }
+
+    // Local fallback for bare test mock
     const isShuffle = get().isShuffle;
     const shuffleIndices = isShuffle ? generateShuffleIndices(tracks.length, validIndex) : [];
-    const shufflePos = 0;
-
-    // If context was explicitly provided (e.g. user selected album/playlist), preserve userQueue.
-    // If raw setQueue without context (e.g. test runner or linear queue replace), start fresh userQueue.
     const userQueue = context ? get().userQueue : [];
-    const { queue, queueIndex } = computeQueueState(
-      tracks,
-      validIndex,
-      userQueue,
-      targetTrack,
-      isShuffle,
-      shuffleIndices,
-      shufflePos
-    );
-
+    const { queue, queueIndex } = computeQueueState(tracks, validIndex, userQueue, targetTrack, isShuffle, shuffleIndices, 0);
     set({
-      status: { ...get().status, state: "Playing", position_secs: 0 },
       contextQueue: tracks,
       contextIndex: validIndex,
       userQueue,
-      shuffleIndices,
-      shufflePos,
       queue,
       queueIndex,
       currentTrack: targetTrack,
       currentTrackId: targetTrack.id,
-      playbackContext: effectiveContext,
-      isManualStop: false,
+      status: { ...get().status, state: "Playing", position_secs: 0 },
     });
-
-    try {
-      await playerAdapter.playTrack(targetTrack);
-      notifyIfEnabled(targetTrack);
-      const s = get();
-      syncWithBackend(s);
-      saveSession({
-        queue: s.queue,
-        queueIndex: s.queueIndex,
-        currentTrackId: s.currentTrackId,
-        playbackContext: s.playbackContext,
-        isShuffle: s.isShuffle,
-        isAutoplay: s.isAutoplay,
-        loopMode: s.loopMode,
-        positionSecs: 0,
-        userQueue: s.userQueue,
-        contextQueue: s.contextQueue,
-        contextIndex: s.contextIndex,
-        sessionHistory: s.sessionHistory,
-      });
-    } catch (e) {
-      console.error("Failed to play track from queue:", e);
-    }
+    await playerAdapter.playTrack(targetTrack);
+    notifyIfEnabled(targetTrack);
+    saveSessionFromStore(get());
   },
 
   playNextInUserQueue: (track: Track | Track[]) => {
@@ -1023,24 +1093,16 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
         state.shuffleIndices,
         state.shufflePos
       );
-      const nextState = { ...state, userQueue: nextUser, queue, queueIndex };
-      syncWithBackend(nextState);
-      saveSession({
-        queue,
-        queueIndex,
-        currentTrackId: state.currentTrackId,
-        playbackContext: state.playbackContext,
-        isShuffle: state.isShuffle,
-        isAutoplay: state.isAutoplay,
-        loopMode: state.loopMode,
-        positionSecs: state.status.position_secs,
-        userQueue: nextUser,
-        contextQueue: state.contextQueue,
-        contextIndex: state.contextIndex,
-        sessionHistory: state.sessionHistory,
-      });
       return { userQueue: nextUser, queue, queueIndex };
     });
+    if (playerAdapter.queuePlayNext) {
+      playerAdapter.queuePlayNext(toAdd).then((snapshot) => {
+        applyQueueSnapshot(set, snapshot);
+        saveSessionFromStore(get());
+      }).catch(() => {});
+    } else {
+      saveSessionFromStore(get());
+    }
   },
 
   addToUserQueue: (track: Track | Track[]) => {
@@ -1057,24 +1119,16 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
         state.shuffleIndices,
         state.shufflePos
       );
-      const nextState = { ...state, userQueue: nextUser, queue, queueIndex };
-      syncWithBackend(nextState);
-      saveSession({
-        queue,
-        queueIndex,
-        currentTrackId: state.currentTrackId,
-        playbackContext: state.playbackContext,
-        isShuffle: state.isShuffle,
-        isAutoplay: state.isAutoplay,
-        loopMode: state.loopMode,
-        positionSecs: state.status.position_secs,
-        userQueue: nextUser,
-        contextQueue: state.contextQueue,
-        contextIndex: state.contextIndex,
-        sessionHistory: state.sessionHistory,
-      });
       return { userQueue: nextUser, queue, queueIndex };
     });
+    if (playerAdapter.queueAddUser) {
+      playerAdapter.queueAddUser(toAdd).then((snapshot) => {
+        applyQueueSnapshot(set, snapshot);
+        saveSessionFromStore(get());
+      }).catch(() => {});
+    } else {
+      saveSessionFromStore(get());
+    }
   },
 
   insertAfterCurrent: (track: Track | Track[]) => {
@@ -1095,24 +1149,20 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
         state.shuffleIndices,
         state.shufflePos
       );
-      const nextState = { ...state, contextQueue: nextContext, queue, queueIndex };
-      syncWithBackend(nextState);
-      saveSession({
-        queue,
-        queueIndex,
-        currentTrackId: state.currentTrackId,
-        playbackContext: state.playbackContext,
-        isShuffle: state.isShuffle,
-        isAutoplay: state.isAutoplay,
-        loopMode: state.loopMode,
-        positionSecs: state.status.position_secs,
-        userQueue: state.userQueue,
-        contextQueue: nextContext,
-        contextIndex: state.contextIndex,
-        sessionHistory: state.sessionHistory,
-      });
-      return { contextQueue: nextContext, queue, queueIndex };
+      const nextShuffleIndices =
+        state.isShuffle && queue.length > state.shuffleIndices.length
+          ? [
+              ...state.shuffleIndices,
+              ...Array.from(
+                { length: queue.length - state.shuffleIndices.length },
+                (_, i) => state.shuffleIndices.length + i
+              ),
+            ]
+          : state.shuffleIndices;
+      return { contextQueue: nextContext, queue, queueIndex, shuffleIndices: nextShuffleIndices };
     });
+    syncWithBackend(get());
+    saveSessionFromStore(get());
   },
 
   removeFromUserQueue: (index: number) => {
@@ -1128,24 +1178,16 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
         state.shuffleIndices,
         state.shufflePos
       );
-      const nextState = { ...state, userQueue: nextUser, queue, queueIndex };
-      syncWithBackend(nextState);
-      saveSession({
-        queue,
-        queueIndex,
-        currentTrackId: state.currentTrackId,
-        playbackContext: state.playbackContext,
-        isShuffle: state.isShuffle,
-        isAutoplay: state.isAutoplay,
-        loopMode: state.loopMode,
-        positionSecs: state.status.position_secs,
-        userQueue: nextUser,
-        contextQueue: state.contextQueue,
-        contextIndex: state.contextIndex,
-        sessionHistory: state.sessionHistory,
-      });
       return { userQueue: nextUser, queue, queueIndex };
     });
+    if (playerAdapter.queueRemoveUserTrack) {
+      playerAdapter.queueRemoveUserTrack(index).then((snapshot) => {
+        applyQueueSnapshot(set, snapshot);
+        saveSessionFromStore(get());
+      }).catch(() => {});
+    } else {
+      saveSessionFromStore(get());
+    }
   },
 
   reorderUserQueue: (fromIndex: number, toIndex: number) => {
@@ -1171,24 +1213,16 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
         state.shuffleIndices,
         state.shufflePos
       );
-      const nextState = { ...state, userQueue: nextUser, queue, queueIndex };
-      syncWithBackend(nextState);
-      saveSession({
-        queue,
-        queueIndex,
-        currentTrackId: state.currentTrackId,
-        playbackContext: state.playbackContext,
-        isShuffle: state.isShuffle,
-        isAutoplay: state.isAutoplay,
-        loopMode: state.loopMode,
-        positionSecs: state.status.position_secs,
-        userQueue: nextUser,
-        contextQueue: state.contextQueue,
-        contextIndex: state.contextIndex,
-        sessionHistory: state.sessionHistory,
-      });
       return { userQueue: nextUser, queue, queueIndex };
     });
+    if (playerAdapter.queueReorderUser) {
+      playerAdapter.queueReorderUser(fromIndex, toIndex).then((snapshot) => {
+        applyQueueSnapshot(set, snapshot);
+        saveSessionFromStore(get());
+      }).catch(() => {});
+    } else {
+      saveSessionFromStore(get());
+    }
   },
 
   clearUserQueue: () => {
@@ -1202,153 +1236,70 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
         state.shuffleIndices,
         state.shufflePos
       );
-      const nextState = { ...state, userQueue: [], queue, queueIndex };
-      syncWithBackend(nextState);
-      saveSession({
-        queue,
-        queueIndex,
-        currentTrackId: state.currentTrackId,
-        playbackContext: state.playbackContext,
-        isShuffle: state.isShuffle,
-        isAutoplay: state.isAutoplay,
-        loopMode: state.loopMode,
-        positionSecs: state.status.position_secs,
-        userQueue: [],
-        contextQueue: state.contextQueue,
-        contextIndex: state.contextIndex,
-        sessionHistory: state.sessionHistory,
-      });
       return { userQueue: [], queue, queueIndex };
     });
+    if (playerAdapter.queueClearUser) {
+      playerAdapter.queueClearUser().then((snapshot) => {
+        applyQueueSnapshot(set, snapshot);
+        saveSessionFromStore(get());
+      }).catch(() => {});
+    } else {
+      saveSessionFromStore(get());
+    }
   },
 
   jumpToUserQueueItem: async (index: number) => {
-    const { userQueue, currentTrack, sessionHistory, contextQueue, contextIndex, isShuffle, shuffleIndices, shufflePos } = get();
-    if (index < 0 || index >= userQueue.length) return;
-    const targetTrack = userQueue[index];
-    const nextUser = userQueue.filter((_, i) => i !== index);
-    const nextHist = currentTrack ? [...sessionHistory, currentTrack].slice(-50) : sessionHistory;
-    const { queue, queueIndex } = computeQueueState(
-      contextQueue,
-      contextIndex,
-      nextUser,
-      targetTrack,
-      isShuffle,
-      shuffleIndices,
-      shufflePos
-    );
-
-    set({
-      userQueue: nextUser,
-      currentTrack: targetTrack,
-      currentTrackId: targetTrack.id,
-      sessionHistory: nextHist,
-      queue,
-      queueIndex,
-      isManualStop: false,
-    });
-
-    try {
-      get().recordTrackPlay(targetTrack.id);
-      await playerAdapter.playTrack(targetTrack);
-      notifyIfEnabled(targetTrack);
-      const s = get();
-      syncWithBackend(s);
-      saveSession({
-        queue: s.queue,
-        queueIndex: s.queueIndex,
-        currentTrackId: s.currentTrackId,
-        playbackContext: s.playbackContext,
-        isShuffle: s.isShuffle,
-        isAutoplay: s.isAutoplay,
-        loopMode: s.loopMode,
-        positionSecs: 0,
-        userQueue: s.userQueue,
-        contextQueue: s.contextQueue,
-        contextIndex: s.contextIndex,
-        sessionHistory: s.sessionHistory,
-      });
-    } catch (e) {
-      console.error("Failed to jump to user queue track:", e);
+    if (playerAdapter.queueJumpToUserTrack) {
+      const snapshot = await playerAdapter.queueJumpToUserTrack(index);
+      applyQueueSnapshot(set, snapshot);
+      const track = snapshot.currentTrack ?? snapshot.current_track;
+      if (track) {
+        get().recordTrackPlay(track.id);
+        notifyIfEnabled(track);
+      }
+      saveSessionFromStore(get());
+      return;
+    }
+    const { userQueue } = get();
+    if (index >= 0 && index < userQueue.length) {
+      await get().playTrack(userQueue[index]);
     }
   },
 
   jumpToContextTrack: async (index: number) => {
-    const { contextQueue, currentTrack, sessionHistory, isShuffle, shuffleIndices, userQueue } = get();
-    if (index < 0 || index >= contextQueue.length) return;
-    const targetTrack = contextQueue[index];
-    const nextHist = currentTrack ? [...sessionHistory, currentTrack].slice(-50) : sessionHistory;
-    let nextShufflePos = 0;
-    if (isShuffle && shuffleIndices.length > 0) {
-      const sPos = shuffleIndices.indexOf(index);
-      if (sPos >= 0) nextShufflePos = sPos;
+    if (playerAdapter.queueJumpToContextTrack) {
+      const snapshot = await playerAdapter.queueJumpToContextTrack(index);
+      applyQueueSnapshot(set, snapshot);
+      const track = snapshot.currentTrack ?? snapshot.current_track;
+      if (track) {
+        get().recordTrackPlay(track.id);
+        notifyIfEnabled(track);
+      }
+      saveSessionFromStore(get());
+      return;
     }
-    const { queue, queueIndex } = computeQueueState(
-      contextQueue,
-      index,
-      userQueue,
-      targetTrack,
-      isShuffle,
-      shuffleIndices,
-      nextShufflePos
-    );
-
-    set({
-      contextIndex: index,
-      shufflePos: nextShufflePos,
-      currentTrack: targetTrack,
-      currentTrackId: targetTrack.id,
-      sessionHistory: nextHist,
-      queue,
-      queueIndex,
-      isManualStop: false,
-    });
-
-    try {
-      get().recordTrackPlay(targetTrack.id);
-      await playerAdapter.playTrack(targetTrack);
-      notifyIfEnabled(targetTrack);
-      const s = get();
-      syncWithBackend(s);
-      saveSession({
-        queue: s.queue,
-        queueIndex: s.queueIndex,
-        currentTrackId: s.currentTrackId,
-        playbackContext: s.playbackContext,
-        isShuffle: s.isShuffle,
-        isAutoplay: s.isAutoplay,
-        loopMode: s.loopMode,
-        positionSecs: 0,
-        userQueue: s.userQueue,
-        contextQueue: s.contextQueue,
-        contextIndex: s.contextIndex,
-        sessionHistory: s.sessionHistory,
-      });
-    } catch (e) {
-      console.error("Failed to jump to context track:", e);
+    const { contextQueue } = get();
+    if (index >= 0 && index < contextQueue.length) {
+      await get().playTrack(contextQueue[index]);
     }
   },
 
   jumpToQueueIndex: async (index: number) => {
+    if (playerAdapter.queueJumpToIndex) {
+      const snapshot = await playerAdapter.queueJumpToIndex(index);
+      applyQueueSnapshot(set, snapshot);
+      const track = snapshot.currentTrack ?? snapshot.current_track;
+      if (track) {
+        get().recordTrackPlay(track.id);
+        notifyIfEnabled(track);
+      }
+      saveSessionFromStore(get());
+      return;
+    }
     const { queue } = get();
-    if (index < 0 || index >= queue.length) return;
-    const targetTrack = queue[index];
-
-    // If targetTrack is in userQueue
-    const uIdx = get().userQueue.findIndex((t) => t.id === targetTrack.id);
-    if (uIdx !== -1) {
-      await get().jumpToUserQueueItem(uIdx);
-      return;
+    if (index >= 0 && index < queue.length) {
+      await get().playTrack(queue[index]);
     }
-
-    // If in contextQueue
-    const cIdx = get().contextQueue.findIndex((t) => t.id === targetTrack.id);
-    if (cIdx !== -1) {
-      await get().jumpToContextTrack(cIdx);
-      return;
-    }
-
-    await get().playTrack(targetTrack);
   },
 
   removeFromQueue: (index: number) => {
@@ -1470,154 +1421,102 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
       contextIndex: -1,
       queue: [],
       queueIndex: -1,
+      currentTrack: undefined,
+      currentTrackId: undefined,
+      status: { ...get().status, state: "Stopped", position_secs: 0 },
+      isManualStop: true,
     });
-    syncWithBackend(get());
+    if (playerAdapter.queueClear) {
+      playerAdapter.queueClear().then((snapshot) => {
+        applyQueueSnapshot(set, snapshot);
+        saveSessionFromStore(get());
+      }).catch(() => {});
+    } else {
+      saveSessionFromStore(get());
+    }
+    if (playerAdapter.stop) {
+      playerAdapter.stop().catch(() => {});
+    }
   },
 
   toggleShuffle: () => {
-    set((state) => {
-      const nextShuffle = !state.isShuffle;
-      const contextPool = state.contextQueue.length > 0 ? state.contextQueue : state.queue;
-      const activeIdx = state.contextIndex >= 0 ? state.contextIndex : Math.max(0, state.queueIndex);
-      let shuffleIndices: number[] = [];
-      let shufflePos = 0;
-
-      if (nextShuffle && contextPool.length > 0) {
-        shuffleIndices = generateShuffleIndices(contextPool.length, activeIdx);
-        shufflePos = 0;
-      }
-
-      const { queue, queueIndex } = computeQueueState(
-        contextPool,
-        activeIdx,
-        state.userQueue,
-        state.currentTrack,
-        nextShuffle,
-        shuffleIndices,
-        shufflePos
-      );
-
-      const nextState = {
-        ...state,
-        isShuffle: nextShuffle,
-        shuffleIndices,
-        shufflePos,
-        contextQueue: contextPool,
-        contextIndex: activeIdx,
-        queue,
-        queueIndex,
-      };
-
-      syncWithBackend(nextState);
-      saveSession({
-        queue,
-        queueIndex,
-        currentTrackId: state.currentTrackId,
-        playbackContext: state.playbackContext,
-        isShuffle: nextShuffle,
-        isAutoplay: state.isAutoplay,
-        loopMode: state.loopMode,
-        positionSecs: state.status.position_secs,
-        userQueue: state.userQueue,
-        contextQueue: contextPool,
-        contextIndex: activeIdx,
-        sessionHistory: state.sessionHistory,
-      });
-
-      return nextState;
+    const state = get();
+    const nextShuffle = !state.isShuffle;
+    const optimisticIndices =
+      nextShuffle && state.queue.length > 0
+        ? generateShuffleIndices(state.queue.length, state.queueIndex >= 0 ? state.queueIndex : 0)
+        : [];
+    set({
+      isShuffle: nextShuffle,
+      shuffleIndices: optimisticIndices,
+      shufflePos: 0,
     });
+    if (playerAdapter.queueSetShuffle) {
+      playerAdapter.queueSetShuffle(nextShuffle).then((snapshot) => {
+        const current = get();
+        const snapQueue = snapshot.queue ?? [];
+        if (snapQueue.length === 0 && current.queue.length > 0) {
+          syncWithBackend(current);
+        } else {
+          applyQueueSnapshot(set, snapshot);
+        }
+        saveSessionFromStore(get());
+      }).catch(() => {});
+    } else {
+      saveSessionFromStore(get());
+    }
   },
 
   toggleAutoplay: () => {
-    set((state) => ({ isAutoplay: !state.isAutoplay }));
-    const s = get();
-    saveSession({
-      queue: s.queue,
-      queueIndex: s.queueIndex,
-      currentTrackId: s.currentTrackId,
-      playbackContext: s.playbackContext,
-      isShuffle: s.isShuffle,
-      isAutoplay: s.isAutoplay,
-      loopMode: s.loopMode,
-      positionSecs: s.status.position_secs,
-      userQueue: s.userQueue,
-      contextQueue: s.contextQueue,
-      contextIndex: s.contextIndex,
-      sessionHistory: s.sessionHistory,
-    });
+    const nextAutoplay = !get().isAutoplay;
+    set({ isAutoplay: nextAutoplay });
+    if (playerAdapter.queueSetAutoplay) {
+      playerAdapter.queueSetAutoplay(nextAutoplay).then((snapshot) => {
+        applyQueueSnapshot(set, snapshot);
+        saveSessionFromStore(get());
+      }).catch(() => {});
+    } else {
+      saveSessionFromStore(get());
+    }
   },
 
   setAutoplay: (enabled: boolean) => {
     set({ isAutoplay: enabled });
-    const s = get();
-    saveSession({
-      queue: s.queue,
-      queueIndex: s.queueIndex,
-      currentTrackId: s.currentTrackId,
-      playbackContext: s.playbackContext,
-      isShuffle: s.isShuffle,
-      isAutoplay: s.isAutoplay,
-      loopMode: s.loopMode,
-      positionSecs: s.status.position_secs,
-      userQueue: s.userQueue,
-      contextQueue: s.contextQueue,
-      contextIndex: s.contextIndex,
-      sessionHistory: s.sessionHistory,
-    });
+    if (playerAdapter.queueSetAutoplay) {
+      playerAdapter.queueSetAutoplay(enabled).then((snapshot) => {
+        applyQueueSnapshot(set, snapshot);
+        saveSessionFromStore(get());
+      }).catch(() => {});
+    } else {
+      saveSessionFromStore(get());
+    }
   },
 
   cycleLoopMode: () => {
-    set((state) => {
-      const nextMode: "Off" | "Queue" | "Track" =
-        state.loopMode === "Off"
-          ? "Queue"
-          : state.loopMode === "Queue"
-          ? "Track"
-          : "Off";
-      return {
-        loopMode: nextMode,
-        status: { ...state.status, loop_mode: nextMode },
-      };
-    });
-    const s = get();
-    syncWithBackend(s);
-    saveSession({
-      queue: s.queue,
-      queueIndex: s.queueIndex,
-      currentTrackId: s.currentTrackId,
-      playbackContext: s.playbackContext,
-      isShuffle: s.isShuffle,
-      isAutoplay: s.isAutoplay,
-      loopMode: s.loopMode,
-      positionSecs: s.status.position_secs,
-      userQueue: s.userQueue,
-      contextQueue: s.contextQueue,
-      contextIndex: s.contextIndex,
-      sessionHistory: s.sessionHistory,
-    });
+    const current = get().loopMode;
+    const nextMode: "Off" | "Queue" | "Track" =
+      current === "Off" ? "Queue" : current === "Queue" ? "Track" : "Off";
+    set((s) => ({ loopMode: nextMode, status: { ...s.status, loop_mode: nextMode } }));
+    if (playerAdapter.queueSetLoopMode) {
+      playerAdapter.queueSetLoopMode(nextMode).then((snapshot) => {
+        applyQueueSnapshot(set, snapshot);
+        saveSessionFromStore(get());
+      }).catch(() => {});
+    } else {
+      saveSessionFromStore(get());
+    }
   },
 
   setLoopMode: (mode: "Off" | "Queue" | "Track") => {
-    set((state) => ({
-      loopMode: mode,
-      status: { ...state.status, loop_mode: mode },
-    }));
-    const s = get();
-    syncWithBackend(s);
-    saveSession({
-      queue: s.queue,
-      queueIndex: s.queueIndex,
-      currentTrackId: s.currentTrackId,
-      playbackContext: s.playbackContext,
-      isShuffle: s.isShuffle,
-      isAutoplay: s.isAutoplay,
-      loopMode: s.loopMode,
-      positionSecs: s.status.position_secs,
-      userQueue: s.userQueue,
-      contextQueue: s.contextQueue,
-      contextIndex: s.contextIndex,
-      sessionHistory: s.sessionHistory,
-    });
+    set((s) => ({ loopMode: mode, status: { ...s.status, loop_mode: mode } }));
+    if (playerAdapter.queueSetLoopMode) {
+      playerAdapter.queueSetLoopMode(mode).then((snapshot) => {
+        applyQueueSnapshot(set, snapshot);
+        saveSessionFromStore(get());
+      }).catch(() => {});
+    } else {
+      saveSessionFromStore(get());
+    }
   },
 
   toggleFavorite: (trackId: string) => {
@@ -1633,607 +1532,88 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
   },
 
   playNext: async () => {
-    const {
-      userQueue,
-      contextQueue,
-      contextIndex,
-      queue,
-      currentTrack,
-      sessionHistory,
-      status,
-      isShuffle,
-      shuffleIndices,
-      shufflePos,
-      isAutoplay,
-      playbackContext,
-    } = get();
-
-    const loopMode = (get().loopMode !== "Off" ? get().loopMode : status.loop_mode) ?? "Off";
-
-    // 1. LoopMode::Track
-    if (loopMode === "Track" && currentTrack) {
-      set({
-        status: { ...status, state: "Playing", position_secs: 0 },
-        isManualStop: false,
-      });
-      try {
-        await playerAdapter.seek(0);
-        await playerAdapter.playTrack(currentTrack);
-      } catch (e) {
-        console.error("Failed to replay track in Loop Track:", e);
+    if (playerAdapter.queueNext) {
+      if (!playerAdapter.isTauri() && playerAdapter.syncFromStore) {
+        const state = get();
+        const effectiveLoop = (state.status?.loop_mode ?? state.loopMode) || "Off";
+        playerAdapter.syncFromStore({
+          queue: state.queue,
+          queueIndex: state.queueIndex,
+          currentTrack: state.currentTrack,
+          status: state.status,
+          isShuffle: state.isShuffle,
+          loopMode: effectiveLoop as "Off" | "Queue" | "Track",
+          isAutoplay: state.isAutoplay,
+          userQueue: state.userQueue,
+          contextQueue: state.contextQueue,
+          contextIndex: state.contextIndex,
+          shuffleIndices: state.shuffleIndices,
+          shufflePos: state.shufflePos,
+        });
       }
+      const snapshot = await playerAdapter.queueNext();
+      applyQueueSnapshot(set, snapshot);
+      const track = snapshot.currentTrack ?? snapshot.current_track;
+      if (track) {
+        notifyIfEnabled(track);
+        get().recordTrackPlay(track.id);
+        set((s) => ({
+          status: { ...s.status, state: "Playing" },
+          isManualStop: false,
+        }));
+      } else {
+        set((s) => ({
+          status: { ...s.status, state: "Stopped", position_secs: 0 },
+          isManualStop: true,
+        }));
+        if (playerAdapter.stop) {
+          playerAdapter.stop().catch(() => {});
+        }
+      }
+      saveSessionFromStore(get());
       return;
-    }
-
-    const nextHist = currentTrack ? [...sessionHistory, currentTrack].slice(-50) : sessionHistory;
-
-    // 2. User priority queue takes immediate precedence
-    if (userQueue.length > 0) {
-      const nextTrack = userQueue[0];
-      const nextUser = userQueue.slice(1);
-      const activeContext = contextQueue.length > 0 ? contextQueue : get().queue;
-      const activeIndex = contextIndex >= 0 ? contextIndex : get().queueIndex;
-      const { queue, queueIndex } = computeQueueState(
-        activeContext,
-        activeIndex,
-        nextUser,
-        nextTrack,
-        isShuffle,
-        shuffleIndices,
-        shufflePos
-      );
-
-      set({
-        status: { ...status, state: "Playing" },
-        userQueue: nextUser,
-        currentTrack: nextTrack,
-        currentTrackId: nextTrack.id,
-        sessionHistory: nextHist,
-        queue,
-        queueIndex,
-        isManualStop: false,
-      });
-
-      try {
-        get().recordTrackPlay(nextTrack.id);
-        await playerAdapter.playTrack(nextTrack);
-        notifyIfEnabled(nextTrack);
-        const s = get();
-        syncWithBackend(s);
-        saveSession({
-          queue: s.queue,
-          queueIndex: s.queueIndex,
-          currentTrackId: s.currentTrackId,
-          playbackContext: s.playbackContext,
-          isShuffle: s.isShuffle,
-          isAutoplay: s.isAutoplay,
-          loopMode: s.loopMode,
-          positionSecs: 0,
-          userQueue: s.userQueue,
-          contextQueue: s.contextQueue,
-          contextIndex: s.contextIndex,
-          sessionHistory: s.sessionHistory,
-        });
-      } catch (e) {
-        console.error("Failed to play next user-queued track:", e);
-      }
-      return;
-    }
-
-    // 3. Context queue traversal
-    const activeContext =
-      contextQueue.length > 0 && queue.length === contextQueue.length + userQueue.length
-        ? contextQueue
-        : get().queue;
-    if (activeContext.length === 0) return;
-
-    let activeIndex = -1;
-    if (contextIndex >= 0 && contextIndex < activeContext.length && activeContext[contextIndex]?.id === currentTrack?.id) {
-      activeIndex = contextIndex;
-    } else if (currentTrack) {
-      activeIndex = activeContext.findIndex((t) => t.id === currentTrack.id);
-    }
-    if (activeIndex === -1) {
-      activeIndex = get().queueIndex;
-    }
-
-    if (isShuffle && activeContext.length > 1) {
-      const currentIndices =
-        shuffleIndices.length === activeContext.length
-          ? shuffleIndices
-          : generateShuffleIndices(activeContext.length, activeIndex);
-
-      if (shufflePos + 1 < currentIndices.length) {
-        const nextPos = shufflePos + 1;
-        const nextContextIdx = currentIndices[nextPos];
-        const nextTrack = activeContext[nextContextIdx];
-        const { queue, queueIndex } = computeQueueState(
-          activeContext,
-          nextContextIdx,
-          userQueue,
-          nextTrack,
-          true,
-          currentIndices,
-          nextPos
-        );
-
-        set({
-          status: { ...status, state: "Playing" },
-          contextQueue: activeContext,
-          contextIndex: nextContextIdx,
-          shuffleIndices: currentIndices,
-          shufflePos: nextPos,
-          currentTrack: nextTrack,
-          currentTrackId: nextTrack.id,
-          sessionHistory: nextHist,
-          queue,
-          queueIndex,
-          isManualStop: false,
-        });
-
-        try {
-          get().recordTrackPlay(nextTrack.id);
-          await playerAdapter.playTrack(nextTrack);
-          notifyIfEnabled(nextTrack);
-          const s = get();
-          syncWithBackend(s);
-          saveSession({
-            queue: s.queue,
-            queueIndex: s.queueIndex,
-            currentTrackId: s.currentTrackId,
-            playbackContext: s.playbackContext,
-            isShuffle: s.isShuffle,
-            isAutoplay: s.isAutoplay,
-            loopMode: s.loopMode,
-            positionSecs: 0,
-            userQueue: s.userQueue,
-            contextQueue: s.contextQueue,
-            contextIndex: s.contextIndex,
-            sessionHistory: s.sessionHistory,
-          });
-        } catch (e) {
-          console.error("Failed to play shuffled context track:", e);
-        }
-        return;
-      } else if (loopMode === "Queue") {
-        const newIndices = generateShuffleIndices(activeContext.length, -1);
-        const nextContextIdx = newIndices[0];
-        const nextTrack = activeContext[nextContextIdx];
-        const { queue, queueIndex } = computeQueueState(
-          activeContext,
-          nextContextIdx,
-          userQueue,
-          nextTrack,
-          true,
-          newIndices,
-          0
-        );
-
-        set({
-          status: { ...status, state: "Playing" },
-          contextQueue: activeContext,
-          contextIndex: nextContextIdx,
-          shuffleIndices: newIndices,
-          shufflePos: 0,
-          currentTrack: nextTrack,
-          currentTrackId: nextTrack.id,
-          sessionHistory: nextHist,
-          queue,
-          queueIndex,
-          isManualStop: false,
-        });
-
-        try {
-          get().recordTrackPlay(nextTrack.id);
-          await playerAdapter.playTrack(nextTrack);
-          notifyIfEnabled(nextTrack);
-          const s = get();
-          syncWithBackend(s);
-          saveSession({
-            queue: s.queue,
-            queueIndex: s.queueIndex,
-            currentTrackId: s.currentTrackId,
-            playbackContext: s.playbackContext,
-            isShuffle: s.isShuffle,
-            isAutoplay: s.isAutoplay,
-            loopMode: s.loopMode,
-            positionSecs: 0,
-            userQueue: s.userQueue,
-            contextQueue: s.contextQueue,
-            contextIndex: s.contextIndex,
-            sessionHistory: s.sessionHistory,
-          });
-        } catch (e) {
-          console.error("Failed to loop shuffled queue:", e);
-        }
-        return;
-      }
-    } else {
-      if (activeIndex < activeContext.length - 1) {
-        const nextContextIdx = activeIndex + 1;
-        const nextTrack = activeContext[nextContextIdx];
-        const { queue, queueIndex } = computeQueueState(
-          activeContext,
-          nextContextIdx,
-          userQueue,
-          nextTrack,
-          false
-        );
-
-        set({
-          status: { ...status, state: "Playing" },
-          contextQueue: activeContext,
-          contextIndex: nextContextIdx,
-          currentTrack: nextTrack,
-          currentTrackId: nextTrack.id,
-          sessionHistory: nextHist,
-          queue,
-          queueIndex,
-          isManualStop: false,
-        });
-
-        try {
-          get().recordTrackPlay(nextTrack.id);
-          await playerAdapter.playTrack(nextTrack);
-          notifyIfEnabled(nextTrack);
-          const s = get();
-          syncWithBackend(s);
-          saveSession({
-            queue: s.queue,
-            queueIndex: s.queueIndex,
-            currentTrackId: s.currentTrackId,
-            playbackContext: s.playbackContext,
-            isShuffle: s.isShuffle,
-            isAutoplay: s.isAutoplay,
-            loopMode: s.loopMode,
-            positionSecs: 0,
-            userQueue: s.userQueue,
-            contextQueue: s.contextQueue,
-            contextIndex: s.contextIndex,
-            sessionHistory: s.sessionHistory,
-          });
-        } catch (e) {
-          console.error("Failed to play next track:", e);
-        }
-        return;
-      } else if (loopMode === "Queue") {
-        const nextTrack = activeContext[0];
-        const { queue, queueIndex } = computeQueueState(
-          activeContext,
-          0,
-          userQueue,
-          nextTrack,
-          false
-        );
-
-        set({
-          status: { ...status, state: "Playing" },
-          contextQueue: activeContext,
-          contextIndex: 0,
-          currentTrack: nextTrack,
-          currentTrackId: nextTrack.id,
-          sessionHistory: nextHist,
-          queue,
-          queueIndex,
-          isManualStop: false,
-        });
-
-        try {
-          get().recordTrackPlay(nextTrack.id);
-          await playerAdapter.playTrack(nextTrack);
-          notifyIfEnabled(nextTrack);
-          const s = get();
-          syncWithBackend(s);
-          saveSession({
-            queue: s.queue,
-            queueIndex: s.queueIndex,
-            currentTrackId: s.currentTrackId,
-            playbackContext: s.playbackContext,
-            isShuffle: s.isShuffle,
-            isAutoplay: s.isAutoplay,
-            loopMode: s.loopMode,
-            positionSecs: 0,
-            userQueue: s.userQueue,
-            contextQueue: s.contextQueue,
-            contextIndex: s.contextIndex,
-            sessionHistory: s.sessionHistory,
-          });
-        } catch (e) {
-          console.error("Failed to loop sequential queue:", e);
-        }
-        return;
-      }
-    }
-
-    // 4. Autoplay candidate check
-    if (isAutoplay && activeContext.length > 0 && playbackContext) {
-      const libraryTracks = getLibraryTracks();
-      if (libraryTracks.length === 0 && playbackContext?.type === "tracks") {
-        const nextTrack = activeContext[0];
-        const { queue, queueIndex } = computeQueueState(activeContext, 0, userQueue, nextTrack);
-        set({
-          status: { ...status, state: "Playing" },
-          contextQueue: activeContext,
-          contextIndex: 0,
-          currentTrack: nextTrack,
-          currentTrackId: nextTrack.id,
-          sessionHistory: nextHist,
-          queue,
-          queueIndex,
-          isManualStop: false,
-        });
-        try {
-          get().recordTrackPlay(nextTrack.id);
-          await playerAdapter.playTrack(nextTrack);
-          notifyIfEnabled(nextTrack);
-          const s = get();
-          syncWithBackend(s);
-          saveSession({
-            queue: s.queue,
-            queueIndex: s.queueIndex,
-            currentTrackId: s.currentTrackId,
-            playbackContext: s.playbackContext,
-            isShuffle: s.isShuffle,
-            isAutoplay: s.isAutoplay,
-            loopMode: s.loopMode,
-            positionSecs: 0,
-            userQueue: s.userQueue,
-            contextQueue: s.contextQueue,
-            contextIndex: s.contextIndex,
-            sessionHistory: s.sessionHistory,
-          });
-        } catch (e) {
-          console.error("Failed to autoplay loop:", e);
-        }
-        return;
-      }
-
-      const current = activeContext[activeIndex] || null;
-      const autoplayTrack = getAutoplayNextTrack(current, activeContext, libraryTracks);
-
-      if (autoplayTrack) {
-        const nextContext = [...activeContext, autoplayTrack];
-        const nextContextIdx = nextContext.length - 1;
-        const { queue, queueIndex } = computeQueueState(nextContext, nextContextIdx, userQueue, autoplayTrack);
-
-        set({
-          status: { ...status, state: "Playing" },
-          contextQueue: nextContext,
-          contextIndex: nextContextIdx,
-          currentTrack: autoplayTrack,
-          currentTrackId: autoplayTrack.id,
-          sessionHistory: nextHist,
-          queue,
-          queueIndex,
-          isManualStop: false,
-        });
-
-        try {
-          get().recordTrackPlay(autoplayTrack.id);
-          await playerAdapter.playTrack(autoplayTrack);
-          notifyIfEnabled(autoplayTrack);
-          const s = get();
-          syncWithBackend(s);
-          saveSession({
-            queue: s.queue,
-            queueIndex: s.queueIndex,
-            currentTrackId: s.currentTrackId,
-            playbackContext: s.playbackContext,
-            isShuffle: s.isShuffle,
-            isAutoplay: s.isAutoplay,
-            loopMode: s.loopMode,
-            positionSecs: 0,
-            userQueue: s.userQueue,
-            contextQueue: s.contextQueue,
-            contextIndex: s.contextIndex,
-            sessionHistory: s.sessionHistory,
-          });
-        } catch (e) {
-          console.error("Failed to play autoplay track:", e);
-        }
-        return;
-      }
-    }
-
-    // 5. Finished entire queue
-    set({
-      status: { ...status, state: "Stopped", position_secs: 0 },
-      isManualStop: true,
-    });
-    try {
-      await playerAdapter.stop();
-    } catch (e) {
-      console.error("Failed to stop at end of queue:", e);
     }
   },
 
   playPrevious: async () => {
-    const {
-      status,
-      userQueue,
-      contextQueue,
-      contextIndex,
-      queue,
-      isShuffle,
-      shuffleIndices,
-      shufflePos,
-      sessionHistory,
-      currentTrack,
-    } = get();
-
-    const activeContext =
-      contextQueue.length > 0 && queue.length === contextQueue.length + userQueue.length
-        ? contextQueue
-        : get().queue;
-    if (activeContext.length === 0 && userQueue.length === 0 && !currentTrack) return;
-
-    // 1. If played > 3 seconds, restart current track
-    if (status.position_secs > 3) {
-      playerAdapter.seek(0);
+    const currentPos = get().status.position_secs || 0;
+    if (currentPos > 3) {
+      await playerAdapter.seek(0);
       return;
     }
-
-    let activeIndex = -1;
-    if (contextIndex >= 0 && contextIndex < activeContext.length && activeContext[contextIndex]?.id === currentTrack?.id) {
-      activeIndex = contextIndex;
-    } else if (currentTrack) {
-      activeIndex = activeContext.findIndex((t) => t.id === currentTrack.id);
-    }
-    if (activeIndex === -1) {
-      activeIndex = get().queueIndex;
-    }
-
-    // 2. If in shuffle mode: step backward in shuffle order
-    if (isShuffle) {
-      if (shufflePos > 0) {
-        const nextPos = shufflePos - 1;
-        const nextContextIdx = shuffleIndices[nextPos];
-        const prevTrack = activeContext[nextContextIdx];
-        const { queue, queueIndex } = computeQueueState(
-          activeContext,
-          nextContextIdx,
-          userQueue,
-          prevTrack,
-          true,
-          shuffleIndices,
-          nextPos
-        );
-
-        set({
-          status: { ...status, state: "Playing" },
-          contextQueue: activeContext,
-          contextIndex: nextContextIdx,
-          shufflePos: nextPos,
-          currentTrack: prevTrack,
-          currentTrackId: prevTrack.id,
-          queue,
-          queueIndex,
-          isManualStop: false,
+    if (playerAdapter.queuePrevious) {
+      if (!playerAdapter.isTauri() && playerAdapter.syncFromStore) {
+        const state = get();
+        const effectiveLoop = (state.status?.loop_mode ?? state.loopMode) || "Off";
+        playerAdapter.syncFromStore({
+          queue: state.queue,
+          queueIndex: state.queueIndex,
+          currentTrack: state.currentTrack,
+          status: state.status,
+          isShuffle: state.isShuffle,
+          loopMode: effectiveLoop as "Off" | "Queue" | "Track",
+          isAutoplay: state.isAutoplay,
+          userQueue: state.userQueue,
+          contextQueue: state.contextQueue,
+          contextIndex: state.contextIndex,
+          shuffleIndices: state.shuffleIndices,
+          shufflePos: state.shufflePos,
         });
-
-        try {
-          get().recordTrackPlay(prevTrack.id);
-          await playerAdapter.playTrack(prevTrack);
-          notifyIfEnabled(prevTrack);
-          const s = get();
-          syncWithBackend(s);
-          saveSession({
-            queue: s.queue,
-            queueIndex: s.queueIndex,
-            currentTrackId: s.currentTrackId,
-            playbackContext: s.playbackContext,
-            isShuffle: s.isShuffle,
-            isAutoplay: s.isAutoplay,
-            loopMode: s.loopMode,
-            positionSecs: 0,
-            userQueue: s.userQueue,
-            contextQueue: s.contextQueue,
-            contextIndex: s.contextIndex,
-            sessionHistory: s.sessionHistory,
-          });
-        } catch (e) {
-          console.error("Failed to play previous shuffled track:", e);
-        }
-        return;
-      } else {
-        playerAdapter.seek(0);
-        return;
       }
-    }
-
-    // 3. Linear / sequential playback: decrement activeIndex
-    if (activeIndex > 0) {
-      const nextContextIdx = activeIndex - 1;
-      const prevTrack = activeContext[nextContextIdx];
-      if (prevTrack) {
-        const { queue, queueIndex } = computeQueueState(
-          activeContext,
-          nextContextIdx,
-          userQueue,
-          prevTrack,
-          false
-        );
-
-        set({
-          status: { ...status, state: "Playing" },
-          contextQueue: activeContext,
-          contextIndex: nextContextIdx,
-          currentTrack: prevTrack,
-          currentTrackId: prevTrack.id,
-          queue,
-          queueIndex,
+      const snapshot = await playerAdapter.queuePrevious(currentPos);
+      applyQueueSnapshot(set, snapshot);
+      const track = snapshot.currentTrack ?? snapshot.current_track;
+      if (track) {
+        notifyIfEnabled(track);
+        get().recordTrackPlay(track.id);
+        set((s) => ({
+          status: { ...s.status, state: "Playing" },
           isManualStop: false,
-        });
-
-        try {
-          get().recordTrackPlay(prevTrack.id);
-          await playerAdapter.playTrack(prevTrack);
-          notifyIfEnabled(prevTrack);
-          const s = get();
-          syncWithBackend(s);
-          saveSession({
-            queue: s.queue,
-            queueIndex: s.queueIndex,
-            currentTrackId: s.currentTrackId,
-            playbackContext: s.playbackContext,
-            isShuffle: s.isShuffle,
-            isAutoplay: s.isAutoplay,
-            loopMode: s.loopMode,
-            positionSecs: 0,
-            userQueue: s.userQueue,
-            contextQueue: s.contextQueue,
-            contextIndex: s.contextIndex,
-            sessionHistory: s.sessionHistory,
-          });
-        } catch (e) {
-          console.error("Failed to play previous sequential track:", e);
-        }
-        return;
+        }));
       }
-    }
-
-    // 4. Fallback: if session history has items and we're at start
-    if (sessionHistory.length > 0) {
-      const prevTrack = sessionHistory[sessionHistory.length - 1];
-      const nextHist = sessionHistory.slice(0, -1);
-      const cIdx = activeContext.findIndex((t) => t.id === prevTrack.id);
-      const nextContextIdx = cIdx >= 0 ? cIdx : 0;
-      const { queue, queueIndex } = computeQueueState(
-        activeContext,
-        nextContextIdx,
-        userQueue,
-        prevTrack,
-        isShuffle,
-        shuffleIndices,
-        shufflePos
-      );
-
-      set({
-        status: { ...status, state: "Playing" },
-        contextQueue: activeContext,
-        contextIndex: nextContextIdx,
-        sessionHistory: nextHist,
-        currentTrack: prevTrack,
-        currentTrackId: prevTrack.id,
-        queue,
-        queueIndex,
-        isManualStop: false,
-      });
-
-      try {
-        get().recordTrackPlay(prevTrack.id);
-        await playerAdapter.playTrack(prevTrack);
-        notifyIfEnabled(prevTrack);
-        const s = get();
-        syncWithBackend(s);
-      } catch (e) {
-        console.error("Failed to play previous track from history:", e);
-      }
+      saveSessionFromStore(get());
       return;
     }
-
-    // 5. At beginning: restart
-    playerAdapter.seek(0);
   },
 
 
@@ -2241,20 +1621,56 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
     const { currentTrack, status } = get();
     set({ isManualStop: false });
 
+    // If no current track is set in store, pick first track from queue or library
+    let trackToPlay = currentTrack;
+    if (!trackToPlay) {
+      const q = get().queue;
+      if (q.length > 0) {
+        trackToPlay = q[0];
+      } else {
+        const libTracks = useLibraryStore.getState().tracks;
+        if (libTracks.length > 0) {
+          trackToPlay = libTracks[0];
+        }
+      }
+    }
+
+    if (!trackToPlay) return;
+
+    // Resuming a session that was never loaded into the engine (app restart
+    // without auto-resume, or a track that already reached its end) is a
+    // no-op in the audio thread. The adapter reports that, and we reload the
+    // track at the last known position instead of showing a scrubber that
+    // moves while the speakers stay silent.
     try {
       await playerAdapter.resume();
       set((s) => ({ status: { ...s.status, state: "Playing" } }));
+      return;
     } catch {
-      if (currentTrack) {
-        try {
-          await playerAdapter.playTrack(currentTrack);
-          if (status.position_secs > 0) {
-            await playerAdapter.seek(status.position_secs);
-          }
-        } catch (err) {
-          console.error("Failed to load and play track on resume:", err);
-        }
+      // Fall through to a full reload.
+    }
+
+    const durationSecs =
+      status.duration_secs ?? trackToPlay.metadata.duration?.secs ?? 0;
+    const savedPos = status.position_secs ?? 0;
+    // A track that already finished restarts from the top, not from its
+    // final second (which would immediately end again).
+    const resumeAt =
+      durationSecs > 0 && savedPos >= durationSecs - 1 ? 0 : savedPos;
+
+    try {
+      await playerAdapter.playTrack(trackToPlay);
+      if (resumeAt > 0) {
+        await playerAdapter.seek(resumeAt);
       }
+      set((s) => ({
+        currentTrack: trackToPlay,
+        currentTrackId: trackToPlay.id,
+        status: { ...s.status, state: "Playing", position_secs: resumeAt, current_track: trackToPlay },
+      }));
+    } catch (err) {
+      console.error("Failed to load and play track on resume:", err);
+      set((s) => ({ status: { ...s.status, state: "Paused" } }));
     }
   },
 
@@ -2264,6 +1680,7 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
       status: { ...state.status, state: "Paused" },
     }));
     playerAdapter.pause();
+    scheduleClearDiscordPresence(1000);
   },
 
   stop: () => {
@@ -2272,9 +1689,12 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
       status: { ...state.status, state: "Stopped", position_secs: 0 },
     }));
     playerAdapter.stop();
+    clearDiscordPresence();
   },
 
   seek: (seconds: number) => {
+    pendingSeekTarget = seconds;
+    pendingSeekTime = Date.now();
     set((s) => ({
       status: { ...s.status, position_secs: seconds },
     }));
@@ -2418,6 +1838,8 @@ export const usePlayerStore = create<PlayerStoreState>((set, get) => ({
         loop_mode: loopMode,
       },
     });
+
+    syncWithBackend(get());
 
     // Only start playback automatically if the user explicitly enabled autoResumePlayback in Settings.
     // By default, the session is restored in a Paused state with zero audio playback.

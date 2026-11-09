@@ -40,6 +40,14 @@ export async function runM1Challenger2Tests(jiti: any) {
     typeof adapterModule.playerAdapter.pickFile === "function",
     "AudioPlayerAdapter exposes pickFile() method"
   );
+  assert(
+    typeof adapterModule.playerAdapter.pickPlaylistFile === "function",
+    "AudioPlayerAdapter exposes pickPlaylistFile() method"
+  );
+  assert(
+    typeof adapterModule.playerAdapter.importPlaylistFile === "function",
+    "AudioPlayerAdapter exposes importPlaylistFile() method"
+  );
 
   // B. Mock DOM environment to simulate BrowserAudioPlayer.pickFolder & pickFile
   // Setup document.createElement mock

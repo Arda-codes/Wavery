@@ -45,8 +45,106 @@ const _artworkCache = new Map<string, string>();
 const _pendingLookups = new Map<string, Promise<string | null>>();
 
 /**
- * Resolves a high-resolution public artwork URL for Discord RPC using Apple Music / iTunes CDN.
- * Discord RPC requires public HTTP/HTTPS URLs (or uploaded asset keys) to render album covers.
+ * Normalizes a title/artist/album for fuzzy comparison: lowercase, strip
+ * diacritics, drop bracketed suffixes ("(Remastered 2011)", "[Deluxe]"),
+ * collapse punctuation to spaces, and remove noise words that make two
+ * different releases look distinct.
+ */
+export function normalizeForMatch(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/\[[^\]]*\]/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\b(feat|ft|featuring|with|remaster|remastered|deluxe|edition|version|ep)\b/g, " ")
+    .replace(/\bthe\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Token overlap in [0, 1]; 1 means the two normalized strings match exactly. */
+export function tokenScore(a: string, b: string): number {
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  const aTokens = new Set(a.split(" ").filter(Boolean));
+  const bTokens = new Set(b.split(" ").filter(Boolean));
+  if (aTokens.size === 0 || bTokens.size === 0) return 0;
+  let shared = 0;
+  for (const token of aTokens) {
+    if (bTokens.has(token)) shared += 1;
+  }
+  return shared / Math.max(aTokens.size, bTokens.size);
+}
+
+/** Minimal shape of an iTunes Search API song/album result. */
+interface ITunesResult {
+  artistName?: string;
+  collectionName?: string;
+  trackName?: string;
+  artworkUrl100?: string;
+}
+
+/** Fetches iTunes search results, returning `null` (not empty) on a transport error. */
+async function searchItunes(term: string, entity: "song" | "album"): Promise<ITunesResult[] | null> {
+  try {
+    const res = await fetch(
+      `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=${entity}&limit=12`,
+      { signal: AbortSignal.timeout(4000) }
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as { results?: ITunesResult[] };
+    return Array.isArray(data?.results) ? data.results : [];
+  } catch {
+    return null;
+  }
+}
+
+/** Discord renders the cover at roughly 512px, so ask for a 600px asset. */
+export function upscaleArtwork(url: string): string {
+  return url.replace(/\/\d+x\d+bb\./, "/600x600bb.");
+}
+
+/**
+ * Picks the best artwork from a result list using artist/album/title overlap
+ * instead of trusting the first hit. Returns `null` when nothing clears the
+ * confidence bar, which is much better than painting the wrong cover.
+ */
+export function bestArtworkScore(
+  results: ITunesResult[],
+  normArtist: string,
+  normAlbum: string,
+  normTitle: string
+): { url: string; score: number } | null {
+  let best: { url: string; score: number } | null = null;
+  for (const result of results) {
+    if (!result.artworkUrl100) continue;
+    const artistScore = tokenScore(normalizeForMatch(result.artistName ?? ""), normArtist);
+    const albumScore = normAlbum
+      ? tokenScore(normalizeForMatch(result.collectionName ?? ""), normAlbum)
+      : 0;
+    const titleScore = normTitle
+      ? tokenScore(normalizeForMatch(result.trackName ?? ""), normTitle)
+      : 0;
+    // Artist identity dominates; album and title break ties between releases.
+    const score = normAlbum
+      ? artistScore * 0.5 + albumScore * 0.35 + titleScore * 0.15
+      : artistScore * 0.6 + titleScore * 0.4;
+    if (!best || score > best.score) {
+      best = { url: upscaleArtwork(result.artworkUrl100), score };
+    }
+  }
+  return best;
+}
+
+/**
+ * Resolves a high-resolution public artwork URL for Discord RPC using the
+ * iTunes Search API. Discord RPC requires public HTTP/HTTPS URLs (or uploaded
+ * asset keys) to render album covers.
+ *
+ * Matches are scored rather than first-hit so an artist's live album or a
+ * compilation never replaces the studio cover.
  */
 export async function resolveOnlineArtwork(
   artist: string,
@@ -70,24 +168,52 @@ export async function resolveOnlineArtwork(
     return _pendingLookups.get(queryKey)!;
   }
 
+  const normArtist = normalizeForMatch(cleanArtist);
+  const normAlbum = normalizeForMatch(cleanAlbum);
+  const normTitle = normalizeForMatch(cleanTitle);
+
   const promise = (async () => {
+    let confidence = 0;
     try {
-      const searchTerm = encodeURIComponent(`${cleanArtist} ${cleanAlbum || cleanTitle}`);
-      const res = await fetch(
-        `https://itunes.apple.com/search?term=${searchTerm}&entity=song&limit=1`,
-        { signal: AbortSignal.timeout(4000) }
-      );
-      if (!res.ok) return null;
-      const data = await res.json();
-      if (data?.results?.[0]?.artworkUrl100) {
-        // Upgrade from 100x100 to 512x512 for crisp display on Discord
-        const highResUrl = data.results[0].artworkUrl100.replace(
-          /\/100x100bb\./,
-          "/512x512bb."
-        );
-        _artworkCache.set(queryKey, highResUrl);
-        return highResUrl;
+      // 1. Track search scoped by artist + album (or title when no album).
+      const songResults = await searchItunes(`${cleanArtist} ${cleanAlbum || cleanTitle}`, "song");
+      if (songResults && songResults.length > 0) {
+        const best = bestArtworkScore(songResults, normArtist, normAlbum, normTitle);
+        if (best && best.score >= 0.55) {
+          _artworkCache.set(queryKey, best.url);
+          return best.url;
+        }
+        confidence = best?.score ?? 0;
+      } else if (songResults === null) {
+        // Transport failure: do not poison the cache with a false negative.
+        return null;
       }
+
+      // 2. Fall back to an album search, which is more forgiving when the
+      //    track is credited to a featured artist or titled differently.
+      if (normAlbum) {
+        const albumResults = await searchItunes(`${cleanArtist} ${cleanAlbum}`, "album");
+        if (albumResults && albumResults.length > 0) {
+          const best = bestArtworkScore(albumResults, normArtist, normAlbum, "");
+          if (best && best.score >= 0.6) {
+            _artworkCache.set(queryKey, best.url);
+            return best.url;
+          }
+        }
+      }
+
+      // 3. Last resort: a strong artist + title match with no album context.
+      if (!normAlbum && confidence < 0.4) {
+        const titleResults = await searchItunes(`${cleanArtist} ${cleanTitle}`, "song");
+        if (titleResults && titleResults.length > 0) {
+          const best = bestArtworkScore(titleResults, normArtist, "", normTitle);
+          if (best && best.score >= 0.6) {
+            _artworkCache.set(queryKey, best.url);
+            return best.url;
+          }
+        }
+      }
+
       _artworkCache.set(queryKey, "");
       return null;
     } catch {
@@ -104,6 +230,37 @@ export async function resolveOnlineArtwork(
 // Debounce timer handle
 let _debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let _pendingDispatchPayload: DiscordPresencePayload | null = null;
+
+/**
+ * Minimum spacing between presence writes. Discord tolerates roughly five
+ * updates per twenty seconds and each write restarts the progress bar, so a
+ * slightly delayed update is always better than a burst.
+ */
+const MIN_DISPATCH_GAP_MS = 600;
+
+/**
+ * Pending "clear presence" timer. Track transitions pass through a transient
+ * Stopped state before the next track loads, so a clear is deferred briefly
+ * and cancelled by any presence that arrives first.
+ */
+let _clearTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Clears the Discord Rich Presence after a short grace period.
+ *
+ * Use this for playback that has stopped, rather than clearing immediately:
+ * auto-advance and crossfades briefly report Stopped, and an immediate clear
+ * makes the Discord card flicker between tracks.
+ *
+ * @param delayMs Grace period in milliseconds (default 1200).
+ */
+export function scheduleClearDiscordPresence(delayMs = 1200): void {
+  if (_clearTimer !== null) clearTimeout(_clearTimer);
+  _clearTimer = setTimeout(() => {
+    _clearTimer = null;
+    clearDiscordPresence();
+  }, delayMs);
+}
 
 // Track last dispatched properties to avoid redundant network/IPC chatter
 let _lastSentTrackKey = "";
@@ -175,6 +332,13 @@ function executeDispatch(payload: DiscordPresencePayload): void {
  * @param payload The presence data to send.
  */
 export function updateDiscordPresence(payload: DiscordPresencePayload): void {
+  // A queued clear means playback had stopped; this new presence supersedes
+  // it, so consecutive tracks do not blink out of the Discord profile.
+  if (_clearTimer !== null) {
+    clearTimeout(_clearTimer);
+    _clearTimer = null;
+  }
+
   const customAppId = useSettingsStore.getState().discordAppId;
   const cleanArtist = payload.artist?.trim() || "";
   const cleanAlbum = payload.album?.trim() || "";
@@ -192,8 +356,10 @@ export function updateDiscordPresence(payload: DiscordPresencePayload): void {
     app_id: customAppId ? customAppId.trim() : undefined,
   };
 
-  // If artwork is not cached yet, proactively resolve it and re-dispatch when ready
-  if (!artworkUrl && cleanArtist && cleanArtist !== "Unknown Artist") {
+  // If artwork is not cached yet, proactively resolve it and re-dispatch when ready.
+  // A cached miss (empty string) is not retried, so polling the presence
+  // never re-hits the network for an artist iTunes does not know.
+  if (!artworkUrl && !_artworkCache.has(queryKey) && cleanArtist && cleanArtist !== "Unknown Artist") {
     resolveOnlineArtwork(cleanArtist, cleanAlbum, cleanTitle).then((resolvedUrl) => {
       if (resolvedUrl) {
         updateDiscordPresence({
@@ -210,10 +376,13 @@ export function updateDiscordPresence(payload: DiscordPresencePayload): void {
   const isSameArtwork = (artworkUrl || "") === (_lastSentArtwork || "");
   const isSameAppId = enrichedPayload.app_id === _lastSentAppId;
 
-  // If playback is advancing normally, Discord's desktop client natively updates the progress bar
-  // using timestamps.start and timestamps.end. Resending on linear 500ms intervals causes rate-limiting
-  // or restarts the progress bar.
+  // While playing, Discord's desktop client advances the progress bar itself
+  // from timestamps.start/end, so resending on a linear clock would only
+  // restart it. A position that drifts more than 2.5s from the expected clock
+  // is a real seek and must be forwarded. While paused there is no clock to
+  // outrun, so an unchanged track is left alone entirely.
   if (isSameTrack && isSamePlayState && isSameArtwork && isSameAppId && _lastSentTime > 0) {
+    if (!payload.is_playing) return;
     const elapsedSecs = (Date.now() - _lastSentTime) / 1000;
     const expectedPos = _lastSentPosition + elapsedSecs;
     const positionDelta = Math.abs(payload.position_secs - expectedPos);
@@ -226,26 +395,32 @@ export function updateDiscordPresence(payload: DiscordPresencePayload): void {
   const isTrackOrStateChange = !isSameTrack || !isSamePlayState || !isSameArtwork || !isSameAppId;
   const timeSinceLastDispatch = Date.now() - _lastSentTime;
 
-  // Immediate dispatch for track changes or play/pause; debounce rapid seek bursts
-  if (isTrackOrStateChange || timeSinceLastDispatch > 500) {
-    if (_debounceTimer !== null) {
-      clearTimeout(_debounceTimer);
-      _debounceTimer = null;
-    }
+  // Discord rate-limits presence updates (about five per twenty seconds) and
+  // restarts the progress bar on every write, so bursts must be coalesced:
+  // a track change goes out almost immediately, play/pause and seeks settle
+  // on a short trailing edge, and only the newest payload is ever sent.
+  const minGap = isTrackOrStateChange ? MIN_DISPATCH_GAP_MS : 500;
+  const delay = Math.max(0, minGap - timeSinceLastDispatch);
+
+  if (_debounceTimer !== null) {
+    clearTimeout(_debounceTimer);
+    _debounceTimer = null;
+  }
+
+  if (delay === 0 && (isTrackOrStateChange || timeSinceLastDispatch > 500)) {
     _pendingDispatchPayload = null;
     executeDispatch(enrichedPayload);
-  } else {
-    _pendingDispatchPayload = enrichedPayload;
-    if (_debounceTimer === null) {
-      _debounceTimer = setTimeout(() => {
-        _debounceTimer = null;
-        if (_pendingDispatchPayload) {
-          executeDispatch(_pendingDispatchPayload);
-          _pendingDispatchPayload = null;
-        }
-      }, 250);
-    }
+    return;
   }
+
+  _pendingDispatchPayload = enrichedPayload;
+  _debounceTimer = setTimeout(() => {
+    _debounceTimer = null;
+    if (_pendingDispatchPayload) {
+      executeDispatch(_pendingDispatchPayload);
+      _pendingDispatchPayload = null;
+    }
+  }, delay > 0 ? delay : 250);
 }
 
 /**
@@ -253,6 +428,10 @@ export function updateDiscordPresence(payload: DiscordPresencePayload): void {
  * Call this when playback stops.
  */
 export function clearDiscordPresence(): void {
+  if (_clearTimer !== null) {
+    clearTimeout(_clearTimer);
+    _clearTimer = null;
+  }
   if (_debounceTimer !== null) {
     clearTimeout(_debounceTimer);
     _debounceTimer = null;

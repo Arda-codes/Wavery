@@ -13,7 +13,8 @@ use wavery_library::manager::SqliteLibraryManager;
 use wavery_library::reader::LoftyMetadataReader;
 
 fn setup_test_env(name: &str) -> (PathBuf, PathBuf, PathBuf) {
-    let temp_dir = std::env::temp_dir().join(format!("wavery_m2_test_{name}_{}", uuid::Uuid::new_v4()));
+    let temp_dir =
+        std::env::temp_dir().join(format!("wavery_m2_test_{name}_{}", uuid::Uuid::new_v4()));
     let db_path = temp_dir.join("library.db");
     let managed_root = temp_dir.join("managed");
     fs::create_dir_all(&managed_root).unwrap();
@@ -69,6 +70,7 @@ fn test_bm25_exact_column_weight_hierarchy() {
                 channels: Some(2),
                 format: "FLAC".into(),
                 lyrics: None,
+                ..Default::default()
             },
             date_added: 1700000001,
         },
@@ -90,6 +92,7 @@ fn test_bm25_exact_column_weight_hierarchy() {
                 channels: Some(2),
                 format: "FLAC".into(),
                 lyrics: None,
+                ..Default::default()
             },
             date_added: 1700000002,
         },
@@ -111,6 +114,7 @@ fn test_bm25_exact_column_weight_hierarchy() {
                 channels: Some(2),
                 format: "FLAC".into(),
                 lyrics: None,
+                ..Default::default()
             },
             date_added: 1700000003,
         },
@@ -132,6 +136,7 @@ fn test_bm25_exact_column_weight_hierarchy() {
                 channels: Some(2),
                 format: "FLAC".into(),
                 lyrics: None,
+                ..Default::default()
             },
             date_added: 1700000004,
         },
@@ -153,6 +158,7 @@ fn test_bm25_exact_column_weight_hierarchy() {
                 channels: Some(2),
                 format: "FLAC".into(),
                 lyrics: None,
+                ..Default::default()
             },
             date_added: 1700000005,
         },
@@ -214,17 +220,24 @@ fn test_year_defensive_bounds_and_tag_manipulation() {
             channels: Some(2),
             format: "WAV".into(),
             lyrics: None,
+            ..Default::default()
         };
 
         let res = reader.write_metadata(&sample_wav, &meta);
-        assert!(res.is_ok(), "Writing metadata with year {year:?} must succeed");
+        assert!(
+            res.is_ok(),
+            "Writing metadata with year {year:?} must succeed"
+        );
 
         let read_back = reader.read_metadata(&sample_wav).unwrap();
         if let Some(y) = year {
             if y > 0 {
                 assert_eq!(read_back.year, Some(y), "Positive year must be read back");
             } else {
-                assert!(read_back.year.is_none(), "Zero/Negative year must not be stored");
+                assert!(
+                    read_back.year.is_none(),
+                    "Zero/Negative year must not be stored"
+                );
             }
         }
     }
@@ -292,8 +305,13 @@ async fn test_heavy_corrupted_media_parallel_ingestion_under_wal_concurrency() {
             let _ = conn.busy_timeout(Duration::from_millis(5000));
 
             while running_c.load(Ordering::Relaxed) {
-                let r1: Result<i64, _> = conn.query_row("SELECT COUNT(*) FROM tracks", [], |r| r.get(0));
-                let r2: Result<i64, _> = conn.query_row("SELECT COUNT(*) FROM tracks_fts WHERE tracks_fts MATCH '\"Song\"*'", [], |r| r.get(0));
+                let r1: Result<i64, _> =
+                    conn.query_row("SELECT COUNT(*) FROM tracks", [], |r| r.get(0));
+                let r2: Result<i64, _> = conn.query_row(
+                    "SELECT COUNT(*) FROM tracks_fts WHERE tracks_fts MATCH '\"Song\"*'",
+                    [],
+                    |r| r.get(0),
+                );
 
                 if r1.is_err() || r2.is_err() {
                     err_cnt.fetch_add(1, Ordering::Relaxed);
@@ -315,9 +333,17 @@ async fn test_heavy_corrupted_media_parallel_ingestion_under_wal_concurrency() {
         h.join().unwrap();
     }
 
-    assert_eq!(imported.len(), 60, "All 60 files must be imported without failure");
+    assert_eq!(
+        imported.len(),
+        60,
+        "All 60 files must be imported without failure"
+    );
     assert_eq!(manager.all_tracks().len(), 60);
-    assert_eq!(read_errors.load(Ordering::SeqCst), 0, "Zero read errors permitted during WAL concurrency");
+    assert_eq!(
+        read_errors.load(Ordering::SeqCst),
+        0,
+        "Zero read errors permitted during WAL concurrency"
+    );
     assert!(read_queries.load(Ordering::SeqCst) > 0);
 
     let _ = fs::remove_dir_all(&temp_dir);

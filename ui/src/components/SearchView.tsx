@@ -24,6 +24,7 @@ import {
   Headphones,
   Compass,
   Trash2,
+  Quote,
 } from "lucide-react";
 
 interface SearchViewProps {
@@ -37,7 +38,20 @@ interface SearchViewProps {
   getArtworkUrl: (trackId: string) => string;
 }
 
-type SearchFilterTab = "all" | "songs" | "albums" | "artists" | "playlists";
+type SearchFilterTab = "all" | "songs" | "albums" | "artists" | "playlists" | "lyrics";
+
+function getLyricSnippet(rawLyrics: string | undefined, query: string): string | null {
+  if (!rawLyrics || !query.trim()) return null;
+  const cleanQuery = query.toLowerCase().trim();
+  const lines = rawLyrics.split(/\r?\n/);
+  for (const line of lines) {
+    const cleanLine = line.replace(/\[\d{2}:\d{2}(?:\.\d{2,3})?\]/g, "").trim();
+    if (cleanLine.toLowerCase().includes(cleanQuery)) {
+      return cleanLine;
+    }
+  }
+  return null;
+}
 
 const CATEGORY_PALETTES = [
   { iconColor: "text-accent", icon: Guitar },
@@ -189,6 +203,21 @@ export const SearchView: React.FC<SearchViewProps> = ({
       .slice(0, 6);
   }, [playHistory, tracks, albums]);
 
+  // Map of trackId -> matching lyric snippet
+  const lyricMatchesMap = useMemo(() => {
+    const map = new Map<string, string>();
+    if (!trimmedQuery || trimmedQuery.length < 2) return map;
+    for (const t of tracks) {
+      if (t.metadata.lyrics) {
+        const snippet = getLyricSnippet(t.metadata.lyrics, trimmedQuery);
+        if (snippet) {
+          map.set(t.id, snippet);
+        }
+      }
+    }
+    return map;
+  }, [tracks, trimmedQuery]);
+
   // 1. Search Results Computation
   const matchingTracks = useMemo(() => {
     if (!trimmedQuery) return [];
@@ -197,14 +226,20 @@ export const SearchView: React.FC<SearchViewProps> = ({
       const artist = t.metadata.artist?.toLowerCase() || "";
       const album = t.metadata.album?.toLowerCase() || "";
       const genre = t.metadata.genre?.toLowerCase() || "";
+      const hasLyricMatch = lyricMatchesMap.has(t.id);
       return (
         title.includes(trimmedQuery) ||
         artist.includes(trimmedQuery) ||
         album.includes(trimmedQuery) ||
-        genre.includes(trimmedQuery)
+        genre.includes(trimmedQuery) ||
+        hasLyricMatch
       );
     });
-  }, [tracks, trimmedQuery]);
+  }, [tracks, trimmedQuery, lyricMatchesMap]);
+
+  const lyricMatchedTracks = useMemo(() => {
+    return tracks.filter((t) => lyricMatchesMap.has(t.id));
+  }, [tracks, lyricMatchesMap]);
 
   const matchingAlbums = useMemo(() => {
     if (!trimmedQuery) return [];
@@ -450,13 +485,13 @@ export const SearchView: React.FC<SearchViewProps> = ({
   return (
     <div
       ref={scrollContainerRef}
-      className="flex-1 overflow-y-auto px-4 sm:px-6 md:px-8 py-4 sm:py-6 space-y-8 select-none pb-28 sm:pb-24"
+      className="flex-1 overflow-y-auto px-4 sm:px-6 md:px-8 py-4 sm:py-6 space-y-8 select-none pb-32 sm:pb-24"
     >
       {/* 1. Header & Active Search Filters */}
       <div className="space-y-4">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+            <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
               {trimmedQuery ? `Results for “${trimmedQuery}”` : "Explore"}
             </h1>
             <p className="text-xs sm:text-sm text-textMuted mt-1">
@@ -483,7 +518,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
           <div className="flex items-center gap-2 overflow-x-auto pt-1 pb-1">
             <button
               onClick={() => setActiveTab("all")}
-              className={`px-4 py-2 rounded-full text-xs font-semibold transition ${
+              className={`px-4 py-2 rounded-full text-xs font-semibold transition whitespace-nowrap flex-shrink-0 ${
                 activeTab === "all"
                   ? "bg-white text-black font-bold shadow-sm"
                   : "bg-white/[0.06] text-textSecondary hover:text-white hover:bg-white/[0.10]"
@@ -493,44 +528,58 @@ export const SearchView: React.FC<SearchViewProps> = ({
             </button>
             <button
               onClick={() => setActiveTab("songs")}
-              className={`px-4 py-2 rounded-full text-xs font-semibold transition ${
+              className={`px-4 py-2 rounded-full text-xs font-semibold transition whitespace-nowrap flex-shrink-0 ${
                 activeTab === "songs"
                   ? "bg-white text-black font-bold shadow-sm"
                   : "bg-white/[0.06] text-textSecondary hover:text-white hover:bg-white/[0.10]"
               }`}
             >
-              Songs ({matchingTracks.length})
+              Songs
             </button>
             <button
               onClick={() => setActiveTab("albums")}
-              className={`px-4 py-2 rounded-full text-xs font-semibold transition ${
+              className={`px-4 py-2 rounded-full text-xs font-semibold transition whitespace-nowrap flex-shrink-0 ${
                 activeTab === "albums"
                   ? "bg-white text-black font-bold shadow-sm"
                   : "bg-white/[0.06] text-textSecondary hover:text-white hover:bg-white/[0.10]"
               }`}
             >
-              Albums ({matchingAlbums.length})
+              Albums
             </button>
             <button
               onClick={() => setActiveTab("artists")}
-              className={`px-4 py-2 rounded-full text-xs font-semibold transition ${
+              className={`px-4 py-2 rounded-full text-xs font-semibold transition whitespace-nowrap flex-shrink-0 ${
                 activeTab === "artists"
                   ? "bg-white text-black font-bold shadow-sm"
                   : "bg-white/[0.06] text-textSecondary hover:text-white hover:bg-white/[0.10]"
               }`}
             >
-              Artists ({matchingArtists.length})
+              Artists
             </button>
             <button
               onClick={() => setActiveTab("playlists")}
-              className={`px-4 py-2 rounded-full text-xs font-semibold transition ${
+              className={`px-4 py-2 rounded-full text-xs font-semibold transition whitespace-nowrap flex-shrink-0 ${
                 activeTab === "playlists"
                   ? "bg-white text-black font-bold shadow-sm"
                   : "bg-white/[0.06] text-textSecondary hover:text-white hover:bg-white/[0.10]"
               }`}
             >
-              Playlists ({matchingPlaylists.length})
+              Playlists
             </button>
+            {lyricMatchedTracks.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setActiveTab("lyrics")}
+                className={`px-4 py-2 rounded-full text-xs font-semibold transition whitespace-nowrap flex-shrink-0 flex items-center gap-2 ${
+                  activeTab === "lyrics"
+                    ? "bg-white text-black font-bold shadow-sm"
+                    : "bg-white/[0.06] text-textSecondary hover:text-white hover:bg-white/[0.10]"
+                }`}
+              >
+                <Quote className="w-3 h-3" />
+                <span>Lyrics ({lyricMatchedTracks.length})</span>
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -542,7 +591,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
           {recentSearches.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2 text-xs font-bold text-textSecondary uppercase tracking-wider">
+                <div className="flex items-center space-x-2 text-xs font-semibold text-textSecondary">
                   <Clock className="w-3.5 h-3.5 text-accent" />
                   <span>Recent Searches</span>
                 </div>
@@ -601,7 +650,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                     className={`group relative h-28 sm:h-32 rounded-2xl overflow-hidden cursor-pointer p-4 flex flex-col justify-between border transition-all duration-300 hover:shadow-xl hover:scale-[1.02] shadow-sm ${cat.cardGradient}`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-sm sm:text-base font-extrabold text-textPrimary tracking-tight leading-tight">
+                      <span className="text-sm sm:text-base font-bold text-textPrimary tracking-tight leading-tight">
                         {cat.name}
                       </span>
                       <IconComponent className={`w-5 h-5 ${cat.iconColor} group-hover:scale-110 transition-transform flex-shrink-0`} />
@@ -654,7 +703,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                             onClick={(e) => handlePlayAlbum(album, e)}
                             className="w-10 h-10 rounded-full bg-accent text-white flex items-center justify-center shadow-lg hover:scale-110 transition"
                           >
-                            <Play className="w-4 h-4 fill-white translate-x-0.5" />
+                            <Play className="w-4 h-4 fill-white" />
                           </button>
                         </div>
                       </div>
@@ -679,9 +728,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
           {totalResultsCount === 0 ? (
             /* Empty Search State */
             <div className="flex flex-col items-center justify-center py-16 text-center select-none">
-              <div className="w-16 h-16 rounded-2xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-textMuted mb-4">
-                <Search className="w-8 h-8" />
-              </div>
+              <Search className="w-12 h-12 text-textMuted mb-4 stroke-[1.5]" />
               <h3 className="text-lg font-bold text-white mb-1">
                 No Results Found
               </h3>
@@ -751,18 +798,15 @@ export const SearchView: React.FC<SearchViewProps> = ({
                                 e.stopPropagation();
                                 handlePlayTopResult();
                               }}
-                              className="w-12 h-12 rounded-full bg-accent text-white shadow-xl flex items-center justify-center hover:scale-110 active:scale-95 transition-transform"
+                              className="w-12 h-12 rounded-full bg-accent text-white shadow-xl flex items-center justify-center active:scale-[0.92] transition-[transform,background-color] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
                               title="Play"
                             >
-                              <Play className="w-5 h-5 fill-white translate-x-0.5" />
+                              <Play className="w-5 h-5 fill-white" />
                             </button>
                           </div>
 
                           <div>
-                            <span className="text-2xs font-black tracking-wider uppercase px-2 py-1 rounded-full bg-white/[0.08] text-accent border border-white/[0.06]">
-                              {topResult.type.toUpperCase()}
-                            </span>
-                            <h3 className="text-xl font-extrabold text-white mt-2 truncate group-hover:text-accent transition-colors">
+                            <h3 className="text-xl font-bold text-white truncate group-hover:text-accent transition-colors">
                               {topResult.title}
                             </h3>
                             <p className="text-xs text-textSecondary truncate mt-1">
@@ -788,7 +832,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                             onClick={() => setActiveTab("songs")}
                             className="text-xs text-textMuted hover:text-white transition font-medium"
                           >
-                            See all ({matchingTracks.length})
+                            See all
                           </button>
                         )}
                       </div>
@@ -825,7 +869,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                                   )}
 
                                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
-                                    <Play className="w-4 h-4 fill-white translate-x-0.5" />
+                                    <Play className="w-4 h-4 fill-white" />
                                   </div>
                                 </div>
 
@@ -842,11 +886,17 @@ export const SearchView: React.FC<SearchViewProps> = ({
                                   <p className="text-2xs text-textSecondary truncate">
                                     {track.metadata.artist || "Unknown Artist"}
                                   </p>
+                                  {lyricMatchesMap.has(track.id) && (
+                                    <p className="text-2xs text-accent/90 italic truncate mt-1 flex items-center gap-1 font-medium">
+                                      <Quote className="w-2.5 h-2.5 flex-shrink-0 opacity-70" />
+                                      <span>&ldquo;{lyricMatchesMap.get(track.id)}&rdquo;</span>
+                                    </p>
+                                  )}
                                 </div>
                               </div>
 
                               <span className="text-xs text-textMuted font-mono flex-shrink-0">
-                                {formatDuration(track.metadata.duration.secs)}
+                                {formatDuration(track.metadata.duration?.secs || 0)}
                               </span>
                             </div>
                           );
@@ -867,7 +917,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                             onClick={() => setActiveTab("albums")}
                             className="text-xs text-textMuted hover:text-white transition font-medium"
                           >
-                            See all ({matchingAlbums.length})
+                            See all
                           </button>
                         )}
                       </div>
@@ -902,7 +952,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                                     onClick={(e) => handlePlayAlbum(album, e)}
                                     className="w-10 h-10 rounded-full bg-accent text-white flex items-center justify-center shadow-lg hover:scale-110 transition"
                                   >
-                                    <Play className="w-4 h-4 fill-white translate-x-0.5" />
+                                    <Play className="w-4 h-4 fill-white" />
                                   </button>
                                 </div>
                               </div>
@@ -931,7 +981,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                             onClick={() => setActiveTab("artists")}
                             className="text-xs text-textMuted hover:text-white transition font-medium"
                           >
-                            See all ({matchingArtists.length})
+                            See all
                           </button>
                         )}
                       </div>
@@ -966,7 +1016,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                                     onClick={(e) => handlePlayArtist(artist, e)}
                                     className="w-8 h-8 rounded-full bg-accent text-white flex items-center justify-center shadow-lg hover:scale-110 transition"
                                   >
-                                    <Play className="w-3.5 h-3.5 fill-white translate-x-0.5" />
+                                    <Play className="w-3.5 h-3.5 fill-white" />
                                   </button>
                                 </div>
                               </div>
@@ -1016,7 +1066,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
               {/* "Songs" Tab View */}
               {activeTab === "songs" && (
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between border-b border-white/[0.06] pb-2 text-xs text-textMuted px-3 font-semibold uppercase">
+                  <div className="flex items-center justify-between border-b border-white/[0.06] pb-2 text-xs text-textMuted px-3 font-medium">
                     <span>Title</span>
                     <span>Duration</span>
                   </div>
@@ -1065,7 +1115,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                                 </div>
                               )}
                               <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
-                                <Play className="w-4 h-4 fill-white translate-x-0.5" />
+                                <Play className="w-4 h-4 fill-white" />
                               </div>
                             </div>
                             <div className="min-w-0">
@@ -1081,10 +1131,16 @@ export const SearchView: React.FC<SearchViewProps> = ({
                               <p className="text-2xs text-textSecondary truncate">
                                 {track.metadata.artist || "Unknown Artist"} • {track.metadata.album || "Unknown Album"}
                               </p>
+                              {lyricMatchesMap.has(track.id) && (
+                                <p className="text-2xs text-accent/90 italic truncate mt-1 flex items-center gap-1 font-medium">
+                                  <Quote className="w-2.5 h-2.5 flex-shrink-0 opacity-70" />
+                                  <span>&ldquo;{lyricMatchesMap.get(track.id)}&rdquo;</span>
+                                </p>
+                              )}
                             </div>
                           </div>
                           <span className="text-xs text-textMuted font-mono">
-                            {formatDuration(track.metadata.duration.secs)}
+                            {formatDuration(track.metadata.duration?.secs || 0)}
                           </span>
                         </div>
                       );
@@ -1126,7 +1182,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                               onClick={(e) => handlePlayAlbum(album, e)}
                               className="w-10 h-10 rounded-full bg-accent text-white flex items-center justify-center shadow-lg hover:scale-110 transition"
                             >
-                              <Play className="w-4 h-4 fill-white translate-x-0.5" />
+                              <Play className="w-4 h-4 fill-white" />
                             </button>
                           </div>
                         </div>
@@ -1175,7 +1231,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                               onClick={(e) => handlePlayArtist(artist, e)}
                               className="w-8 h-8 rounded-full bg-accent text-white flex items-center justify-center shadow-lg hover:scale-110 transition"
                             >
-                              <Play className="w-3.5 h-3.5 fill-white translate-x-0.5" />
+                              <Play className="w-3.5 h-3.5 fill-white" />
                             </button>
                           </div>
                         </div>
@@ -1211,6 +1267,78 @@ export const SearchView: React.FC<SearchViewProps> = ({
                       </h3>
                     </div>
                   ))}
+                </div>
+              )}
+
+              {/* "Lyrics" Tab View */}
+              {activeTab === "lyrics" && (
+                <div className="space-y-3">
+                  <div className="text-xs text-textMuted">
+                    Found {lyricMatchedTracks.length} {lyricMatchedTracks.length === 1 ? "song" : "songs"} matching lyrics for &ldquo;{globalSearch}&rdquo;
+                  </div>
+                  <div className="space-y-1 bg-surface/60 border border-white/[0.06] rounded-2xl p-2 divide-y divide-white/[0.04]">
+                    {lyricMatchedTracks.map((track, idx) => {
+                      const isThisPlaying = currentTrack?.id === track.id && isPlaying;
+                      const artworkUrl = getArtworkUrl(track.id);
+                      const snippet = lyricMatchesMap.get(track.id);
+
+                      return (
+                        <div
+                          key={track.id}
+                          onClick={() => handlePlayTrack(track, idx)}
+                          onContextMenu={(e) => handleTrackContextMenu(e, track)}
+                          className="group flex items-center justify-between px-3 py-3 rounded-xl hover:bg-white/[0.06] cursor-pointer transition"
+                        >
+                          <div className="flex items-center space-x-3 min-w-0 pr-4">
+                            <div className="relative w-10 h-10 rounded-lg overflow-hidden bg-surfaceActive border border-white/[0.06] flex-shrink-0">
+                              {artworkUrl ? (
+                                <img
+                                  src={artworkUrl}
+                                  alt={track.metadata.title}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => {
+                                    (e.target as HTMLElement).style.display = "none";
+                                  }}
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-textMuted">
+                                  <Music className="w-4 h-4" />
+                                </div>
+                              )}
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                                <Play className="w-4 h-4 fill-white" />
+                              </div>
+                            </div>
+
+                            <div className="min-w-0">
+                              <p
+                                className={`text-xs font-semibold truncate ${
+                                  isThisPlaying
+                                    ? "text-accent"
+                                    : "text-white group-hover:text-accent"
+                                } transition-colors`}
+                              >
+                                {track.metadata.title || "Untitled Track"}
+                              </p>
+                              <p className="text-2xs text-textSecondary truncate">
+                                {track.metadata.artist || "Unknown Artist"} • {track.metadata.album || "Unknown Album"}
+                              </p>
+                              {snippet && (
+                                <p className="text-2xs text-accent/90 italic truncate mt-1 flex items-center gap-1 font-medium">
+                                  <Quote className="w-2.5 h-2.5 flex-shrink-0 opacity-70" />
+                                  <span>&ldquo;{snippet}&rdquo;</span>
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          <span className="text-xs text-textMuted font-mono flex-shrink-0">
+                            {formatDuration(track.metadata.duration?.secs || 0)}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </>

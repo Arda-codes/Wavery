@@ -15,7 +15,6 @@ import {
   Heart,
   MoreHorizontal,
   X,
-  Clock,
   Music,
   Disc,
   User,
@@ -267,7 +266,7 @@ const HistoryRow: React.FC<HistoryRowProps> = ({
               className="hidden group-hover:flex items-center justify-center w-6 h-6 rounded-full bg-white text-black shadow-md hover:scale-105 active:scale-95 transition-transform"
               title="Play"
             >
-              <Play className="w-3 h-3 fill-current ml-1" />
+              <Play className="w-3 h-3 fill-current" />
             </button>
           </>
         )}
@@ -299,7 +298,7 @@ const HistoryRow: React.FC<HistoryRowProps> = ({
             {track.metadata.title || "Unknown Title"}
           </span>
           {track.metadata.format && (
-            <span className="text-2xs font-bold uppercase tracking-wider px-2 py-1 rounded bg-white/[0.06] text-textMuted border border-white/[0.04]">
+            <span className="text-2xs font-medium px-2 py-1 rounded bg-white/[0.06] text-textMuted border border-white/[0.04]">
               {track.metadata.format}
             </span>
           )}
@@ -341,12 +340,12 @@ const HistoryRow: React.FC<HistoryRowProps> = ({
       </div>
 
       {/* Played Timestamp */}
-      <div className="w-28 text-right pr-4 text-2xs font-mono text-textMuted flex-shrink-0">
+      <div className="w-28 text-right pr-4 text-2xs font-mono tabular-nums text-textMuted flex-shrink-0">
         {playedTimeStr}
       </div>
 
       {/* Track Duration */}
-      <div className="w-14 text-right pr-3 text-2xs font-mono text-textMuted flex-shrink-0">
+      <div className="w-14 text-right pr-3 text-2xs font-mono tabular-nums text-textMuted flex-shrink-0">
         {durationStr}
       </div>
 
@@ -406,7 +405,6 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   const setQueue = usePlayerStore((s) => s.setQueue);
   const currentTrackId = usePlayerStore((s) => s.currentTrackId);
   const isPlaying = usePlayerStore((s) => s.status.state === "Playing");
-  const isShuffle = usePlayerStore((s) => s.isShuffle);
   const toggleShuffle = usePlayerStore((s) => s.toggleShuffle);
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -512,15 +510,17 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   }, [validTracks, setQueue]);
 
   // Shuffle all history tracks
-  const handleShuffleAll = useCallback(() => {
+  const handleShuffleAll = useCallback(async () => {
     if (validTracks.length === 0) return;
-    if (!isShuffle) toggleShuffle();
     const shuffled = [...validTracks].sort(() => Math.random() - 0.5);
-    setQueue(shuffled, 0, {
+    await setQueue(shuffled, 0, {
       type: "tracks",
       name: "Listening History (Shuffled)",
     });
-  }, [validTracks, isShuffle, toggleShuffle, setQueue]);
+    if (!usePlayerStore.getState().isShuffle) {
+      toggleShuffle();
+    }
+  }, [validTracks, toggleShuffle, setQueue]);
 
   // Handle clear history confirmation
   const handleConfirmClear = useCallback(() => {
@@ -562,26 +562,19 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-background">
       {/* Hero Header */}
-      <div className="p-8 pb-6 flex items-end gap-6 bg-gradient-to-b from-accent/[0.10] via-surface/[0.03] to-transparent border-b border-white/[0.06] flex-shrink-0">
+      <div className="p-4 sm:p-8 pb-6 flex flex-col sm:flex-row items-center sm:items-end gap-4 sm:gap-6 text-center sm:text-left bg-gradient-to-b from-accent/[0.10] via-surface/[0.03] to-transparent border-b border-white/[0.06] flex-shrink-0">
         {/* Large History Art Glyph */}
-        <div className="w-36 h-36 rounded-2xl bg-gradient-to-br from-surfaceActive via-surface to-surfaceActive flex items-center justify-center shadow-xl border border-white/[0.08] ring-1 ring-white/10 ring-inset flex-shrink-0 relative overflow-hidden group hover:brightness-105 transition-all">
-          <History className="w-16 h-16 text-accent relative z-10 drop-shadow-sm" />
+        <div className="w-24 h-24 sm:w-36 sm:h-36 rounded-2xl bg-gradient-to-br from-surfaceActive via-surface to-surfaceActive flex items-center justify-center shadow-xl border border-white/[0.08] ring-1 ring-white/10 ring-inset flex-shrink-0 relative overflow-hidden group hover:brightness-105 transition-all">
+          <History className="w-10 h-10 sm:w-16 sm:h-16 text-accent relative z-10 drop-shadow-sm" />
         </div>
 
         {/* Info & Action Controls */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-2xs font-bold text-accent uppercase tracking-widest flex items-center gap-2">
-              <Clock className="w-3 h-3" />
-              Activity
-            </span>
-          </div>
-
-          <h1 className="text-3xl font-black text-white tracking-tight truncate mb-2">
+          <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight truncate mb-2">
             Listening History
           </h1>
 
-          <p className="text-xs text-textSecondary font-medium flex items-center gap-2 mb-4">
+          <p className="text-xs text-textSecondary font-medium flex items-center justify-center sm:justify-start flex-wrap gap-2 mb-4">
             <span className="text-white font-semibold">{playHistory.length} plays</span>
             <span>•</span>
             <span>{uniqueTracksCount} unique tracks</span>
@@ -594,7 +587,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           </p>
 
           {/* Action Button Strip */}
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center justify-center sm:justify-start gap-3 flex-wrap">
             {/* Play All */}
             <button
               onClick={handlePlayAll}
@@ -616,7 +609,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             </button>
 
             {/* Filter Search Input */}
-            <div className="relative w-52">
+            <div className="relative w-full sm:w-52">
               <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-textMuted" />
               <input
                 type="text"
@@ -636,7 +629,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             </div>
 
             {/* Clear History Button */}
-            <div className="ml-auto">
+            <div className="sm:ml-auto">
               <button
                 onClick={() => setShowClearConfirm(true)}
                 className="px-4 py-2 rounded-lg text-xs font-semibold text-textSecondary hover:text-danger hover:bg-danger/10 border border-transparent hover:border-danger/20 transition flex items-center space-x-2"
@@ -655,9 +648,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-fade-in p-4">
           <div className="bg-surface border border-white/[0.12] rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4">
             <div className="flex items-center space-x-3 text-danger">
-              <div className="w-10 h-10 rounded-xl bg-danger/15 border border-danger/25 flex items-center justify-center flex-shrink-0">
-                <AlertTriangle className="w-5 h-5 text-danger" />
-              </div>
+              <AlertTriangle className="w-5 h-5 text-danger flex-shrink-0" />
               <h3 className="font-bold text-base text-white">Clear Listening History?</h3>
             </div>
             <p className="text-xs text-textSecondary leading-relaxed">
@@ -682,7 +673,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
       )}
 
       {/* Timeline Grouped Track List */}
-      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
+      <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-4 space-y-6 pb-32 sm:pb-4">
         {groupedHistory.length === 0 ? (
           <div className="py-16 text-center text-xs text-textMuted">
             No matching tracks found in history for "{searchQuery}".
@@ -692,11 +683,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             <div key={group.title} className="space-y-1">
               {/* Group Sticky Header */}
               <div className="flex items-center justify-between py-2 px-3 border-b border-white/[0.06] mb-2 sticky top-0 bg-background/95 backdrop-blur-md z-10">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-textSecondary flex items-center space-x-2">
-                  <span>{group.title}</span>
-                  <span className="text-2xs text-textMuted font-normal font-mono">
-                    ({group.items.length})
-                  </span>
+                <h3 className="text-xs font-semibold text-textSecondary">
+                  {group.title}
                 </h3>
               </div>
 

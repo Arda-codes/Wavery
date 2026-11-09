@@ -42,8 +42,10 @@ export interface AppleAlbumMetadata {
 interface RawItunesItem {
   wrapperType?: string;
   kind?: string;
+  artistId?: number;
   trackId?: number;
   collectionId?: number;
+  collectionType?: string;
   trackName?: string;
   artistName?: string;
   collectionName?: string;
@@ -74,6 +76,34 @@ function sanitizeQuery(text: string): string {
     .trim();
 }
 
+/**
+ * Normalizes strings by lowercasing, stripping punctuation, and collapsing whitespace.
+ */
+function normalizeText(str: string): string {
+  return str
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Checks whether candidate title matches target title. */
+function isTitleMatch(candidate: string, target: string): boolean {
+  const c = normalizeText(candidate);
+  const t = normalizeText(target);
+  if (!c || !t) return false;
+  return c === t || c.includes(t) || t.includes(c);
+}
+
+/** Checks whether candidate artist matches target artist. */
+function isArtistMatch(candidate: string, target: string): boolean {
+  if (!target) return true;
+  const c = normalizeText(candidate);
+  const t = normalizeText(target);
+  if (!c || !t) return false;
+  return c === t || c.includes(t) || t.includes(c);
+}
+
 /** Parses release year from ISO release date string (e.g. "2024-08-30T07:00:00Z"). */
 function parseYear(releaseDate?: string): number | undefined {
   if (!releaseDate) return undefined;
@@ -84,16 +114,115 @@ function parseYear(releaseDate?: string): number | undefined {
 }
 
 /**
- * Searches Apple Music for the best matching song.
+ * Validates and ranks candidate tracks to select the highest-accuracy matching release.
+ */
+function pickBestTrackMatch(
+  candidates: RawItunesItem[],
+  targetTitle: string,
+  targetArtist: string,
+  targetAlbum?: string
+): RawItunesItem | null {
+  const tTitleNorm = normalizeText(targetTitle);
+  const tArtistNorm = normalizeText(targetArtist);
+  const tAlbumNorm = targetAlbum ? normalizeText(targetAlbum) : "";
+
+  // 1. Filter out completely unrelated tracks
+  const valid = candidates.filter((item) => {
+    if (!item.trackName) return false;
+    if (!isTitleMatch(item.trackName, targetTitle)) return false;
+    if (tArtistNorm && !isArtistMatch(item.artistName || "", targetArtist)) return false;
+    return true;
+  });
+
+  if (valid.length === 0) return null;
+
+  // 2. Rank candidates by relevance
+  valid.sort((a, b) => {
+    let scoreA = 0;
+    let scoreB = 0;
+
+    const aTitle = normalizeText(a.trackName || "");
+    const bTitle = normalizeText(b.trackName || "");
+    if (aTitle === tTitleNorm) scoreA += 10;
+    if (bTitle === tTitleNorm) scoreB += 10;
+
+    const aArtist = normalizeText(a.artistName || "");
+    const bArtist = normalizeText(b.artistName || "");
+    if (aArtist === tArtistNorm) scoreA += 10;
+    if (bArtist === tArtistNorm) scoreB += 10;
+
+    const aAlbum = normalizeText(a.collectionName || "");
+    const bAlbum = normalizeText(b.collectionName || "");
+    if (tAlbumNorm) {
+      if (aAlbum === tAlbumNorm) scoreA += 25;
+      if (bAlbum === tAlbumNorm) scoreB += 25;
+    }
+
+    // Prefer full LP album releases over standalone "- Single" or "- EP" if no album requested
+    const aIsSingle = (a.collectionName || "").toLowerCase().includes("single");
+    const bIsSingle = (b.collectionName || "").toLowerCase().includes("single");
+    if (!aIsSingle) scoreA += 5;
+    if (!bIsSingle) scoreB += 5;
+
+    // Prefer tracks with trackNumber > 1 (indicates part of a full album release)
+    if ((a.trackNumber || 0) > 1) scoreA += 2;
+    if ((b.trackNumber || 0) > 1) scoreB += 2;
+
+    return scoreB - scoreA;
+  });
+
+  return valid[0];
+}
+
+function rawItemToTrackMetadata(
+  best: RawItunesItem,
+  fallbackTitle: string,
+  fallbackArtist: string,
+  fallbackAlbum: string
+): AppleTrackMetadata {
+  return {
+    title: best.trackName || fallbackTitle,
+    artist: best.artistName || fallbackArtist,
+    album: best.collectionName || fallbackAlbum,
+    albumArtist: best.collectionArtistName,
+    trackNumber: best.trackNumber,
+    discNumber: best.discNumber,
+    year: parseYear(best.releaseDate),
+    genre: best.primaryGenreName,
+    artworkUrl: best.artworkUrl100
+      ? upgradeArtworkResolution(best.artworkUrl100, 1000)
+      : undefined,
+    appleTrackId: best.trackId,
+    appleCollectionId: best.collectionId,
+    durationSecs: best.trackTimeMillis ? Math.round(best.trackTimeMillis / 1000) : undefined,
+  };
+}
+
+/**
+ * Searches Apple Music for the best matching song using multi-strategy fallback:
+ * 1. Direct song search (`artist + title`)
+ * 2. Artist lookup fallback (handles Apple keyword stemming issues like femtanyl -> fentanyl)
+ * 3. Title-only search fallback
+ *
+ * Guaranteed to NEVER return an unrelated song when no legitimate match exists.
  */
 export async function searchAppleMusicTrack(
   title: string,
   artist: string,
   album?: string
 ): Promise<AppleTrackMetadata | null> {
-  const cleanTitle = sanitizeQuery(title);
-  const cleanArtist = sanitizeQuery(artist);
+  let cleanTitle = sanitizeQuery(title);
+  let cleanArtist = sanitizeQuery(artist);
   const cleanAlbum = album ? sanitizeQuery(album) : "";
+
+  // If artist is empty/generic but title contains " - ", auto-split them
+  if ((!cleanArtist || cleanArtist.toLowerCase() === "unknown artist") && cleanTitle.includes(" - ")) {
+    const parts = cleanTitle.split(" - ");
+    if (parts.length === 2 && parts[0].trim() && parts[1].trim()) {
+      cleanArtist = parts[0].trim();
+      cleanTitle = parts[1].trim();
+    }
+  }
 
   if (!cleanTitle && !cleanArtist) return null;
 
@@ -102,63 +231,94 @@ export async function searchAppleMusicTrack(
     return _trackCache.get(cacheKey) ?? null;
   }
 
+  // Strategy 1: Direct song query
   try {
     const query = encodeURIComponent(`${cleanArtist} ${cleanTitle}`.trim());
     const res = await fetch(
-      `https://itunes.apple.com/search?term=${query}&entity=song&limit=5`,
+      `https://itunes.apple.com/search?term=${query}&entity=song&limit=25`,
       { signal: AbortSignal.timeout(6000) }
     );
-
-    if (!res.ok) {
-      _trackCache.set(cacheKey, null);
-      return null;
-    }
-
-    const data = await res.json();
-    const results: RawItunesItem[] = data.results || [];
-
-    if (results.length === 0) {
-      _trackCache.set(cacheKey, null);
-      return null;
-    }
-
-    // Pick best match: prefer exact/case-insensitive match on artist + title
-    let best = results[0];
-    const targetTitle = cleanTitle.toLowerCase();
-    const targetArtist = cleanArtist.toLowerCase();
-
-    for (const r of results) {
-      const rTitle = (r.trackName || "").toLowerCase();
-      const rArtist = (r.artistName || "").toLowerCase();
-      if (rTitle === targetTitle && rArtist.includes(targetArtist)) {
-        best = r;
-        break;
+    if (res.ok) {
+      const data = await res.json();
+      const results: RawItunesItem[] = data.results || [];
+      const match = pickBestTrackMatch(results, cleanTitle, cleanArtist, cleanAlbum);
+      if (match) {
+        const meta = rawItemToTrackMetadata(match, cleanTitle, cleanArtist, cleanAlbum);
+        _trackCache.set(cacheKey, meta);
+        return meta;
       }
     }
-
-    const meta: AppleTrackMetadata = {
-      title: best.trackName || cleanTitle,
-      artist: best.artistName || cleanArtist,
-      album: best.collectionName || cleanAlbum,
-      albumArtist: best.collectionArtistName,
-      trackNumber: best.trackNumber,
-      discNumber: best.discNumber,
-      year: parseYear(best.releaseDate),
-      genre: best.primaryGenreName,
-      artworkUrl: best.artworkUrl100
-        ? upgradeArtworkResolution(best.artworkUrl100, 1000)
-        : undefined,
-      appleTrackId: best.trackId,
-      appleCollectionId: best.collectionId,
-      durationSecs: best.trackTimeMillis ? Math.round(best.trackTimeMillis / 1000) : undefined,
-    };
-
-    _trackCache.set(cacheKey, meta);
-    return meta;
   } catch (err) {
-    console.warn("Apple Music track search error:", err);
-    return null;
+    console.warn("Apple Music direct search error:", err);
   }
+
+  // Strategy 2: Artist lookup fallback (solves stemming and stylized artist names)
+  if (cleanArtist && cleanArtist.toLowerCase() !== "unknown artist") {
+    try {
+      const artistQuery = encodeURIComponent(cleanArtist);
+      const res = await fetch(
+        `https://itunes.apple.com/search?term=${artistQuery}&entity=musicArtist&limit=5`,
+        { signal: AbortSignal.timeout(6000) }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        const artists: RawItunesItem[] = data.results || [];
+        const normTargetArtist = normalizeText(cleanArtist);
+
+        const matchedArtist =
+          artists.find((a) => a.artistId && normalizeText(a.artistName || "") === normTargetArtist) ||
+          artists.find((a) => a.artistId && isArtistMatch(a.artistName || "", cleanArtist));
+
+        if (matchedArtist?.artistId) {
+          const lookupRes = await fetch(
+            `https://itunes.apple.com/lookup?id=${matchedArtist.artistId}&entity=song&limit=200`,
+            { signal: AbortSignal.timeout(6000) }
+          );
+          if (lookupRes.ok) {
+            const lookupData = await lookupRes.json();
+            const songs: RawItunesItem[] = (lookupData.results || []).filter(
+              (i: RawItunesItem) => i.wrapperType === "track" && i.kind === "song"
+            );
+            const match = pickBestTrackMatch(songs, cleanTitle, cleanArtist, cleanAlbum);
+            if (match) {
+              const meta = rawItemToTrackMetadata(match, cleanTitle, cleanArtist, cleanAlbum);
+              _trackCache.set(cacheKey, meta);
+              return meta;
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Apple Music artist lookup fallback error:", err);
+    }
+  }
+
+  // Strategy 3: Title-only query fallback
+  if (cleanTitle) {
+    try {
+      const titleQuery = encodeURIComponent(cleanTitle);
+      const res = await fetch(
+        `https://itunes.apple.com/search?term=${titleQuery}&entity=song&limit=25`,
+        { signal: AbortSignal.timeout(6000) }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        const results: RawItunesItem[] = data.results || [];
+        const match = pickBestTrackMatch(results, cleanTitle, cleanArtist, cleanAlbum);
+        if (match) {
+          const meta = rawItemToTrackMetadata(match, cleanTitle, cleanArtist, cleanAlbum);
+          _trackCache.set(cacheKey, meta);
+          return meta;
+        }
+      }
+    } catch (err) {
+      console.warn("Apple Music title search fallback error:", err);
+    }
+  }
+
+  // Never return an unverified match
+  _trackCache.set(cacheKey, null);
+  return null;
 }
 
 /**
@@ -180,26 +340,78 @@ export async function searchAppleMusicAlbum(
   }
 
   try {
-    // 1. Search for album collection ID
+    let collectionId: number | undefined;
+    let bestAlbum: RawItunesItem | undefined;
+
+    // 1. Direct album search
     const query = encodeURIComponent(`${cleanArtist} ${cleanAlbum}`.trim());
     const searchRes = await fetch(
-      `https://itunes.apple.com/search?term=${query}&entity=album&limit=3`,
+      `https://itunes.apple.com/search?term=${query}&entity=album&limit=10`,
       { signal: AbortSignal.timeout(6000) }
     );
 
-    if (!searchRes.ok) return null;
-    const searchData = await searchRes.json();
-    const albums: RawItunesItem[] = searchData.results || [];
+    if (searchRes.ok) {
+      const searchData = await searchRes.json();
+      const albums: RawItunesItem[] = searchData.results || [];
+      const tAlbumNorm = normalizeText(cleanAlbum);
+      const tArtistNorm = normalizeText(cleanArtist);
 
-    if (albums.length === 0 || !albums[0].collectionId) {
+      bestAlbum = albums.find((a) => {
+        if (!a.collectionId || !a.collectionName) return false;
+        const aNorm = normalizeText(a.collectionName);
+        if (aNorm !== tAlbumNorm && !aNorm.includes(tAlbumNorm) && !tAlbumNorm.includes(aNorm)) return false;
+        if (tArtistNorm && !isArtistMatch(a.artistName || "", cleanArtist)) return false;
+        return true;
+      });
+
+      if (bestAlbum?.collectionId) {
+        collectionId = bestAlbum.collectionId;
+      }
+    }
+
+    // 2. Artist lookup fallback if direct album search yielded no match
+    if (!collectionId && cleanArtist && cleanArtist.toLowerCase() !== "unknown artist") {
+      const artistQuery = encodeURIComponent(cleanArtist);
+      const artistRes = await fetch(
+        `https://itunes.apple.com/search?term=${artistQuery}&entity=musicArtist&limit=5`,
+        { signal: AbortSignal.timeout(6000) }
+      );
+      if (artistRes.ok) {
+        const artistData = await artistRes.json();
+        const artists: RawItunesItem[] = artistData.results || [];
+        const matchedArtist = artists.find(
+          (a) => a.artistId && isArtistMatch(a.artistName || "", cleanArtist)
+        );
+        if (matchedArtist?.artistId) {
+          const albumsRes = await fetch(
+            `https://itunes.apple.com/lookup?id=${matchedArtist.artistId}&entity=album&limit=100`,
+            { signal: AbortSignal.timeout(6000) }
+          );
+          if (albumsRes.ok) {
+            const albumsData = await albumsRes.json();
+            const albumsList: RawItunesItem[] = (albumsData.results || []).filter(
+              (i: RawItunesItem) => i.collectionType === "Album" || i.wrapperType === "collection"
+            );
+            const tAlbumNorm = normalizeText(cleanAlbum);
+            bestAlbum = albumsList.find((a) => {
+              if (!a.collectionId || !a.collectionName) return false;
+              const aNorm = normalizeText(a.collectionName);
+              return aNorm === tAlbumNorm || aNorm.includes(tAlbumNorm) || tAlbumNorm.includes(aNorm);
+            });
+            if (bestAlbum?.collectionId) {
+              collectionId = bestAlbum.collectionId;
+            }
+          }
+        }
+      }
+    }
+
+    if (!collectionId || !bestAlbum) {
       _albumCache.set(cacheKey, null);
       return null;
     }
 
-    const bestAlbum = albums[0];
-    const collectionId = bestAlbum.collectionId!;
-
-    // 2. Lookup album tracks by collectionId in 1 single request
+    // Lookup album tracks by collectionId in 1 single request
     const lookupRes = await fetch(
       `https://itunes.apple.com/lookup?id=${collectionId}&entity=song`,
       { signal: AbortSignal.timeout(6000) }
@@ -211,7 +423,7 @@ export async function searchAppleMusicAlbum(
 
     // The first item is the collection/album wrapper; subsequent items are songs
     const tracks: AppleTrackMetadata[] = [];
-    let albumArtwork = bestAlbum.artworkUrl100
+    const albumArtwork = bestAlbum.artworkUrl100
       ? upgradeArtworkResolution(bestAlbum.artworkUrl100, 1000)
       : undefined;
 

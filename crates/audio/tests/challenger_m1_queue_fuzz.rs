@@ -30,6 +30,7 @@ fn make_test_track(id: &str, title: &str) -> Track {
             channels: Some(2),
             format: "FLAC".into(),
             lyrics: None,
+            ..Default::default()
         },
         date_added: 0,
     }
@@ -98,7 +99,11 @@ fn test_challenger_150k_randomized_fuzzing_state_machine_invariants() {
                         let trks: Vec<Track> = (0..new_len)
                             .map(|i| make_test_track(&format!("reset_{i}"), &format!("Reset {i}")))
                             .collect();
-                        let s_idx = if new_len > 0 { rng.gen_range(0..new_len * 2) } else { 0 };
+                        let s_idx = if new_len > 0 {
+                            rng.gen_range(0..new_len * 2)
+                        } else {
+                            0
+                        };
                         q.set_queue(trks, s_idx);
                     }
                 }
@@ -122,16 +127,28 @@ fn test_challenger_150k_randomized_fuzzing_state_machine_invariants() {
             let curr_trk = q.current_track();
 
             if q_len == 0 {
-                assert_eq!(curr_idx, None, "Op {op} (size {size}): Empty queue must have current_index == None");
-                assert_eq!(curr_trk, None, "Op {op} (size {size}): Empty queue must have current_track == None");
+                assert_eq!(
+                    curr_idx, None,
+                    "Op {op} (size {size}): Empty queue must have current_index == None"
+                );
+                assert_eq!(
+                    curr_trk, None,
+                    "Op {op} (size {size}): Empty queue must have current_track == None"
+                );
             } else {
-                assert!(curr_idx.is_some(), "Op {op} (size {size}): Non-empty queue must have current_index");
+                assert!(
+                    curr_idx.is_some(),
+                    "Op {op} (size {size}): Non-empty queue must have current_index"
+                );
                 let idx = curr_idx.unwrap();
                 assert!(
                     idx < q_len,
                     "Op {op} (size {size}): current_index {idx} is out of bounds for queue length {q_len}"
                 );
-                assert!(curr_trk.is_some(), "Op {op} (size {size}): Non-empty queue must have current_track");
+                assert!(
+                    curr_trk.is_some(),
+                    "Op {op} (size {size}): Non-empty queue must have current_track"
+                );
                 assert_eq!(
                     curr_trk.unwrap().id,
                     q.queue()[idx].id,
@@ -192,14 +209,18 @@ fn test_challenger_inserting_500_items_play_next_in_shuffle() {
 
     // Step back from splice_0000 to splice_0499:
     for expected_num in 1..insert_count {
-        let prev = q.previous(Duration::from_secs(1)).expect("Expected previous spliced track");
+        let prev = q
+            .previous(Duration::from_secs(1))
+            .expect("Expected previous spliced track");
         let expected_id = format!("splice_{expected_num:04}");
         assert_eq!(prev.id, expected_id);
     }
 
     // Step back into original history: played_history[3], [2], [1], [0]
     for step in (0..4).rev() {
-        let prev = q.previous(Duration::from_secs(1)).expect("Expected history track");
+        let prev = q
+            .previous(Duration::from_secs(1))
+            .expect("Expected history track");
         assert_eq!(prev.id, played_history[step]);
     }
 
@@ -263,8 +284,13 @@ fn test_challenger_rapid_shuffle_toggling_with_state_mutations() {
 
         // Validate bounds
         let q_len = q.queue().len();
-        let idx = q.current_index().expect("Index must be Some for non-empty queue");
-        assert!(idx < q_len, "Index {idx} out of bounds for queue len {q_len}");
+        let idx = q
+            .current_index()
+            .expect("Index must be Some for non-empty queue");
+        assert!(
+            idx < q_len,
+            "Index {idx} out of bounds for queue len {q_len}"
+        );
         let trk = q.current_track().expect("Track must be Some");
         assert_eq!(trk.id, q.queue()[idx].id);
     }
@@ -341,13 +367,18 @@ fn test_challenger_shuffle_permutation_rigor() {
             q.set_loop_mode(LoopMode::Off);
 
             let initial_id = format!("perm_{size}_{start_idx}");
-            assert_eq!(q.current_track().map(|t| t.id.as_str()), Some(initial_id.as_str()));
+            assert_eq!(
+                q.current_track().map(|t| t.id.as_str()),
+                Some(initial_id.as_str())
+            );
 
             let mut visited = Vec::with_capacity(size);
             visited.push(initial_id);
 
             for _ in 1..size {
-                let nxt = q.next().expect("Expected next track during complete shuffle traversal");
+                let nxt = q
+                    .next()
+                    .expect("Expected next track during complete shuffle traversal");
                 visited.push(nxt.id.clone());
             }
 

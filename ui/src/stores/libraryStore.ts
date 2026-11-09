@@ -6,15 +6,16 @@
  */
 
 import { create } from "zustand";
-import { Track, AlbumInfo, ArtistInfo, ImportStrategy, Playlist } from "../types";
+import { Track, AlbumInfo, ArtistInfo, GenreInfo, ImportStrategy, Playlist } from "../types";
 import { playerAdapter } from "../services/adapter";
-import { groupTracksByAlbum, groupTracksByArtist } from "../utils/library";
+import { groupTracksByAlbum, groupTracksByArtist, extractLibraryGenres } from "../utils/library";
 import { usePlayerStore, registerLibraryTracksGetter } from "./playerStore";
 
 interface LibraryState {
   tracks: Track[];
   albums: AlbumInfo[];
   artists: ArtistInfo[];
+  genres: GenreInfo[];
   likedTrackIds: Set<string>;
   likedTracks: Track[];
   playlists: Playlist[];
@@ -22,7 +23,7 @@ interface LibraryState {
   error: string | null;
 
   loadTracks: () => Promise<void>;
-  setTracks: (tracks: Track[]) => void;
+  setTracks: (tracks: Track[], albums?: AlbumInfo[], artists?: ArtistInfo[], genres?: GenreInfo[]) => void;
   deleteTrack: (trackId: string, removeFile?: boolean) => Promise<void>;
   loadLiked: () => Promise<void>;
   toggleLike: (trackId: string) => Promise<boolean>;
@@ -36,22 +37,31 @@ interface LibraryState {
   importFolder: (path: string, strategy: ImportStrategy) => Promise<void>;
   rebuildDatabase: () => Promise<void>;
   vacuumDatabase: () => Promise<void>;
+  getAlbumDetails: (title: string, artist?: string) => Promise<AlbumInfo | null>;
+  getArtistDetails: (name: string) => Promise<ArtistInfo | null>;
 }
 
 export const useLibraryStore = create<LibraryState>((set, get) => ({
   tracks: [],
   albums: [],
   artists: [],
+  genres: [],
   likedTrackIds: new Set<string>(),
   likedTracks: [],
   playlists: [],
   isLoading: false,
   error: null,
 
-  setTracks: (tracks: Track[]) => {
-    const albums = groupTracksByAlbum(tracks);
-    const artists = groupTracksByArtist(tracks);
-    set({ tracks, albums, artists });
+  setTracks: (tracks: Track[], albums?: AlbumInfo[], artists?: ArtistInfo[], genres?: GenreInfo[]) => {
+    const resolvedAlbums = albums ?? groupTracksByAlbum(tracks);
+    const resolvedArtists = artists ?? groupTracksByArtist(tracks);
+    const resolvedGenres = genres ?? extractLibraryGenres(tracks);
+    set({
+      tracks,
+      albums: resolvedAlbums,
+      artists: resolvedArtists,
+      genres: resolvedGenres,
+    });
   },
 
   deleteTrack: async (trackId: string, removeFile = false) => {
@@ -61,9 +71,30 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       // Clean up in playerStore if this track was playing or in queue
       await usePlayerStore.getState().handleTrackDeleted(trackId);
 
-      const nextTracks = get().tracks.filter((t) => t.id !== trackId);
-      const nextAlbums = groupTracksByAlbum(nextTracks);
-      const nextArtists = groupTracksByArtist(nextTracks);
+      let nextTracks: Track[];
+      let nextAlbums: AlbumInfo[];
+      let nextArtists: ArtistInfo[];
+      let nextGenres: GenreInfo[];
+
+      if (playerAdapter.isTauri() && playerAdapter.getAlbums && playerAdapter.getArtists) {
+        // Native Tauri path: query authoritative updated state from Rust SQLite
+        const [t, a, ar, g] = await Promise.all([
+          playerAdapter.getTracks(),
+          playerAdapter.getAlbums(),
+          playerAdapter.getArtists(),
+          playerAdapter.getGenres ? playerAdapter.getGenres() : Promise.resolve([]),
+        ]);
+        nextTracks = t;
+        nextAlbums = a;
+        nextArtists = ar;
+        nextGenres = g;
+      } else {
+        // Browser / Headless Node test runner fallback
+        nextTracks = get().tracks.filter((t) => t.id !== trackId);
+        nextAlbums = groupTracksByAlbum(nextTracks);
+        nextArtists = groupTracksByArtist(nextTracks);
+        nextGenres = extractLibraryGenres(nextTracks);
+      }
 
       const nextLikedIds = new Set(get().likedTrackIds);
       nextLikedIds.delete(trackId);
@@ -73,6 +104,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
         tracks: nextTracks,
         albums: nextAlbums,
         artists: nextArtists,
+        genres: nextGenres,
         likedTrackIds: nextLikedIds,
         likedTracks: nextLikedTracks,
       });
@@ -89,10 +121,32 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   loadTracks: async () => {
     set({ isLoading: true, error: null });
     try {
-      const tracks = await playerAdapter.getTracks();
-      const albums = groupTracksByAlbum(tracks);
-      const artists = groupTracksByArtist(tracks);
-      set({ tracks, albums, artists, isLoading: false });
+      let tracks: Track[];
+      let albums: AlbumInfo[];
+      let artists: ArtistInfo[];
+      let genres: GenreInfo[] = [];
+
+      if (playerAdapter.isTauri() && playerAdapter.getAlbums && playerAdapter.getArtists) {
+        // High-performance Tauri IPC path: query pre-computed SQLite collections concurrently
+        const [fetchedTracks, fetchedAlbums, fetchedArtists, fetchedGenres] = await Promise.all([
+          playerAdapter.getTracks(),
+          playerAdapter.getAlbums(),
+          playerAdapter.getArtists(),
+          playerAdapter.getGenres ? playerAdapter.getGenres() : Promise.resolve([]),
+        ]);
+        tracks = fetchedTracks;
+        albums = fetchedAlbums;
+        artists = fetchedArtists;
+        genres = fetchedGenres;
+      } else {
+        // Fallback / Browser / Test mode: client-side grouping
+        tracks = await playerAdapter.getTracks();
+        albums = groupTracksByAlbum(tracks);
+        artists = groupTracksByArtist(tracks);
+        genres = extractLibraryGenres(tracks);
+      }
+
+      set({ tracks, albums, artists, genres, isLoading: false });
       // Also silently load liked IDs and playlists
       get().loadLiked();
       get().loadPlaylists();
@@ -233,10 +287,29 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   rebuildDatabase: async () => {
     set({ isLoading: true, error: null });
     try {
-      const tracks = await playerAdapter.rebuildLibrary();
-      const albums = groupTracksByAlbum(tracks);
-      const artists = groupTracksByArtist(tracks);
-      set({ tracks, albums, artists, isLoading: false });
+      let tracks: Track[];
+      let albums: AlbumInfo[];
+      let artists: ArtistInfo[];
+      let genres: GenreInfo[] = [];
+
+      if (playerAdapter.isTauri() && playerAdapter.getAlbums && playerAdapter.getArtists) {
+        tracks = await playerAdapter.rebuildLibrary();
+        const [a, ar, g] = await Promise.all([
+          playerAdapter.getAlbums(),
+          playerAdapter.getArtists(),
+          playerAdapter.getGenres ? playerAdapter.getGenres() : Promise.resolve([]),
+        ]);
+        albums = a;
+        artists = ar;
+        genres = g;
+      } else {
+        tracks = await playerAdapter.rebuildLibrary();
+        albums = groupTracksByAlbum(tracks);
+        artists = groupTracksByArtist(tracks);
+        genres = extractLibraryGenres(tracks);
+      }
+
+      set({ tracks, albums, artists, genres, isLoading: false });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       set({
@@ -255,6 +328,32 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       set({ error: msg || "Failed to vacuum database" });
       throw err;
     }
+  },
+
+  getAlbumDetails: async (title: string, artist?: string): Promise<AlbumInfo | null> => {
+    if (playerAdapter.isTauri() && playerAdapter.getAlbumDetails) {
+      return playerAdapter.getAlbumDetails(title, artist);
+    }
+    const titleLower = title.trim().toLowerCase();
+    const artistLower = artist?.trim().toLowerCase();
+    const found = get().albums.find((alb) => {
+      const matchTitle = alb.title.toLowerCase() === titleLower;
+      if (!matchTitle) return false;
+      if (artistLower) {
+        return alb.artist.toLowerCase() === artistLower;
+      }
+      return true;
+    });
+    return found ?? null;
+  },
+
+  getArtistDetails: async (name: string): Promise<ArtistInfo | null> => {
+    if (playerAdapter.isTauri() && playerAdapter.getArtistDetails) {
+      return playerAdapter.getArtistDetails(name);
+    }
+    const nameLower = name.trim().toLowerCase();
+    const found = get().artists.find((art) => art.name.toLowerCase() === nameLower);
+    return found ?? null;
   },
 }));
 

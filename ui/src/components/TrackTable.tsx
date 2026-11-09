@@ -5,11 +5,13 @@ import { sortTracks } from "../utils/library";
 import { usePlayerStore } from "../stores/playerStore";
 import { useLibraryStore } from "../stores/libraryStore";
 import { useSettingsStore } from "../stores/settingsStore";
+import { useSortStore } from "../stores/sortStore";
 import { windowService } from "../services/windowService";
 import { TrackRow } from "./TrackRow";
 import { AddToPlaylistModal } from "./AddToPlaylistModal";
 import { DeleteTrackModal } from "./DeleteTrackModal";
 import { SongMetadataModal } from "./SongMetadataModal";
+import { FilterMenu, FilterSection } from "./FilterMenu";
 import {
   Music,
   Clock,
@@ -31,6 +33,10 @@ interface TrackTableProps {
   onRemoveTrack?: (trackId: string) => void;
   onDeleteTrack?: (track: Track) => void;
   onEditTrack?: (track: Track) => void;
+  pageKey?: string;
+  fallbackPageKey?: string;
+  defaultSortKey?: TrackSortKey;
+  defaultSortDir?: SortDirection;
 }
 
 const TrackTableInner: React.FC<TrackTableProps> = ({
@@ -44,14 +50,141 @@ const TrackTableInner: React.FC<TrackTableProps> = ({
   onRemoveTrack,
   onDeleteTrack: customDeleteTrack,
   onEditTrack: customEditTrack,
+  pageKey,
+  fallbackPageKey,
+  defaultSortKey,
+  defaultSortDir,
 }) => {
   const rowDensity = useSettingsStore((s) => s.rowDensity);
   const rowHeight = rowDensity === "compact" ? 34 : 44;
 
   const [searchQuery, setSearchQuery] = useState("");
   const deferredSearchQuery = useDeferredValue(searchQuery);
-  const [sortKey, setSortKey] = useState<TrackSortKey>("title");
-  const [sortDir, setSortDir] = useState<SortDirection>("asc");
+
+  // Filter Menu state
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [filterGenre, setFilterGenre] = useState<string>("all");
+  const [filterEra, setFilterEra] = useState<string>("all");
+  const [filterAudio, setFilterAudio] = useState<string>("all");
+  const [filterDuration, setFilterDuration] = useState<string>("all");
+
+  const availableGenres = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const t of tracks) {
+      const g = t.metadata.genre?.trim();
+      if (g) {
+        const parts = g.split(/[,/&;]/).map((p) => p.trim()).filter(Boolean);
+        for (const p of parts) {
+          const cap = p.charAt(0).toUpperCase() + p.slice(1);
+          map.set(cap, (map.get(cap) || 0) + 1);
+        }
+      }
+    }
+    return Array.from(map.entries())
+      .filter(([, count]) => count >= 2)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([name]) => name);
+  }, [tracks]);
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (filterGenre !== "all") count++;
+    if (filterEra !== "all") count++;
+    if (filterAudio !== "all") count++;
+    if (filterDuration !== "all") count++;
+    return count;
+  }, [filterGenre, filterEra, filterAudio, filterDuration]);
+
+  const resetAllFilters = useCallback(() => {
+    setFilterGenre("all");
+    setFilterEra("all");
+    setFilterAudio("all");
+    setFilterDuration("all");
+  }, []);
+
+  const filterSections: FilterSection[] = useMemo(() => {
+    const sections: FilterSection[] = [
+      {
+        id: "audio",
+        title: "Content & Audio",
+        selectedId: filterAudio,
+        onChange: setFilterAudio,
+        options: [
+          { id: "all", label: "All Songs" },
+          { id: "lyrics", label: "Has Lyrics" },
+          { id: "lossless", label: "Lossless (FLAC/WAV)" },
+        ],
+      },
+      {
+        id: "era",
+        title: "Release Era",
+        selectedId: filterEra,
+        onChange: setFilterEra,
+        options: [
+          { id: "all", label: "All Eras" },
+          { id: "2020s", label: "2020s" },
+          { id: "2010s", label: "2010s" },
+          { id: "2000s", label: "2000s" },
+          { id: "1990s", label: "90s" },
+          { id: "older", label: "Classic" },
+        ],
+      },
+      {
+        id: "duration",
+        title: "Track Length",
+        selectedId: filterDuration,
+        onChange: setFilterDuration,
+        options: [
+          { id: "all", label: "Any Length" },
+          { id: "short", label: "< 3 min" },
+          { id: "medium", label: "3 – 5 min" },
+          { id: "long", label: "> 5 min" },
+        ],
+      },
+    ];
+
+    if (availableGenres.length > 0) {
+      sections.unshift({
+        id: "genre",
+        title: "Genre",
+        selectedId: filterGenre,
+        onChange: setFilterGenre,
+        options: [
+          { id: "all", label: "All Genres" },
+          ...availableGenres.map((g) => ({ id: g, label: g })),
+        ],
+      });
+    }
+
+    return sections;
+  }, [filterGenre, filterEra, filterAudio, filterDuration, availableGenres]);
+
+  const [localSortKey, setLocalSortKey] = useState<TrackSortKey>(defaultSortKey || "title");
+  const [localSortDir, setLocalSortDir] = useState<SortDirection>(defaultSortDir || "asc");
+
+  const pageSortState = useSortStore(
+    useCallback(
+      (s) =>
+        pageKey
+          ? s.pageSorts[pageKey] ||
+            (fallbackPageKey ? s.pageSorts[fallbackPageKey] : undefined)
+          : undefined,
+      [pageKey, fallbackPageKey]
+    )
+  );
+  const togglePageSort = useSortStore((s) => s.togglePageSort);
+
+  const sortKey: TrackSortKey =
+    (pageKey ? (pageSortState?.key as TrackSortKey) : null) ||
+    localSortKey ||
+    defaultSortKey ||
+    "title";
+  const sortDir: SortDirection =
+    (pageKey ? (pageSortState?.dir as SortDirection) : null) ||
+    localSortDir ||
+    defaultSortDir ||
+    "asc";
 
   // Add to Playlist modal state
   const [selectedTrackForPlaylist, setSelectedTrackForPlaylist] = useState<Track | null>(null);
@@ -77,29 +210,78 @@ const TrackTableInner: React.FC<TrackTableProps> = ({
 
   const handleHeaderClick = useCallback(
     (key: TrackSortKey) => {
-      if (sortKey === key) {
-        setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+      if (pageKey) {
+        togglePageSort(pageKey, key, defaultSortKey || "title", fallbackPageKey);
       } else {
-        setSortKey(key);
-        setSortDir("asc");
+        if (localSortKey === key) {
+          setLocalSortDir((d) => (d === "asc" ? "desc" : "asc"));
+        } else {
+          setLocalSortKey(key);
+          setLocalSortDir("asc");
+        }
       }
     },
-    [sortKey]
+    [pageKey, fallbackPageKey, defaultSortKey, togglePageSort, localSortKey]
   );
 
   const filteredAndSortedTracks = useMemo(() => {
     let list = tracks;
+
+    // Apply Filter Menu criteria
+    if (filterGenre !== "all") {
+      const gLower = filterGenre.toLowerCase();
+      list = list.filter((t) => t.metadata.genre?.toLowerCase().includes(gLower));
+    }
+
+    if (filterEra !== "all") {
+      list = list.filter((t) => {
+        const y = t.metadata.year;
+        if (!y) return false;
+        if (filterEra === "2020s") return y >= 2020;
+        if (filterEra === "2010s") return y >= 2010 && y < 2020;
+        if (filterEra === "2000s") return y >= 2000 && y < 2010;
+        if (filterEra === "1990s") return y >= 1990 && y < 2000;
+        if (filterEra === "older") return y < 1990;
+        return true;
+      });
+    }
+
+    if (filterAudio === "lyrics") {
+      list = list.filter((t) => Boolean(t.metadata.lyrics?.trim()));
+    } else if (filterAudio === "lossless") {
+      list = list.filter((t) => {
+        const fmt = (t.metadata.format || t.source?.Managed?.split(".").pop() || "").toUpperCase();
+        return fmt === "FLAC" || fmt === "WAV" || fmt === "ALAC";
+      });
+    }
+
+    if (filterDuration !== "all") {
+      list = list.filter((t) => {
+        const secs = t.metadata.duration?.secs || 0;
+        if (filterDuration === "short") return secs < 180;
+        if (filterDuration === "medium") return secs >= 180 && secs <= 300;
+        if (filterDuration === "long") return secs > 300;
+        return true;
+      });
+    }
+
     if (deferredSearchQuery.trim()) {
       const q = deferredSearchQuery.toLowerCase();
       list = list.filter((t) => {
         const title = t.metadata.title?.toLowerCase() || "";
         const artist = t.metadata.artist?.toLowerCase() || "";
         const album = t.metadata.album?.toLowerCase() || "";
-        return title.includes(q) || artist.includes(q) || album.includes(q);
+        const lyrics = t.metadata.lyrics?.toLowerCase() || "";
+        return (
+          title.includes(q) ||
+          artist.includes(q) ||
+          album.includes(q) ||
+          lyrics.includes(q)
+        );
       });
     }
     return sortTracks(list, sortKey, sortDir);
-  }, [tracks, deferredSearchQuery, sortKey, sortDir]);
+  }, [tracks, filterGenre, filterEra, filterAudio, filterDuration, deferredSearchQuery, sortKey, sortDir]);
 
   const virtualizer = useVirtualizer({
     count: filteredAndSortedTracks.length,
@@ -179,9 +361,7 @@ const TrackTableInner: React.FC<TrackTableProps> = ({
   if (tracks.length === 0) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-background">
-        <div className="w-16 h-16 rounded-2xl bg-surface border border-white/[0.07] flex items-center justify-center mb-4 shadow-lg">
-          <Music className="w-8 h-8 text-textMuted" />
-        </div>
+        <Music className="w-12 h-12 text-textMuted mb-4 stroke-[1.5]" />
         <h3 className="text-sm font-bold text-white mb-1">
           No songs found
         </h3>
@@ -211,17 +391,29 @@ const TrackTableInner: React.FC<TrackTableProps> = ({
       aria-label="Track list"
       className="flex-1 flex flex-col overflow-hidden bg-background"
     >
-      {/* Search & Stats Bar */}
+      {/* Search & Filter Bar */}
       {showSearchBar && (
-        <div className="flex flex-wrap items-center justify-between px-3 sm:px-6 py-3 sm:py-3 border-b border-white/[0.06] flex-shrink-0 gap-2 sm:gap-4 bg-background">
-          <div className="relative flex-1 max-w-xs min-w-[140px] group">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-textMuted group-focus-within:text-accent transition-colors" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Filter songs..."
-              className="w-full bg-surface border border-white/[0.08] hover:border-white/[0.15] focus:border-accent/60 rounded-full pl-8 pr-4 py-2 text-xs text-white placeholder-textMuted focus:outline-none focus:ring-1 focus:ring-accent/30 transition"
+        <div className="flex flex-wrap items-center justify-between px-3 sm:px-6 py-3 border-b border-white/[0.06] flex-shrink-0 gap-2 sm:gap-4 bg-background">
+          <div className="flex items-center space-x-2 sm:space-x-3 flex-1">
+            <div className="relative w-40 sm:w-60 max-w-xs group flex-shrink-0">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-textMuted group-focus-within:text-accent transition-colors" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Filter songs..."
+                className="w-full bg-surface border border-white/[0.08] hover:border-white/[0.15] focus:border-accent/60 rounded-full pl-8 pr-4 py-2 text-xs text-white placeholder-textMuted focus:outline-none focus:ring-1 focus:ring-accent/30 transition"
+              />
+            </div>
+
+            {/* Proper Filter Popover Menu */}
+            <FilterMenu
+              isOpen={isFilterOpen}
+              onToggle={() => setIsFilterOpen((v) => !v)}
+              onClose={() => setIsFilterOpen(false)}
+              activeFilterCount={activeFilterCount}
+              onResetAll={resetAllFilters}
+              sections={filterSections}
             />
           </div>
 
@@ -243,7 +435,7 @@ const TrackTableInner: React.FC<TrackTableProps> = ({
       >
         <div
           role="row"
-          className="grid grid-cols-[36px_minmax(0,1fr)_auto] md:grid-cols-[40px_minmax(160px,1fr)_140px_80px] lg:grid-cols-[44px_minmax(180px,1fr)_150px_150px_90px] xl:grid-cols-[48px_minmax(180px,1fr)_160px_160px_80px_110px] gap-2 sm:gap-3 px-3 sm:px-6 items-center text-2xs font-bold text-textMuted uppercase tracking-wider h-10 select-none"
+          className="grid grid-cols-[36px_minmax(0,1fr)_auto] md:grid-cols-[40px_minmax(160px,1fr)_140px_80px] lg:grid-cols-[44px_minmax(180px,1fr)_150px_150px_90px] xl:grid-cols-[48px_minmax(180px,1fr)_160px_160px_80px_110px] gap-2 sm:gap-3 px-3 sm:px-6 items-center text-xs font-medium text-textMuted h-10 select-none"
         >
           <div
             role="columnheader"
@@ -300,7 +492,7 @@ const TrackTableInner: React.FC<TrackTableProps> = ({
       <div
         ref={parentRef}
         role="rowgroup"
-        className="flex-1 overflow-y-auto"
+        className="flex-1 overflow-y-auto pb-32 sm:pb-0"
       >
         <div
           style={{

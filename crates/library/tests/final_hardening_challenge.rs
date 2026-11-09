@@ -9,7 +9,8 @@ use wavery_core::models::{Track, TrackMetadata, TrackSource};
 use wavery_library::db::LibraryDatabase;
 
 fn create_env(name: &str) -> (PathBuf, PathBuf, PathBuf) {
-    let temp_dir = std::env::temp_dir().join(format!("wavery_m4_adv_{name}_{}", uuid::Uuid::new_v4()));
+    let temp_dir =
+        std::env::temp_dir().join(format!("wavery_m4_adv_{name}_{}", uuid::Uuid::new_v4()));
     let db_path = temp_dir.join("library.db");
     let managed_root = temp_dir.join("managed");
     fs::create_dir_all(&managed_root).unwrap();
@@ -35,6 +36,7 @@ fn sample_track(id: &str, title: &str, artist: &str, album: &str, managed_root: 
             channels: Some(2),
             format: "FLAC".to_string(),
             lyrics: None,
+            ..Default::default()
         },
         date_added: 1700000000,
     }
@@ -47,7 +49,9 @@ struct SimpleRng {
 
 impl SimpleRng {
     fn new(seed: u64) -> Self {
-        Self { state: seed.wrapping_add(0x9E3779B97F4A7C15) }
+        Self {
+            state: seed.wrapping_add(0x9E3779B97F4A7C15),
+        }
     }
 
     fn next_u32(&mut self) -> u32 {
@@ -81,7 +85,8 @@ fn test_m4_heavy_wal_concurrency_and_stress() {
             &managed_root,
         ));
     }
-    db.insert_or_update_batch(&initial_tracks, &managed_root).unwrap();
+    db.insert_or_update_batch(&initial_tracks, &managed_root)
+        .unwrap();
 
     let running = Arc::new(AtomicBool::new(true));
     let read_count = Arc::new(AtomicUsize::new(0));
@@ -106,15 +111,20 @@ fn test_m4_heavy_wal_concurrency_and_stress() {
                     0 => db_c.search_fts("Artist", &m_root).map(|v| v.len()),
                     1 => db_c.list_albums().map(|v| v.len()),
                     2 => db_c.list_artists().map(|v| v.len()),
-                    3 => db_c.get_album_tracks("Album 0", None, &m_root).map(|v| v.len()),
+                    3 => db_c
+                        .get_album_tracks("Album 0", None, &m_root)
+                        .map(|v| v.len()),
                     _ => {
                         let tid = format!("init-{:04}", (i * 3) % 500);
-                        db_c.get_track(&tid, &m_root).map(|opt| opt.is_some() as usize)
+                        db_c.get_track(&tid, &m_root)
+                            .map(|opt| opt.is_some() as usize)
                     }
                 };
 
                 match res {
-                    Ok(_) => { r_cnt.fetch_add(1, Ordering::Relaxed); }
+                    Ok(_) => {
+                        r_cnt.fetch_add(1, Ordering::Relaxed);
+                    }
                     Err(e) => {
                         eprintln!("Reader error: {e:?}");
                         err_cnt.fetch_add(1, Ordering::Relaxed);
@@ -150,7 +160,9 @@ fn test_m4_heavy_wal_concurrency_and_stress() {
                     .collect();
 
                 match db_c.insert_or_update_batch(&batch, &m_root) {
-                    Ok(_) => { w_cnt.fetch_add(20, Ordering::Relaxed); }
+                    Ok(_) => {
+                        w_cnt.fetch_add(20, Ordering::Relaxed);
+                    }
                     Err(e) => {
                         eprintln!("Writer error: {e:?}");
                         err_cnt.fetch_add(1, Ordering::Relaxed);
@@ -211,7 +223,10 @@ fn test_m4_heavy_wal_concurrency_and_stress() {
     println!("Total Written Tracks:  {writes}");
     println!("Total Error Count:     {errors}");
 
-    assert_eq!(errors, 0, "Zero errors or locks permitted during heavy parallel concurrency");
+    assert_eq!(
+        errors, 0,
+        "Zero errors or locks permitted during heavy parallel concurrency"
+    );
     assert!(reads > 300, "Expected > 300 reads during 3s");
     assert!(writes > 300, "Expected > 300 writes during 3s");
 
@@ -228,17 +243,51 @@ fn test_m4_fts5_random_fuzzing() {
     // Populate with 200 diverse multilingual tracks
     let mut tracks = Vec::new();
     let words = [
-        "Summer", "Night", "City", "Cyberpunk", "Tokyo", "Electric", "Dreams",
-        "Synthwave", "Future", "Bass", "Beats", "Sound", "Wave", "Echo", "Shadow",
-        "Ágætis", "byrjun", "Über", "Éléphant", "Corazón", "İstanbul", "久石譲",
-        "千と千尋", "강남스타일", "حبيبي", "Ζορμπάς", "Цой", "Кино",
+        "Summer",
+        "Night",
+        "City",
+        "Cyberpunk",
+        "Tokyo",
+        "Electric",
+        "Dreams",
+        "Synthwave",
+        "Future",
+        "Bass",
+        "Beats",
+        "Sound",
+        "Wave",
+        "Echo",
+        "Shadow",
+        "Ágætis",
+        "byrjun",
+        "Über",
+        "Éléphant",
+        "Corazón",
+        "İstanbul",
+        "久石譲",
+        "千と千尋",
+        "강남스타일",
+        "حبيبي",
+        "Ζορμπάς",
+        "Цой",
+        "Кино",
     ];
 
     for i in 0..200 {
-        let title = format!("{} {}", words[i % words.len()], words[(i + 3) % words.len()]);
+        let title = format!(
+            "{} {}",
+            words[i % words.len()],
+            words[(i + 3) % words.len()]
+        );
         let artist = format!("Artist {}", words[(i + 7) % words.len()]);
         let album = format!("Album {}", words[(i + 11) % words.len()]);
-        tracks.push(sample_track(&format!("fz-{i:03}"), &title, &artist, &album, &managed_root));
+        tracks.push(sample_track(
+            &format!("fz-{i:03}"),
+            &title,
+            &artist,
+            &album,
+            &managed_root,
+        ));
     }
     db.insert_or_update_batch(&tracks, &managed_root).unwrap();
 
@@ -247,29 +296,87 @@ fn test_m4_fts5_random_fuzzing() {
     let string_nested_symbols = "()*&^%$#@!~".repeat(50);
 
     let adversarial_fuzz_seeds: &[&str] = &[
-        "", "   ", "\t\n\r",
-        "\"", "\"\"\"", "''''", "`", "``",
-        "*", "**", "***", "?", "???", "/", "//", "\\", "\\\\",
-        "(", ")", "()", ")()(", "[", "]", "[]", "{", "}", "{}",
-        "AND", "OR", "NOT", "NEAR", "MATCH", "SELECT", "DROP", "TABLE",
-        "AND AND AND", "OR OR OR", "NOT NOT",
-        "\"*\"", "\" \"", "\":*\"", "col:*", "title:*", "artist:DJ",
-        "'; DROP TABLE tracks; --", "' OR '1'='1", "\" OR \"\"=\"",
-        "🔥", "🎧", "🚀", "🌟", "✨", "🎵", "🎶",
+        "",
+        "   ",
+        "\t\n\r",
+        "\"",
+        "\"\"\"",
+        "''''",
+        "`",
+        "``",
+        "*",
+        "**",
+        "***",
+        "?",
+        "???",
+        "/",
+        "//",
+        "\\",
+        "\\\\",
+        "(",
+        ")",
+        "()",
+        ")()(",
+        "[",
+        "]",
+        "[]",
+        "{",
+        "}",
+        "{}",
+        "AND",
+        "OR",
+        "NOT",
+        "NEAR",
+        "MATCH",
+        "SELECT",
+        "DROP",
+        "TABLE",
+        "AND AND AND",
+        "OR OR OR",
+        "NOT NOT",
+        "\"*\"",
+        "\" \"",
+        "\":*\"",
+        "col:*",
+        "title:*",
+        "artist:DJ",
+        "'; DROP TABLE tracks; --",
+        "' OR '1'='1",
+        "\" OR \"\"=\"",
+        "🔥",
+        "🎧",
+        "🚀",
+        "🌟",
+        "✨",
+        "🎵",
+        "🎶",
         &string_1000_a,
         &string_100_quotes,
         &string_nested_symbols,
         "SELECT * FROM tracks WHERE id = 1",
         "0x00\0\0\0",
-        "null", "NULL", "undefined", "NaN",
-        "İSTANBUL", "istanbul", "ISTANBUL",
-        "über", "Uber", "UBER",
-        "Sigur Ros", "Sigur Rós", "SIGUR ROS",
+        "null",
+        "NULL",
+        "undefined",
+        "NaN",
+        "İSTANBUL",
+        "istanbul",
+        "ISTANBUL",
+        "über",
+        "Uber",
+        "UBER",
+        "Sigur Ros",
+        "Sigur Rós",
+        "SIGUR ROS",
     ];
 
     for (idx, q) in adversarial_fuzz_seeds.iter().enumerate() {
         let res = db.search_fts(q, &managed_root);
-        assert!(res.is_ok(), "FTS query index {idx} ('{q}') failed with error: {:?}", res.err());
+        assert!(
+            res.is_ok(),
+            "FTS query index {idx} ('{q}') failed with error: {:?}",
+            res.err()
+        );
     }
 
     // Generate 500 pseudo-random string queries using PRNG
@@ -278,9 +385,15 @@ fn test_m4_fts5_random_fuzzing() {
 
     for f_idx in 0..500 {
         let len = rng.gen_range(1, 60);
-        let q: String = (0..len).map(|_| fuzz_chars[rng.gen_range(0, fuzz_chars.len())]).collect();
+        let q: String = (0..len)
+            .map(|_| fuzz_chars[rng.gen_range(0, fuzz_chars.len())])
+            .collect();
         let res = db.search_fts(&q, &managed_root);
-        assert!(res.is_ok(), "Random FTS fuzz test #{f_idx} ('{q}') returned Err: {:?}", res.err());
+        assert!(
+            res.is_ok(),
+            "Random FTS fuzz test #{f_idx} ('{q}') returned Err: {:?}",
+            res.err()
+        );
     }
 
     println!("\n=== M4 FTS5 ADVERSARIAL FUZZING PASSED (1,000+ queries) ===");

@@ -12,7 +12,10 @@ use wavery_core::models::{Track, TrackMetadata, TrackSource};
 use wavery_library::db::LibraryDatabase;
 
 fn setup_env(test_name: &str) -> (PathBuf, PathBuf, PathBuf) {
-    let temp_dir = std::env::temp_dir().join(format!("wavery_fts5_adv_{test_name}_{}", uuid::Uuid::new_v4()));
+    let temp_dir = std::env::temp_dir().join(format!(
+        "wavery_fts5_adv_{test_name}_{}",
+        uuid::Uuid::new_v4()
+    ));
     let db_path = temp_dir.join("library.db");
     let managed_root = temp_dir.join("managed");
     fs::create_dir_all(&managed_root).unwrap();
@@ -46,6 +49,7 @@ fn build_track(
             channels: Some(2),
             format: "FLAC".to_string(),
             lyrics: None,
+            ..Default::default()
         },
         date_added: 1700000000,
     }
@@ -68,17 +72,61 @@ fn test_adversarial_bm25_column_weight_ordering() {
     // 4. Album Artist (2.0)
     // 5. Genre (1.0) -> Lowest
     let tracks = vec![
-        build_track("t_genre", "Regular Track", "Regular Artist", "Regular Album", None, "Supernova", &managed_root),
-        build_track("t_album_artist", "Regular Track 2", "Regular Artist 2", "Regular Album 2", Some("Supernova"), "Rock", &managed_root),
-        build_track("t_album", "Regular Track 3", "Regular Artist 3", "Supernova", None, "Rock", &managed_root),
-        build_track("t_artist", "Regular Track 4", "Supernova", "Regular Album 4", None, "Rock", &managed_root),
-        build_track("t_title", "Supernova", "Regular Artist 5", "Regular Album 5", None, "Rock", &managed_root),
+        build_track(
+            "t_genre",
+            "Regular Track",
+            "Regular Artist",
+            "Regular Album",
+            None,
+            "Supernova",
+            &managed_root,
+        ),
+        build_track(
+            "t_album_artist",
+            "Regular Track 2",
+            "Regular Artist 2",
+            "Regular Album 2",
+            Some("Supernova"),
+            "Rock",
+            &managed_root,
+        ),
+        build_track(
+            "t_album",
+            "Regular Track 3",
+            "Regular Artist 3",
+            "Supernova",
+            None,
+            "Rock",
+            &managed_root,
+        ),
+        build_track(
+            "t_artist",
+            "Regular Track 4",
+            "Supernova",
+            "Regular Album 4",
+            None,
+            "Rock",
+            &managed_root,
+        ),
+        build_track(
+            "t_title",
+            "Supernova",
+            "Regular Artist 5",
+            "Regular Album 5",
+            None,
+            "Rock",
+            &managed_root,
+        ),
     ];
 
     db.insert_or_update_batch(&tracks, &managed_root).unwrap();
 
     let results = db.search_fts("Supernova", &managed_root).unwrap();
-    assert_eq!(results.len(), 5, "All 5 tracks containing 'Supernova' must match");
+    assert_eq!(
+        results.len(),
+        5,
+        "All 5 tracks containing 'Supernova' must match"
+    );
 
     let ids: Vec<&str> = results.iter().map(|t| t.id.as_str()).collect();
     assert_eq!(
@@ -95,14 +143,55 @@ fn test_adversarial_bm25_column_weight_ordering() {
 
     // Test secondary keyword "Hyperdrive" with multi-word titles
     let hyper_tracks = vec![
-        build_track("h_genre", "Song Delta", "Artist Echo", "Album Foxtrot", None, "Hyperdrive Metal", &managed_root),
-        build_track("h_album_artist", "Song Charlie", "Artist Bravo", "Album Alpha", Some("Hyperdrive Syndicate"), "Metal", &managed_root),
-        build_track("h_album", "Song Bravo", "Artist Alpha", "The Hyperdrive Experience", None, "Metal", &managed_root),
-        build_track("h_artist", "Song Alpha", "Hyperdrive Project", "Greatest Hits", None, "Metal", &managed_root),
-        build_track("h_title", "Hyperdrive Odyssey", "Unknown Artist", "Unknown Album", None, "Metal", &managed_root),
+        build_track(
+            "h_genre",
+            "Song Delta",
+            "Artist Echo",
+            "Album Foxtrot",
+            None,
+            "Hyperdrive Metal",
+            &managed_root,
+        ),
+        build_track(
+            "h_album_artist",
+            "Song Charlie",
+            "Artist Bravo",
+            "Album Alpha",
+            Some("Hyperdrive Syndicate"),
+            "Metal",
+            &managed_root,
+        ),
+        build_track(
+            "h_album",
+            "Song Bravo",
+            "Artist Alpha",
+            "The Hyperdrive Experience",
+            None,
+            "Metal",
+            &managed_root,
+        ),
+        build_track(
+            "h_artist",
+            "Song Alpha",
+            "Hyperdrive Project",
+            "Greatest Hits",
+            None,
+            "Metal",
+            &managed_root,
+        ),
+        build_track(
+            "h_title",
+            "Hyperdrive Odyssey",
+            "Unknown Artist",
+            "Unknown Album",
+            None,
+            "Metal",
+            &managed_root,
+        ),
     ];
 
-    db.insert_or_update_batch(&hyper_tracks, &managed_root).unwrap();
+    db.insert_or_update_batch(&hyper_tracks, &managed_root)
+        .unwrap();
 
     let hyper_results = db.search_fts("Hyperdrive", &managed_root).unwrap();
     assert_eq!(hyper_results.len(), 5);
@@ -133,20 +222,109 @@ fn test_adversarial_diacritics_and_unicode_tokenization() {
     let db = LibraryDatabase::open(&db_path).expect("Failed to open DB");
 
     let unicode_tracks = vec![
-        build_track("u_cafe", "Café del Mar", "Chilled Café", "Café Sessions", None, "Ambient", &managed_root),
-        build_track("u_motley", "Kickstart My Heart", "Mötley Crüe", "Dr. Feelgood", None, "Glam Metal", &managed_root),
-        build_track("u_bjork", "Jóga", "Björk", "Homogenic", None, "Art Pop", &managed_root),
-        build_track("u_amelie", "La Valse d'Amélie", "Yann Tiersen", "Le Fabuleux Destin d'Amélie Poulain", None, "Soundtrack", &managed_root),
-        build_track("u_sigur", "Hoppípolla", "Sigur Rós", "Takk...", None, "Post-Rock", &managed_root),
-        build_track("u_spanish", "Canción del Mariachi", "Los Lobos & Antonio Banderas", "Desperado", None, "Latin", &managed_root),
-        build_track("u_german", "Über den Wolken", "Reinhard Mey", "Mädchen im Spiegel", None, "Liedermacher", &managed_root),
-        build_track("u_turkish", "Gönülçelen", "Teoman", "İstanbul'da Sonbahar", None, "Rock", &managed_root),
-        build_track("u_nordic", "Smuk Som Et Stjerneskud", "Brødrene Olsen", "Dansk Melodi Grand Prix", None, "Pop", &managed_root),
-        build_track("u_cjk", "千と千尋の神隠し", "久石譲", "Spirited Away", None, "Soundtrack", &managed_root),
-        build_track("u_cyrillic", "Группа крови", "Кино", "Группа крови", None, "Rock", &managed_root),
+        build_track(
+            "u_cafe",
+            "Café del Mar",
+            "Chilled Café",
+            "Café Sessions",
+            None,
+            "Ambient",
+            &managed_root,
+        ),
+        build_track(
+            "u_motley",
+            "Kickstart My Heart",
+            "Mötley Crüe",
+            "Dr. Feelgood",
+            None,
+            "Glam Metal",
+            &managed_root,
+        ),
+        build_track(
+            "u_bjork",
+            "Jóga",
+            "Björk",
+            "Homogenic",
+            None,
+            "Art Pop",
+            &managed_root,
+        ),
+        build_track(
+            "u_amelie",
+            "La Valse d'Amélie",
+            "Yann Tiersen",
+            "Le Fabuleux Destin d'Amélie Poulain",
+            None,
+            "Soundtrack",
+            &managed_root,
+        ),
+        build_track(
+            "u_sigur",
+            "Hoppípolla",
+            "Sigur Rós",
+            "Takk...",
+            None,
+            "Post-Rock",
+            &managed_root,
+        ),
+        build_track(
+            "u_spanish",
+            "Canción del Mariachi",
+            "Los Lobos & Antonio Banderas",
+            "Desperado",
+            None,
+            "Latin",
+            &managed_root,
+        ),
+        build_track(
+            "u_german",
+            "Über den Wolken",
+            "Reinhard Mey",
+            "Mädchen im Spiegel",
+            None,
+            "Liedermacher",
+            &managed_root,
+        ),
+        build_track(
+            "u_turkish",
+            "Gönülçelen",
+            "Teoman",
+            "İstanbul'da Sonbahar",
+            None,
+            "Rock",
+            &managed_root,
+        ),
+        build_track(
+            "u_nordic",
+            "Smuk Som Et Stjerneskud",
+            "Brødrene Olsen",
+            "Dansk Melodi Grand Prix",
+            None,
+            "Pop",
+            &managed_root,
+        ),
+        build_track(
+            "u_cjk",
+            "千と千尋の神隠し",
+            "久石譲",
+            "Spirited Away",
+            None,
+            "Soundtrack",
+            &managed_root,
+        ),
+        build_track(
+            "u_cyrillic",
+            "Группа крови",
+            "Кино",
+            "Группа крови",
+            None,
+            "Rock",
+            &managed_root,
+        ),
     ];
 
-    db.insert_or_update_batch(&unicode_tracks, &managed_root).unwrap();
+    db.insert_or_update_batch(&unicode_tracks, &managed_root)
+        .unwrap();
 
     // Verification Test Matrix:
     // Testing specific accents/diacritics: café, mötley, björk, etc.
@@ -184,7 +362,8 @@ fn test_adversarial_diacritics_and_unicode_tokenization() {
     ];
 
     for (query, expected_id) in test_cases {
-        let results = db.search_fts(query, &managed_root)
+        let results = db
+            .search_fts(query, &managed_root)
             .unwrap_or_else(|e| panic!("Search failed for '{query}': {e}"));
         assert!(
             results.iter().any(|t| t.id == expected_id),
@@ -206,11 +385,51 @@ fn test_adversarial_multi_word_prefix_and_punctuation() {
     let db = LibraryDatabase::open(&db_path).expect("Failed to open DB");
 
     let tracks = vec![
-        build_track("p1", "Dark All Day (feat. Tim Cappello)", "Gunship", "Dark All Day", None, "Synthwave", &managed_root),
-        build_track("p2", "Thunderstruck / Shoot to Thrill [Live at River Plate]", "AC/DC", "Live", None, "Hard Rock", &managed_root),
-        build_track("p3", "Don't Stop Believin'", "Journey", "Escape (Expanded Edition)", None, "Classic Rock", &managed_root),
-        build_track("p4", "Around the World / Harder, Better, Faster, Stronger", "Daft Punk", "Alive 2007", None, "Electronic", &managed_root),
-        build_track("p5", "21st Century Schizoid Man [including Mirrors]", "King Crimson", "In the Court of the Crimson King", None, "Prog Rock", &managed_root),
+        build_track(
+            "p1",
+            "Dark All Day (feat. Tim Cappello)",
+            "Gunship",
+            "Dark All Day",
+            None,
+            "Synthwave",
+            &managed_root,
+        ),
+        build_track(
+            "p2",
+            "Thunderstruck / Shoot to Thrill [Live at River Plate]",
+            "AC/DC",
+            "Live",
+            None,
+            "Hard Rock",
+            &managed_root,
+        ),
+        build_track(
+            "p3",
+            "Don't Stop Believin'",
+            "Journey",
+            "Escape (Expanded Edition)",
+            None,
+            "Classic Rock",
+            &managed_root,
+        ),
+        build_track(
+            "p4",
+            "Around the World / Harder, Better, Faster, Stronger",
+            "Daft Punk",
+            "Alive 2007",
+            None,
+            "Electronic",
+            &managed_root,
+        ),
+        build_track(
+            "p5",
+            "21st Century Schizoid Man [including Mirrors]",
+            "King Crimson",
+            "In the Court of the Crimson King",
+            None,
+            "Prog Rock",
+            &managed_root,
+        ),
     ];
 
     db.insert_or_update_batch(&tracks, &managed_root).unwrap();
@@ -256,10 +475,27 @@ fn test_adversarial_sql_injection_payloads() {
     let db = LibraryDatabase::open(&db_path).expect("Failed to open DB");
 
     let baseline_tracks = vec![
-        build_track("base1", "Safe Track 1", "Safe Artist", "Safe Album", None, "Pop", &managed_root),
-        build_track("base2", "Safe Track 2", "Safe Artist", "Safe Album", None, "Rock", &managed_root),
+        build_track(
+            "base1",
+            "Safe Track 1",
+            "Safe Artist",
+            "Safe Album",
+            None,
+            "Pop",
+            &managed_root,
+        ),
+        build_track(
+            "base2",
+            "Safe Track 2",
+            "Safe Artist",
+            "Safe Album",
+            None,
+            "Rock",
+            &managed_root,
+        ),
     ];
-    db.insert_or_update_batch(&baseline_tracks, &managed_root).unwrap();
+    db.insert_or_update_batch(&baseline_tracks, &managed_root)
+        .unwrap();
 
     let attack_payloads = [
         "'; DROP TABLE tracks; --",
@@ -295,7 +531,11 @@ fn test_adversarial_sql_injection_payloads() {
 
     // Verify database tables and data are 100% intact
     let all = db.load_all(&managed_root).unwrap();
-    assert_eq!(all.len(), 2, "Database tracks table must remain untouched and uncorrupted");
+    assert_eq!(
+        all.len(),
+        2,
+        "Database tracks table must remain untouched and uncorrupted"
+    );
 
     drop(db);
     let _ = fs::remove_dir_all(&temp_dir);
@@ -410,6 +650,7 @@ fn test_adversarial_rapid_concurrent_mutations_and_trigger_sync() {
                     channels: Some(2),
                     format: "FLAC".to_string(),
                     lyrics: None,
+                    ..Default::default()
                 };
 
                 match db_c.update_track_metadata(&target_id, &meta) {
@@ -492,18 +733,28 @@ fn test_adversarial_rapid_concurrent_mutations_and_trigger_sync() {
         h.join().unwrap();
     }
 
-    assert_eq!(error_count.load(Ordering::SeqCst), 0, "Zero errors allowed during rapid concurrent mutations");
+    assert_eq!(
+        error_count.load(Ordering::SeqCst),
+        0,
+        "Zero errors allowed during rapid concurrent mutations"
+    );
 
     println!("\n=== POST-CONCURRENCY FTS5 TRIGGER SYNCHRONIZATION AUDIT ===");
 
     // 1. Audit Deleted Tracks: Ensure FTS5 has NO GHOST ROWS for deleted tracks
     let deleted_set = deleted_ids.lock().unwrap().clone();
     println!("Auditing {} deleted tracks...", deleted_set.len());
-    assert!(!deleted_set.is_empty(), "Expected at least some tracks to have been deleted");
+    assert!(
+        !deleted_set.is_empty(),
+        "Expected at least some tracks to have been deleted"
+    );
 
     for d_id in &deleted_set {
         // Direct table check
-        assert!(db.get_track(d_id, &managed_root).unwrap().is_none(), "Track {d_id} must not exist in tracks table");
+        assert!(
+            db.get_track(d_id, &managed_root).unwrap().is_none(),
+            "Track {d_id} must not exist in tracks table"
+        );
 
         // FTS search for the old initial song title
         let idx_str = d_id.strip_prefix("init_").unwrap();
@@ -518,7 +769,10 @@ fn test_adversarial_rapid_concurrent_mutations_and_trigger_sync() {
     // 2. Audit Updated Tracks: Ensure FTS5 finds new title and NOT old title
     let updated_map = updated_titles.lock().unwrap().clone();
     println!("Auditing {} updated tracks...", updated_map.len());
-    assert!(!updated_map.is_empty(), "Expected at least some tracks to have been updated");
+    assert!(
+        !updated_map.is_empty(),
+        "Expected at least some tracks to have been updated"
+    );
 
     for (u_id, new_title) in &updated_map {
         // Search for new title must return track
@@ -567,17 +821,62 @@ fn test_adversarial_multi_word_cross_column_ranking_and_nulls() {
     // Rank 4: Word 1 in Artist, Word 2 in Album (5.0 + 3.0) -> Track 4
     // Rank 5: Both words in Genre (1.0 + 1.0) -> Track 5
     let ranking_tracks = vec![
-        build_track("r5_genre", "Some Title", "Some Artist", "Some Album", None, "Midnight Runner Synth", &managed_root),
-        build_track("r4_artist_album", "Some Title", "Midnight Star", "Runner Records", None, "Synth", &managed_root),
-        build_track("r3_artist", "Some Title", "Midnight Runner Band", "Some Album", None, "Synth", &managed_root),
-        build_track("r2_title_artist", "Midnight Melody", "Runner Boy", "Some Album", None, "Synth", &managed_root),
-        build_track("r1_title", "Midnight Runner", "Some Artist", "Some Album", None, "Synth", &managed_root),
+        build_track(
+            "r5_genre",
+            "Some Title",
+            "Some Artist",
+            "Some Album",
+            None,
+            "Midnight Runner Synth",
+            &managed_root,
+        ),
+        build_track(
+            "r4_artist_album",
+            "Some Title",
+            "Midnight Star",
+            "Runner Records",
+            None,
+            "Synth",
+            &managed_root,
+        ),
+        build_track(
+            "r3_artist",
+            "Some Title",
+            "Midnight Runner Band",
+            "Some Album",
+            None,
+            "Synth",
+            &managed_root,
+        ),
+        build_track(
+            "r2_title_artist",
+            "Midnight Melody",
+            "Runner Boy",
+            "Some Album",
+            None,
+            "Synth",
+            &managed_root,
+        ),
+        build_track(
+            "r1_title",
+            "Midnight Runner",
+            "Some Artist",
+            "Some Album",
+            None,
+            "Synth",
+            &managed_root,
+        ),
     ];
 
-    db.insert_or_update_batch(&ranking_tracks, &managed_root).unwrap();
+    db.insert_or_update_batch(&ranking_tracks, &managed_root)
+        .unwrap();
 
     let results = db.search_fts("Midnight Runner", &managed_root).unwrap();
-    assert_eq!(results.len(), 5, "All 5 tracks matching both words must be returned");
+    assert_eq!(
+        results.len(),
+        5,
+        "All 5 tracks matching both words must be returned"
+    );
 
     let ids: Vec<&str> = results.iter().map(|t| t.id.as_str()).collect();
     assert_eq!(
@@ -611,12 +910,16 @@ fn test_adversarial_multi_word_cross_column_ranking_and_nulls() {
             channels: None,
             format: "FLAC".to_string(),
             lyrics: None,
+            ..Default::default()
         },
         date_added: 1700000000,
     };
 
     db.insert_or_update(&null_track, &managed_root).unwrap();
-    assert!(db.get_track("t_null_fields", &managed_root).unwrap().is_some());
+    assert!(db
+        .get_track("t_null_fields", &managed_root)
+        .unwrap()
+        .is_some());
 
     // Test Control characters in metadata fields
     let ctrl_track = build_track(

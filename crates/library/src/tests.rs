@@ -9,12 +9,15 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use tokio::sync::mpsc;
-use wavery_core::models::{ImportStrategy, ScanProgress, Track, TrackMetadata, TrackSource};
+use wavery_core::models::{
+    ImportStrategy, ScanProgress, Track, TrackMetadata, TrackSource, WaveformData,
+};
 use wavery_core::traits::{LibraryManager, MetadataReader};
 
 #[test]
 fn test_sqlite_pragmas_and_schema() {
-    let temp_dir = std::env::temp_dir().join(format!("wavery_pragma_test_{}", uuid::Uuid::new_v4()));
+    let temp_dir =
+        std::env::temp_dir().join(format!("wavery_pragma_test_{}", uuid::Uuid::new_v4()));
     let db_path = temp_dir.join("library.db");
     fs::create_dir_all(&temp_dir).unwrap();
 
@@ -68,12 +71,26 @@ fn test_batched_ingestion_and_fts5_triggers() {
     for i in 1..=10 {
         tracks.push(Track {
             id: format!("track-id-{i}"),
-            source: TrackSource::Managed(managed_root.join(format!("artist/album/{i:02} - Song {i}.flac"))),
+            source: TrackSource::Managed(
+                managed_root.join(format!("artist/album/{i:02} - Song {i}.flac")),
+            ),
             metadata: TrackMetadata {
                 title: Some(format!("Synth Song {i}")),
-                artist: Some(if i <= 5 { "Kavinsky".into() } else { "Gunship".into() }),
-                album: Some(if i <= 5 { "Nightcall".into() } else { "Dark All Day".into() }),
-                album_artist: Some(if i <= 5 { "Kavinsky".into() } else { "Gunship".into() }),
+                artist: Some(if i <= 5 {
+                    "Kavinsky".into()
+                } else {
+                    "Gunship".into()
+                }),
+                album: Some(if i <= 5 {
+                    "Nightcall".into()
+                } else {
+                    "Dark All Day".into()
+                }),
+                album_artist: Some(if i <= 5 {
+                    "Kavinsky".into()
+                } else {
+                    "Gunship".into()
+                }),
                 track_number: Some(i),
                 disc_number: Some(1),
                 year: Some(2013 + (i as i32 % 5)),
@@ -84,6 +101,7 @@ fn test_batched_ingestion_and_fts5_triggers() {
                 channels: Some(2),
                 format: "FLAC".into(),
                 lyrics: None,
+                ..Default::default()
             },
             date_added: 1700000000 + i as u64,
         });
@@ -122,7 +140,8 @@ fn test_batched_ingestion_and_fts5_triggers() {
 
 #[test]
 fn test_sqlite_fts5_diacritics_unicode_and_special_queries() {
-    let temp_dir = std::env::temp_dir().join(format!("wavery_fts_unicode_{}", uuid::Uuid::new_v4()));
+    let temp_dir =
+        std::env::temp_dir().join(format!("wavery_fts_unicode_{}", uuid::Uuid::new_v4()));
     let db_path = temp_dir.join("library.db");
     let managed_root = temp_dir.join("managed");
     fs::create_dir_all(&managed_root).unwrap();
@@ -148,6 +167,7 @@ fn test_sqlite_fts5_diacritics_unicode_and_special_queries() {
                 channels: Some(2),
                 format: "FLAC".into(),
                 lyrics: None,
+                ..Default::default()
             },
             date_added: 1700000001,
         },
@@ -169,6 +189,7 @@ fn test_sqlite_fts5_diacritics_unicode_and_special_queries() {
                 channels: Some(2),
                 format: "FLAC".into(),
                 lyrics: None,
+                ..Default::default()
             },
             date_added: 1700000002,
         },
@@ -190,6 +211,7 @@ fn test_sqlite_fts5_diacritics_unicode_and_special_queries() {
                 channels: Some(2),
                 format: "MP3".into(),
                 lyrics: None,
+                ..Default::default()
             },
             date_added: 1700000003,
         },
@@ -211,6 +233,7 @@ fn test_sqlite_fts5_diacritics_unicode_and_special_queries() {
                 channels: Some(2),
                 format: "MP3".into(),
                 lyrics: None,
+                ..Default::default()
             },
             date_added: 1700000004,
         },
@@ -232,6 +255,7 @@ fn test_sqlite_fts5_diacritics_unicode_and_special_queries() {
                 channels: Some(2),
                 format: "FLAC".into(),
                 lyrics: None,
+                ..Default::default()
             },
             date_added: 1700000005,
         },
@@ -253,6 +277,7 @@ fn test_sqlite_fts5_diacritics_unicode_and_special_queries() {
                 channels: Some(2),
                 format: "MP3".into(),
                 lyrics: None,
+                ..Default::default()
             },
             date_added: 1700000006,
         },
@@ -302,7 +327,9 @@ fn test_sqlite_fts5_diacritics_unicode_and_special_queries() {
     assert!(res_empty.is_empty());
 
     // 8. SQL Injection attacks are safely sanitized
-    let res_injection = db.search_fts("'; DROP TABLE tracks; --", &managed_root).unwrap();
+    let res_injection = db
+        .search_fts("'; DROP TABLE tracks; --", &managed_root)
+        .unwrap();
     // Verify table still exists and query returned cleanly
     assert!(res_injection.is_empty());
     assert_eq!(db.load_all(&managed_root).unwrap().len(), 6);
@@ -344,11 +371,13 @@ fn test_multi_connection_wal_concurrency() {
                 channels: None,
                 format: "MP3".into(),
                 lyrics: None,
+                ..Default::default()
             },
             date_added: 1700000000 + i as u64,
         });
     }
-    db.insert_or_update_batch(&initial_tracks, &managed_root).unwrap();
+    db.insert_or_update_batch(&initial_tracks, &managed_root)
+        .unwrap();
 
     let writer_done = Arc::new(AtomicBool::new(false));
 
@@ -359,7 +388,9 @@ fn test_multi_connection_wal_concurrency() {
         let is_done = Arc::clone(&writer_done);
         reader_handles.push(thread::spawn(move || {
             let reader_conn = rusqlite::Connection::open(&p).unwrap();
-            reader_conn.busy_timeout(Duration::from_millis(5000)).unwrap();
+            reader_conn
+                .busy_timeout(Duration::from_millis(5000))
+                .unwrap();
             let mut read_iterations = 0;
 
             while !is_done.load(Ordering::SeqCst) || read_iterations < 20 {
@@ -410,11 +441,14 @@ fn test_multi_connection_wal_concurrency() {
                         channels: None,
                         format: "MP3".into(),
                         lyrics: None,
+                ..Default::default()
                     },
                     date_added: 1700000000 + i as u64,
                 });
             }
-            db_writer.insert_or_update_batch(&batch, &root_writer).unwrap();
+            db_writer
+                .insert_or_update_batch(&batch, &root_writer)
+                .unwrap();
             thread::sleep(Duration::from_millis(5));
         }
     });
@@ -435,7 +469,8 @@ fn test_multi_connection_wal_concurrency() {
 
 #[test]
 fn test_transaction_atomicity_and_rollback_integrity() {
-    let temp_dir = std::env::temp_dir().join(format!("wavery_tx_rollback_{}", uuid::Uuid::new_v4()));
+    let temp_dir =
+        std::env::temp_dir().join(format!("wavery_tx_rollback_{}", uuid::Uuid::new_v4()));
     let db_path = temp_dir.join("library.db");
     let managed_root = temp_dir.join("managed");
     fs::create_dir_all(&managed_root).unwrap();
@@ -461,6 +496,7 @@ fn test_transaction_atomicity_and_rollback_integrity() {
             channels: None,
             format: "MP3".into(),
             lyrics: None,
+            ..Default::default()
         },
         date_added: 1700000000,
     };
@@ -469,7 +505,8 @@ fn test_transaction_atomicity_and_rollback_integrity() {
 
     // 2. Create playlist with track1
     let playlist = db.create_playlist("My Playlist").unwrap();
-    db.add_tracks_to_playlist(&playlist.id, &["valid-1".into()]).unwrap();
+    db.add_tracks_to_playlist(&playlist.id, &["valid-1".into()])
+        .unwrap();
     let initial_pl = db.get_playlist(&playlist.id).unwrap().unwrap();
     assert_eq!(initial_pl.track_ids, vec!["valid-1".to_string()]);
 
@@ -479,7 +516,10 @@ fn test_transaction_atomicity_and_rollback_integrity() {
     invalid_pl.track_ids = vec!["valid-1".into(), "non_existent_ghost_track_id".into()];
 
     let save_res = db.save_playlist(&invalid_pl);
-    assert!(save_res.is_err(), "Foreign key violation must produce error");
+    assert!(
+        save_res.is_err(),
+        "Foreign key violation must produce error"
+    );
 
     // 4. Verify full rollback: playlist name and track list remain unmodified
     let after_rollback_pl = db.get_playlist(&playlist.id).unwrap().unwrap();
@@ -504,7 +544,10 @@ async fn test_library_rebuild_resilience_on_disk_mutations() {
     for i in 1..=4 {
         let fpath = incoming_dir.join(format!("song_{i}.mp3"));
         fs::write(&fpath, b"ID3\x03\x00\x00\x00\x00\x00\x00audioframesample").unwrap();
-        manager.import_track(&fpath, ImportStrategy::Copy).await.unwrap();
+        manager
+            .import_track(&fpath, ImportStrategy::Copy)
+            .await
+            .unwrap();
     }
 
     assert_eq!(manager.all_tracks().len(), 4);
@@ -519,7 +562,11 @@ async fn test_library_rebuild_resilience_on_disk_mutations() {
     fs::write(&new_track_path1, b"fLaC\x00\x00\x00\x00newcontentA").unwrap();
 
     let new_track_path2 = library_root.join("new_song_B.mp3");
-    fs::write(&new_track_path2, b"ID3\x03\x00\x00\x00\x00\x00\x00newcontentB").unwrap();
+    fs::write(
+        &new_track_path2,
+        b"ID3\x03\x00\x00\x00\x00\x00\x00newcontentB",
+    )
+    .unwrap();
 
     // 3. Trigger rebuild_library
     let rebuilt_tracks = manager.rebuild_library().await.unwrap();
@@ -529,11 +576,20 @@ async fn test_library_rebuild_resilience_on_disk_mutations() {
     assert_eq!(manager.all_tracks().len(), 5);
 
     // Verify deleted file is no longer in library
-    assert!(!manager.all_tracks().iter().any(|t| t.id == original_tracks[0].id));
+    assert!(!manager
+        .all_tracks()
+        .iter()
+        .any(|t| t.id == original_tracks[0].id));
 
     // Verify new files are present and indexed
-    assert!(manager.all_tracks().iter().any(|t| t.source.path().file_name().unwrap() == "new_song_A.flac"));
-    assert!(manager.all_tracks().iter().any(|t| t.source.path().file_name().unwrap() == "new_song_B.mp3"));
+    assert!(manager
+        .all_tracks()
+        .iter()
+        .any(|t| t.source.path().file_name().unwrap() == "new_song_A.flac"));
+    assert!(manager
+        .all_tracks()
+        .iter()
+        .any(|t| t.source.path().file_name().unwrap() == "new_song_B.mp3"));
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
@@ -566,7 +622,11 @@ fn test_corrupt_and_untagged_audio_fallbacks() {
 
     // 3. Corrupt ID3 frame / random binary garbage
     let garbage_mp3 = temp_dir.join("garbage.mp3");
-    fs::write(&garbage_mp3, [0xFF, 0xFE, 0x00, 0x12, 0x99, 0x88, 0x77, 0x66]).unwrap();
+    fs::write(
+        &garbage_mp3,
+        [0xFF, 0xFE, 0x00, 0x12, 0x99, 0x88, 0x77, 0x66],
+    )
+    .unwrap();
     let meta_garbage = reader.read_metadata(&garbage_mp3).unwrap();
     assert_eq!(meta_garbage.title.as_deref(), Some("garbage"));
     assert_eq!(meta_garbage.format, "MP3");
@@ -577,7 +637,8 @@ fn test_corrupt_and_untagged_audio_fallbacks() {
 
 #[tokio::test]
 async fn test_scanner_filters_non_audio_files() {
-    let temp_dir = std::env::temp_dir().join(format!("wavery_filter_test_{}", uuid::Uuid::new_v4()));
+    let temp_dir =
+        std::env::temp_dir().join(format!("wavery_filter_test_{}", uuid::Uuid::new_v4()));
     let incoming_dir = temp_dir.join("mixed_files");
     let library_root = temp_dir.join("library");
     let db_path = temp_dir.join("library.db");
@@ -585,8 +646,16 @@ async fn test_scanner_filters_non_audio_files() {
     fs::create_dir_all(&library_root).unwrap();
 
     // Create mixed files: 3 audio files, 5 non-audio files
-    fs::write(incoming_dir.join("track1.mp3"), b"ID3\x03\x00\x00\x00\x00\x00\x00data").unwrap();
-    fs::write(incoming_dir.join("track2.flac"), b"fLaC\x00\x00\x00\x00data").unwrap();
+    fs::write(
+        incoming_dir.join("track1.mp3"),
+        b"ID3\x03\x00\x00\x00\x00\x00\x00data",
+    )
+    .unwrap();
+    fs::write(
+        incoming_dir.join("track2.flac"),
+        b"fLaC\x00\x00\x00\x00data",
+    )
+    .unwrap();
     fs::write(incoming_dir.join("track3.ogg"), b"OggS\x00\x00\x00\x00data").unwrap();
 
     fs::write(incoming_dir.join("cover.jpg"), b"\xFF\xD8\xFF\xE0image").unwrap();
@@ -611,7 +680,8 @@ async fn test_scanner_filters_non_audio_files() {
 
 #[test]
 fn test_multi_artist_and_missing_tag_edge_cases() {
-    let temp_dir = std::env::temp_dir().join(format!("wavery_multi_artist_{}", uuid::Uuid::new_v4()));
+    let temp_dir =
+        std::env::temp_dir().join(format!("wavery_multi_artist_{}", uuid::Uuid::new_v4()));
     let db_path = temp_dir.join("library.db");
     let managed_root = temp_dir.join("managed");
     fs::create_dir_all(&managed_root).unwrap();
@@ -637,6 +707,7 @@ fn test_multi_artist_and_missing_tag_edge_cases() {
                 channels: Some(2),
                 format: "MP3".into(),
                 lyrics: None,
+                ..Default::default()
             },
             date_added: 1700000001,
         },
@@ -658,6 +729,7 @@ fn test_multi_artist_and_missing_tag_edge_cases() {
                 channels: Some(2),
                 format: "FLAC".into(),
                 lyrics: None,
+                ..Default::default()
             },
             date_added: 1700000002,
         },
@@ -679,6 +751,7 @@ fn test_multi_artist_and_missing_tag_edge_cases() {
                 channels: Some(2),
                 format: "FLAC".into(),
                 lyrics: None,
+                ..Default::default()
             },
             date_added: 1700000003,
         },
@@ -700,6 +773,7 @@ fn test_multi_artist_and_missing_tag_edge_cases() {
                 channels: Some(2),
                 format: "MP3".into(),
                 lyrics: None,
+                ..Default::default()
             },
             date_added: 1700000004,
         },
@@ -721,6 +795,7 @@ fn test_multi_artist_and_missing_tag_edge_cases() {
                 channels: Some(2),
                 format: "WAV".into(),
                 lyrics: None,
+                ..Default::default()
             },
             date_added: 1700000005,
         },
@@ -792,6 +867,7 @@ fn test_sqlite_aggregations() {
                 channels: Some(2),
                 format: "FLAC".into(),
                 lyrics: None,
+                ..Default::default()
             },
             date_added: 1700000000,
         },
@@ -813,6 +889,7 @@ fn test_sqlite_aggregations() {
                 channels: Some(2),
                 format: "FLAC".into(),
                 lyrics: None,
+                ..Default::default()
             },
             date_added: 1700000001,
         },
@@ -834,6 +911,7 @@ fn test_sqlite_aggregations() {
                 channels: Some(2),
                 format: "FLAC".into(),
                 lyrics: None,
+                ..Default::default()
             },
             date_added: 1700000002,
         },
@@ -858,7 +936,9 @@ fn test_sqlite_aggregations() {
     assert_eq!(daft.track_count, 2);
 
     // Check get_album_tracks
-    let disc_tracks = db.get_album_tracks("Discovery", Some("Daft Punk"), &managed_root).unwrap();
+    let disc_tracks = db
+        .get_album_tracks("Discovery", Some("Daft Punk"), &managed_root)
+        .unwrap();
     assert_eq!(disc_tracks.len(), 2);
     assert_eq!(disc_tracks[0].id, "t1");
     assert_eq!(disc_tracks[1].id, "t2");
@@ -906,8 +986,12 @@ async fn test_parallel_directory_scanner_with_progress() {
     let events = progress_handle.await.unwrap();
     assert!(!events.is_empty());
 
-    let has_discovered = events.iter().any(|e| matches!(e, ScanProgress::DiscoveredFiles(15)));
-    let has_completed = events.iter().any(|e| matches!(e, ScanProgress::Completed(_)));
+    let has_discovered = events
+        .iter()
+        .any(|e| matches!(e, ScanProgress::DiscoveredFiles(15)));
+    let has_completed = events
+        .iter()
+        .any(|e| matches!(e, ScanProgress::Completed(_)));
     assert!(has_discovered);
     assert!(has_completed);
 
@@ -916,7 +1000,8 @@ async fn test_parallel_directory_scanner_with_progress() {
 
 #[test]
 fn test_playlist_operations() {
-    let temp_dir = std::env::temp_dir().join(format!("wavery_playlist_test_{}", uuid::Uuid::new_v4()));
+    let temp_dir =
+        std::env::temp_dir().join(format!("wavery_playlist_test_{}", uuid::Uuid::new_v4()));
     let db_path = temp_dir.join("library.db");
     let managed_root = temp_dir.join("managed");
     fs::create_dir_all(&managed_root).unwrap();
@@ -943,6 +1028,7 @@ fn test_playlist_operations() {
                 channels: None,
                 format: "MP3".into(),
                 lyrics: None,
+                ..Default::default()
             },
             date_added: 1700000000,
         },
@@ -964,6 +1050,7 @@ fn test_playlist_operations() {
                 channels: None,
                 format: "MP3".into(),
                 lyrics: None,
+                ..Default::default()
             },
             date_added: 1700000001,
         },
@@ -975,7 +1062,8 @@ fn test_playlist_operations() {
     assert_eq!(playlist.name, "Chill Synth");
 
     // Add tracks
-    db.add_tracks_to_playlist(&playlist.id, &["track-1".into(), "track-2".into()]).unwrap();
+    db.add_tracks_to_playlist(&playlist.id, &["track-1".into(), "track-2".into()])
+        .unwrap();
 
     let fetched = db.get_playlist(&playlist.id).unwrap().unwrap();
     assert_eq!(fetched.track_ids.len(), 2);
@@ -993,7 +1081,8 @@ fn test_playlist_operations() {
     assert_eq!(renamed.name, "Renamed Synth");
 
     // Remove track from playlist
-    db.remove_track_from_playlist(&playlist.id, "track-1").unwrap();
+    db.remove_track_from_playlist(&playlist.id, "track-1")
+        .unwrap();
     let after_removal = db.get_playlist(&playlist.id).unwrap().unwrap();
     assert_eq!(after_removal.track_ids, vec!["track-2".to_string()]);
 
@@ -1046,6 +1135,7 @@ fn test_liked_tracks_operations() {
                 channels: None,
                 format: "MP3".into(),
                 lyrics: None,
+                ..Default::default()
             },
             date_added: 1700000000,
         },
@@ -1067,6 +1157,7 @@ fn test_liked_tracks_operations() {
                 channels: None,
                 format: "FLAC".into(),
                 lyrics: None,
+                ..Default::default()
             },
             date_added: 1700000001,
         },
@@ -1081,7 +1172,10 @@ fn test_liked_tracks_operations() {
     // 2. Like track-1
     db.like_track("track-1").unwrap();
     assert!(db.is_track_liked("track-1").unwrap());
-    assert_eq!(db.get_liked_track_ids().unwrap(), vec!["track-1".to_string()]);
+    assert_eq!(
+        db.get_liked_track_ids().unwrap(),
+        vec!["track-1".to_string()]
+    );
     let liked_tracks = db.get_liked_tracks(&managed_root).unwrap();
     assert_eq!(liked_tracks.len(), 1);
     assert_eq!(liked_tracks[0].metadata.title.as_deref(), Some("Song A"));
@@ -1096,7 +1190,10 @@ fn test_liked_tracks_operations() {
     let state = db.toggle_like("track-1").unwrap();
     assert!(!state);
     assert!(!db.is_track_liked("track-1").unwrap());
-    assert_eq!(db.get_liked_track_ids().unwrap(), vec!["track-2".to_string()]);
+    assert_eq!(
+        db.get_liked_track_ids().unwrap(),
+        vec!["track-2".to_string()]
+    );
 
     // 5. Unlike track-2
     db.unlike_track("track-2").unwrap();
@@ -1108,7 +1205,8 @@ fn test_liked_tracks_operations() {
 
 #[tokio::test]
 async fn test_import_track_copy_and_move_strategies() {
-    let temp_dir = std::env::temp_dir().join(format!("wavery_strategy_test_{}", uuid::Uuid::new_v4()));
+    let temp_dir =
+        std::env::temp_dir().join(format!("wavery_strategy_test_{}", uuid::Uuid::new_v4()));
     let library_root = temp_dir.join("library");
     let db_path = temp_dir.join("library.db");
     fs::create_dir_all(&library_root).unwrap();
@@ -1218,7 +1316,8 @@ async fn test_reimport_and_rescan_deduplication() {
 
 #[tokio::test]
 async fn test_legacy_uuid_duplicate_cleanup() {
-    let temp_dir = std::env::temp_dir().join(format!("wavery_legacy_uuid_{}", uuid::Uuid::new_v4()));
+    let temp_dir =
+        std::env::temp_dir().join(format!("wavery_legacy_uuid_{}", uuid::Uuid::new_v4()));
     let library_root = temp_dir.join("library");
     let db_path = temp_dir.join("library.db");
     fs::create_dir_all(&library_root).unwrap();
@@ -1229,7 +1328,11 @@ async fn test_legacy_uuid_duplicate_cleanup() {
 
     // Canonical file
     let canonical = album_dir.join("song.mp3");
-    fs::write(&canonical, b"ID3\x03\x00\x00\x00\x00\x00\x00canonicalcontent").unwrap();
+    fs::write(
+        &canonical,
+        b"ID3\x03\x00\x00\x00\x00\x00\x00canonicalcontent",
+    )
+    .unwrap();
 
     // Legacy duplicate files with 8 hex chars suffixes
     let dup1 = album_dir.join("song_a1b2c3d4.mp3");
@@ -1248,8 +1351,14 @@ async fn test_legacy_uuid_duplicate_cleanup() {
     assert_eq!(scanned.len(), 1);
     assert_eq!(manager.all_tracks().len(), 1);
     assert!(canonical.exists());
-    assert!(!dup1.exists(), "Legacy duplicate 1 must be deleted from disk");
-    assert!(!dup2.exists(), "Legacy duplicate 2 must be deleted from disk");
+    assert!(
+        !dup1.exists(),
+        "Legacy duplicate 1 must be deleted from disk"
+    );
+    assert!(
+        !dup2.exists(),
+        "Legacy duplicate 2 must be deleted from disk"
+    );
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
@@ -1288,6 +1397,7 @@ fn test_fts5_bm25_weighted_ranking_relevance() {
                 channels: Some(2),
                 format: "FLAC".into(),
                 lyrics: None,
+                ..Default::default()
             },
             date_added: 1700000001,
         },
@@ -1309,6 +1419,7 @@ fn test_fts5_bm25_weighted_ranking_relevance() {
                 channels: Some(2),
                 format: "FLAC".into(),
                 lyrics: None,
+                ..Default::default()
             },
             date_added: 1700000002,
         },
@@ -1330,6 +1441,7 @@ fn test_fts5_bm25_weighted_ranking_relevance() {
                 channels: Some(2),
                 format: "FLAC".into(),
                 lyrics: None,
+                ..Default::default()
             },
             date_added: 1700000003,
         },
@@ -1351,6 +1463,7 @@ fn test_fts5_bm25_weighted_ranking_relevance() {
                 channels: Some(2),
                 format: "FLAC".into(),
                 lyrics: None,
+                ..Default::default()
             },
             date_added: 1700000004,
         },
@@ -1372,6 +1485,7 @@ fn test_fts5_bm25_weighted_ranking_relevance() {
                 channels: Some(2),
                 format: "FLAC".into(),
                 lyrics: None,
+                ..Default::default()
             },
             date_added: 1700000005,
         },
@@ -1383,7 +1497,10 @@ fn test_fts5_bm25_weighted_ranking_relevance() {
     assert_eq!(search_results.len(), 5);
 
     let result_ids: Vec<String> = search_results.iter().map(|t| t.id.clone()).collect();
-    println!("BM25 Weighted Search Result Order for 'Hyperdrive': {:?}", result_ids);
+    println!(
+        "BM25 Weighted Search Result Order for 'Hyperdrive': {:?}",
+        result_ids
+    );
 
     // Exact expected BM25 order:
     // 1. Title (weight 10.0) -> t_title
@@ -1391,11 +1508,26 @@ fn test_fts5_bm25_weighted_ranking_relevance() {
     // 3. Album (weight 3.0) -> t_album
     // 4. Album Artist (weight 2.0) -> t_album_artist
     // 5. Genre (weight 1.0) -> t_genre
-    assert_eq!(result_ids[0], "t_title", "Title match must rank highest (weight 10.0)");
-    assert_eq!(result_ids[1], "t_artist", "Artist match must rank second (weight 5.0)");
-    assert_eq!(result_ids[2], "t_album", "Album match must rank third (weight 3.0)");
-    assert_eq!(result_ids[3], "t_album_artist", "Album Artist match must rank fourth (weight 2.0)");
-    assert_eq!(result_ids[4], "t_genre", "Genre match must rank fifth (weight 1.0)");
+    assert_eq!(
+        result_ids[0], "t_title",
+        "Title match must rank highest (weight 10.0)"
+    );
+    assert_eq!(
+        result_ids[1], "t_artist",
+        "Artist match must rank second (weight 5.0)"
+    );
+    assert_eq!(
+        result_ids[2], "t_album",
+        "Album match must rank third (weight 3.0)"
+    );
+    assert_eq!(
+        result_ids[3], "t_album_artist",
+        "Album Artist match must rank fourth (weight 2.0)"
+    );
+    assert_eq!(
+        result_ids[4], "t_genre",
+        "Genre match must rank fifth (weight 1.0)"
+    );
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
@@ -1445,11 +1577,19 @@ fn test_year_boundary_validation_and_defensive_guard() {
         channels: Some(2),
         format: "WAV".into(),
         lyrics: None,
+        ..Default::default()
     };
     let write_res = reader.write_metadata(&audio_file, &neg_year_meta);
-    assert!(write_res.is_ok(), "Writing metadata with negative year must succeed without panic: {:?}", write_res.err());
+    assert!(
+        write_res.is_ok(),
+        "Writing metadata with negative year must succeed without panic: {:?}",
+        write_res.err()
+    );
     let read_back_neg = reader.read_metadata(&audio_file).unwrap();
-    assert!(read_back_neg.year.is_none(), "Negative year must not be stored in tag");
+    assert!(
+        read_back_neg.year.is_none(),
+        "Negative year must not be stored in tag"
+    );
 
     // 2. Test write_metadata with zero year: should not set zero year
     let zero_year_meta = TrackMetadata {
@@ -1467,11 +1607,18 @@ fn test_year_boundary_validation_and_defensive_guard() {
         channels: Some(2),
         format: "WAV".into(),
         lyrics: None,
+        ..Default::default()
     };
     let write_zero_res = reader.write_metadata(&audio_file, &zero_year_meta);
-    assert!(write_zero_res.is_ok(), "Writing metadata with zero year must succeed without panic");
+    assert!(
+        write_zero_res.is_ok(),
+        "Writing metadata with zero year must succeed without panic"
+    );
     let read_back_zero = reader.read_metadata(&audio_file).unwrap();
-    assert!(read_back_zero.year.is_none(), "Zero year must not be stored in tag");
+    assert!(
+        read_back_zero.year.is_none(),
+        "Zero year must not be stored in tag"
+    );
 
     // 3. Test write_metadata with valid positive year
     let valid_year_meta = TrackMetadata {
@@ -1489,18 +1636,27 @@ fn test_year_boundary_validation_and_defensive_guard() {
         channels: Some(2),
         format: "WAV".into(),
         lyrics: None,
+        ..Default::default()
     };
     let write_valid_res = reader.write_metadata(&audio_file, &valid_year_meta);
-    assert!(write_valid_res.is_ok(), "Writing metadata with valid year must succeed");
+    assert!(
+        write_valid_res.is_ok(),
+        "Writing metadata with valid year must succeed"
+    );
     let read_back_valid = reader.read_metadata(&audio_file).unwrap();
-    assert_eq!(read_back_valid.year, Some(2024), "Valid positive year must be stored and read back");
+    assert_eq!(
+        read_back_valid.year,
+        Some(2024),
+        "Valid positive year must be stored and read back"
+    );
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
 
 #[tokio::test]
 async fn test_parallel_ingestion_corrupted_zero_byte_concurrent_wal_reads() {
-    let temp_dir = std::env::temp_dir().join(format!("wavery_corrupt_wal_{}", uuid::Uuid::new_v4()));
+    let temp_dir =
+        std::env::temp_dir().join(format!("wavery_corrupt_wal_{}", uuid::Uuid::new_v4()));
     let library_root = temp_dir.join("library");
     let incoming_dir = temp_dir.join("incoming");
     let db_path = temp_dir.join("library.db");
@@ -1522,7 +1678,11 @@ async fn test_parallel_ingestion_corrupted_zero_byte_concurrent_wal_reads() {
     }
     for i in 1..=10 {
         let garbage_path = incoming_dir.join(format!("garbage_song_{i:02}.ogg"));
-        fs::write(&garbage_path, [0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x00, 0x11]).unwrap();
+        fs::write(
+            &garbage_path,
+            [0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x00, 0x11],
+        )
+        .unwrap();
     }
 
     let mut manager = SqliteLibraryManager::new(library_root.clone(), db_path.clone()).unwrap();
@@ -1550,8 +1710,13 @@ async fn test_parallel_ingestion_corrupted_zero_byte_concurrent_wal_reads() {
             let _ = conn.busy_timeout(Duration::from_millis(5000));
 
             while running_c.load(Ordering::Relaxed) {
-                let res1: Result<i64, _> = conn.query_row("SELECT COUNT(*) FROM tracks", [], |r| r.get(0));
-                let res2: Result<i64, _> = conn.query_row("SELECT COUNT(*) FROM tracks_fts WHERE tracks_fts MATCH '\"empty\"*'", [], |r| r.get(0));
+                let res1: Result<i64, _> =
+                    conn.query_row("SELECT COUNT(*) FROM tracks", [], |r| r.get(0));
+                let res2: Result<i64, _> = conn.query_row(
+                    "SELECT COUNT(*) FROM tracks_fts WHERE tracks_fts MATCH '\"empty\"*'",
+                    [],
+                    |r| r.get(0),
+                );
 
                 if res1.is_err() || res2.is_err() {
                     r_err.fetch_add(1, Ordering::Relaxed);
@@ -1577,8 +1742,15 @@ async fn test_parallel_ingestion_corrupted_zero_byte_concurrent_wal_reads() {
     // All 30 files should have successfully imported with graceful file stem fallbacks
     assert_eq!(imported.len(), 30);
     assert_eq!(manager.all_tracks().len(), 30);
-    assert_eq!(read_err.load(Ordering::SeqCst), 0, "Zero read errors permitted during parallel ingestion");
-    assert!(read_count.load(Ordering::SeqCst) > 0, "Concurrent reads must execute during scan");
+    assert_eq!(
+        read_err.load(Ordering::SeqCst),
+        0,
+        "Zero read errors permitted during parallel ingestion"
+    );
+    assert!(
+        read_count.load(Ordering::SeqCst) > 0,
+        "Concurrent reads must execute during scan"
+    );
 
     // Verify all 30 tracks have proper format and duration = 0
     for track in manager.all_tracks() {
@@ -1601,10 +1773,19 @@ fn test_lyrics_reading_embedded_and_sidecar() {
     let flac_path = Path::new("/home/arda/Downloads/04 - Tyler, The Creator - See You Again (feat. Kali Uchis)_with_lyrics.flac");
     if flac_path.exists() {
         let meta = reader.read_metadata(flac_path).unwrap();
-        assert!(meta.lyrics.is_some(), "Embedded lyrics must be parsed from FLAC tag");
+        assert!(
+            meta.lyrics.is_some(),
+            "Embedded lyrics must be parsed from FLAC tag"
+        );
         let lyrics = meta.lyrics.unwrap();
-        assert!(lyrics.contains("See You Again"), "Lyrics must contain song title");
-        assert!(lyrics.contains("[00:00.19]"), "Lyrics must contain LRC timestamps");
+        assert!(
+            lyrics.contains("See You Again"),
+            "Lyrics must contain song title"
+        );
+        assert!(
+            lyrics.contains("[00:00.19]"),
+            "Lyrics must contain LRC timestamps"
+        );
     }
 
     // 2. Verify reading from sidecar .lrc file
@@ -1615,10 +1796,17 @@ fn test_lyrics_reading_embedded_and_sidecar() {
 
     // Write a dummy file (unreadable by probe fallback) and a sidecar .lrc
     fs::write(&song_file, b"DUMMY_AUDIO_DATA").unwrap();
-    fs::write(&lrc_file, "[00:01.00]Sidecar lyric line 1\n[00:05.00]Sidecar lyric line 2").unwrap();
+    fs::write(
+        &lrc_file,
+        "[00:01.00]Sidecar lyric line 1\n[00:05.00]Sidecar lyric line 2",
+    )
+    .unwrap();
 
     let meta = reader.read_metadata(&song_file).unwrap();
-    assert!(meta.lyrics.is_some(), "Sidecar .lrc must be read when present");
+    assert!(
+        meta.lyrics.is_some(),
+        "Sidecar .lrc must be read when present"
+    );
     let sidecar_lyrics = meta.lyrics.unwrap();
     assert!(sidecar_lyrics.contains("Sidecar lyric line 1"));
     assert!(sidecar_lyrics.contains("[00:05.00]"));
@@ -1628,7 +1816,8 @@ fn test_lyrics_reading_embedded_and_sidecar() {
 
 #[test]
 fn test_lyrics_database_persistence_and_queries() {
-    let temp_dir = std::env::temp_dir().join(format!("wavery_db_lyrics_test_{}", uuid::Uuid::new_v4()));
+    let temp_dir =
+        std::env::temp_dir().join(format!("wavery_db_lyrics_test_{}", uuid::Uuid::new_v4()));
     let db_path = temp_dir.join("library.db");
     let managed_root = temp_dir.join("managed");
     fs::create_dir_all(&managed_root).unwrap();
@@ -1654,6 +1843,7 @@ fn test_lyrics_database_persistence_and_queries() {
             channels: Some(2),
             format: "FLAC".into(),
             lyrics: Some(sample_lrc.into()),
+            ..Default::default()
         },
         date_added: 1700000000,
     };
@@ -1662,7 +1852,10 @@ fn test_lyrics_database_persistence_and_queries() {
     db.insert_or_update(&track, &managed_root).unwrap();
 
     // 2. Fetch by ID
-    let fetched = db.get_track("track-with-lyrics-1", &managed_root).unwrap().unwrap();
+    let fetched = db
+        .get_track("track-with-lyrics-1", &managed_root)
+        .unwrap()
+        .unwrap();
     assert_eq!(fetched.metadata.lyrics.as_deref(), Some(sample_lrc));
 
     // 3. Load all
@@ -1671,7 +1864,9 @@ fn test_lyrics_database_persistence_and_queries() {
     assert_eq!(all[0].metadata.lyrics.as_deref(), Some(sample_lrc));
 
     // 4. Get album tracks
-    let album_tracks = db.get_album_tracks("Lyric Album", Some("Lyric Artist"), &managed_root).unwrap();
+    let album_tracks = db
+        .get_album_tracks("Lyric Album", Some("Lyric Artist"), &managed_root)
+        .unwrap();
     assert_eq!(album_tracks.len(), 1);
     assert_eq!(album_tracks[0].metadata.lyrics.as_deref(), Some(sample_lrc));
 
@@ -1679,9 +1874,13 @@ fn test_lyrics_database_persistence_and_queries() {
     let mut updated_meta = fetched.metadata.clone();
     let updated_lrc = "[00:15.00]Updated lyric line";
     updated_meta.lyrics = Some(updated_lrc.into());
-    db.update_track_metadata("track-with-lyrics-1", &updated_meta).unwrap();
+    db.update_track_metadata("track-with-lyrics-1", &updated_meta)
+        .unwrap();
 
-    let refetched = db.get_track("track-with-lyrics-1", &managed_root).unwrap().unwrap();
+    let refetched = db
+        .get_track("track-with-lyrics-1", &managed_root)
+        .unwrap()
+        .unwrap();
     assert_eq!(refetched.metadata.lyrics.as_deref(), Some(updated_lrc));
 
     drop(db);
@@ -1690,7 +1889,8 @@ fn test_lyrics_database_persistence_and_queries() {
 
 #[test]
 fn test_database_schema_migration_for_lyrics() {
-    let temp_dir = std::env::temp_dir().join(format!("wavery_db_migration_test_{}", uuid::Uuid::new_v4()));
+    let temp_dir =
+        std::env::temp_dir().join(format!("wavery_db_migration_test_{}", uuid::Uuid::new_v4()));
     let db_path = temp_dir.join("legacy_library.db");
     let managed_root = temp_dir.join("managed");
     fs::create_dir_all(&managed_root).unwrap();
@@ -1731,7 +1931,10 @@ fn test_database_schema_migration_for_lyrics() {
     let db = LibraryDatabase::open(&db_path).unwrap();
 
     // Verify existing track is loaded with lyrics: None
-    let track = db.get_track("legacy-track-1", &managed_root).unwrap().unwrap();
+    let track = db
+        .get_track("legacy-track-1", &managed_root)
+        .unwrap()
+        .unwrap();
     assert_eq!(track.metadata.title.as_deref(), Some("Legacy Song"));
     assert_eq!(track.metadata.lyrics, None);
 
@@ -1740,8 +1943,705 @@ fn test_database_schema_migration_for_lyrics() {
     meta.lyrics = Some("[00:01.00]Migrated lyrics".into());
     db.update_track_metadata("legacy-track-1", &meta).unwrap();
 
-    let updated = db.get_track("legacy-track-1", &managed_root).unwrap().unwrap();
-    assert_eq!(updated.metadata.lyrics.as_deref(), Some("[00:01.00]Migrated lyrics"));
+    let updated = db
+        .get_track("legacy-track-1", &managed_root)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        updated.metadata.lyrics.as_deref(),
+        Some("[00:01.00]Migrated lyrics")
+    );
+
+    drop(db);
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn test_heuristics_extract_artist_from_path() {
+    use crate::heuristics::extract_artist_from_path;
+
+    // Parent folder heuristic
+    let p1 = Path::new("/Music/Radiohead/In Rainbows/01.flac");
+    assert_eq!(
+        extract_artist_from_path(p1, Some("In Rainbows")),
+        Some("Radiohead".to_string())
+    );
+
+    // "Artist - Album" folder heuristic
+    let p2 = Path::new("/Music/Led Zeppelin - Physical Graffiti/01.mp3");
+    assert_eq!(
+        extract_artist_from_path(p2, None),
+        Some("Led Zeppelin".to_string())
+    );
+
+    // Filename pattern "01 - Artist - Title"
+    let p3 = Path::new("/Downloads/01 - Radiohead - Creep.flac");
+    assert_eq!(
+        extract_artist_from_path(p3, None),
+        Some("Radiohead".to_string())
+    );
+
+    // Filename pattern "01. Artist - Title"
+    let p4 = Path::new("/Downloads/01. Led Zeppelin - Kashmir.mp3");
+    assert_eq!(
+        extract_artist_from_path(p4, None),
+        Some("Led Zeppelin".to_string())
+    );
+
+    // Generic folders ignored
+    let p5 = Path::new("/Music/Downloads/audio/01.flac");
+    assert_eq!(extract_artist_from_path(p5, None), None);
+
+    // Multi-byte Unicode prefix safety (where byte index 5 is not a char boundary)
+    let p_cyrillic = Path::new("/Music/Downloads/ЖЖЖ - Song.flac");
+    assert_eq!(
+        extract_artist_from_path(p_cyrillic, None),
+        Some("ЖЖЖ".to_string())
+    );
+
+    // Track prefix with German uppercase sharp S and Cyrillic
+    let p_german_cyrillic = Path::new("/Music/Downloads/Track 01 ЖWEIẞ - Song.flac");
+    assert_eq!(
+        extract_artist_from_path(p_german_cyrillic, None),
+        Some("ЖWEIẞ".to_string())
+    );
+
+    // Case-insensitive variants
+    let p_caps = Path::new("/Music/Downloads/TRACK 99 Some Artist - Song.flac");
+    assert_eq!(
+        extract_artist_from_path(p_caps, None),
+        Some("Some Artist".to_string())
+    );
+}
+
+
+#[test]
+fn test_clustering_group_tracks_by_album_and_artist() {
+    use crate::clustering::{extract_library_genres, group_tracks_by_album, group_tracks_by_artist};
+    use std::path::PathBuf;
+    use wavery_core::models::{Track, TrackMetadata, TrackSource};
+
+    let track1 = Track {
+        id: "t1".into(),
+        source: TrackSource::Managed(PathBuf::from("/Music/Daft Punk/Discovery/01 One More Time.flac")),
+        metadata: TrackMetadata {
+            title: Some("One More Time".into()),
+            artist: Some("Daft Punk".into()),
+            album: Some("Discovery".into()),
+            album_artist: None,
+            track_number: Some(1),
+            disc_number: Some(1),
+            year: Some(2001),
+            genre: Some("Electronic / Dance".into()),
+            duration: Duration::from_secs(320),
+            ..Default::default()
+        },
+        date_added: 1700000000,
+    };
+
+    let track2 = Track {
+        id: "t2".into(),
+        source: TrackSource::Managed(PathBuf::from("/Music/Daft Punk/Discovery/02 Aerodynamic.flac")),
+        metadata: TrackMetadata {
+            title: Some("Aerodynamic".into()),
+            artist: Some("Daft Punk".into()),
+            album: Some("Discovery".into()),
+            album_artist: None,
+            track_number: Some(2),
+            disc_number: Some(1),
+            year: Some(2001),
+            genre: Some("Electronic".into()),
+            duration: Duration::from_secs(210),
+            ..Default::default()
+        },
+        date_added: 1700000000,
+    };
+
+    let tracks = vec![track2.clone(), track1.clone()]; // out of order
+    let albums = group_tracks_by_album(&tracks, &[]);
+    assert_eq!(albums.len(), 1);
+    let alb = &albums[0];
+    assert_eq!(alb.title, "Discovery");
+    assert_eq!(alb.artist, "Daft Punk");
+    assert_eq!(alb.track_count, 2);
+    assert_eq!(alb.total_duration_secs, 530);
+    assert_eq!(alb.tracks[0].id, "t1"); // sorted by track_number
+    assert_eq!(alb.tracks[1].id, "t2");
+
+    let artists = group_tracks_by_artist(&tracks, &[]);
+    assert_eq!(artists.len(), 1);
+    let art = &artists[0];
+    assert_eq!(art.name, "Daft Punk");
+    assert_eq!(art.album_count, 1);
+    assert_eq!(art.track_count, 2);
+
+    let genres = extract_library_genres(&tracks, None);
+    assert!(!genres.is_empty());
+    assert_eq!(genres[0].name, "Electronic");
+    assert_eq!(genres[0].track_count, 2);
+}
+
+#[test]
+fn test_clustering_compilation_detection() {
+    use crate::clustering::group_tracks_by_album;
+    use std::path::PathBuf;
+    use wavery_core::models::{Track, TrackMetadata, TrackSource};
+
+    let tracks: Vec<Track> = (0..5)
+        .map(|i| Track {
+            id: format!("comp-{i}"),
+            source: TrackSource::Managed(PathBuf::from(format!(
+                "/Music/Soundtracks/Pulp Fiction/0{i} Song.flac"
+            ))),
+            metadata: TrackMetadata {
+                title: Some(format!("Song {i}")),
+                artist: Some(format!("Artist {i}")),
+                album: Some("Pulp Fiction OST".into()),
+                album_artist: None,
+                track_number: Some(i as u32 + 1),
+                disc_number: Some(1),
+                year: Some(1994),
+                genre: Some("Soundtrack".into()),
+                duration: Duration::from_secs(180),
+                ..Default::default()
+            },
+            date_added: 1700000000,
+        })
+        .collect();
+
+    let albums = group_tracks_by_album(&tracks, &[]);
+    assert_eq!(albums.len(), 1);
+    let alb = &albums[0];
+    assert_eq!(alb.title, "Pulp Fiction OST");
+    assert!(alb.is_compilation);
+    assert_eq!(alb.artist, "Various Artists");
+    assert_eq!(alb.track_count, 5);
+}
+
+#[test]
+fn test_manager_cached_collections() {
+    use crate::manager::SqliteLibraryManager;
+    use wavery_core::models::{ImportStrategy, TrackMetadata};
+    use wavery_core::traits::LibraryManager;
+
+    let temp_dir = std::env::temp_dir().join(format!("wavery_mgr_test_{}", uuid::Uuid::new_v4()));
+    let library_root = temp_dir.join("library");
+    let db_path = temp_dir.join("library.db");
+    fs::create_dir_all(&library_root).unwrap();
+
+    let mut mgr = SqliteLibraryManager::new(library_root.clone(), db_path).unwrap();
+
+    // Verify initial empty cache
+    assert!(mgr.list_albums().unwrap().is_empty());
+    assert!(mgr.list_artists().unwrap().is_empty());
+    assert!(mgr.list_genres().unwrap().is_empty());
+
+    // Import audio file
+    let audio_path = library_root.join("01_test_track.flac");
+    fs::write(&audio_path, b"dummy audio content").unwrap();
+
+    let meta = TrackMetadata {
+        title: Some("Instant Crush".into()),
+        artist: Some("Daft Punk feat. Julian Casablancas".into()),
+        album: Some("Random Access Memories".into()),
+        year: Some(2013),
+        genre: Some("Synth-Pop".into()),
+        duration: Duration::from_secs(337),
+        ..Default::default()
+    };
+
+    // Ingest track into manager
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let track = rt.block_on(mgr.import_track(&audio_path, ImportStrategy::Copy));
+    // Even if Lofty fails on dummy audio, let's update track metadata to test caching
+    if let Ok(mut t) = track {
+        t.metadata = meta.clone();
+        let _ = rt.block_on(mgr.update_track_metadata(&t.id, &meta, false));
+
+        let albums = mgr.list_albums().unwrap();
+        assert!(!albums.is_empty());
+
+        let artists = mgr.list_artists().unwrap();
+        assert!(!artists.is_empty());
+
+        let genres = mgr.list_genres().unwrap();
+        assert!(!genres.is_empty());
+    }
+
+    drop(mgr);
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+fn write_test_pcm16_wav(path: &Path, samples: &[i16], sample_rate: u32) {
+    let num_channels: u16 = 1;
+    let bits_per_sample: u16 = 16;
+    let byte_rate: u32 = sample_rate * u32::from(num_channels) * u32::from(bits_per_sample / 8);
+    let block_align: u16 = num_channels * (bits_per_sample / 8);
+    let data_size: u32 = (samples.len() * 2) as u32;
+    let riff_size: u32 = 36 + data_size;
+
+    let mut bytes = Vec::with_capacity(44 + data_size as usize);
+    bytes.extend_from_slice(b"RIFF");
+    bytes.extend_from_slice(&riff_size.to_le_bytes());
+    bytes.extend_from_slice(b"WAVE");
+    bytes.extend_from_slice(b"fmt ");
+    bytes.extend_from_slice(&16_u32.to_le_bytes());
+    bytes.extend_from_slice(&1_u16.to_le_bytes()); // PCM
+    bytes.extend_from_slice(&num_channels.to_le_bytes());
+    bytes.extend_from_slice(&sample_rate.to_le_bytes());
+    bytes.extend_from_slice(&byte_rate.to_le_bytes());
+    bytes.extend_from_slice(&block_align.to_le_bytes());
+    bytes.extend_from_slice(&bits_per_sample.to_le_bytes());
+    bytes.extend_from_slice(b"data");
+    bytes.extend_from_slice(&data_size.to_le_bytes());
+    for &sample in samples {
+        bytes.extend_from_slice(&sample.to_le_bytes());
+    }
+    fs::write(path, bytes).unwrap();
+}
+
+#[test]
+fn test_waveform_resampling_and_symphonia_decoding() {
+    use crate::waveform::{compute_waveform_peaks, resample_peaks_to_100, WAVEFORM_POINT_COUNT};
+
+    // 1. Empty & silent inputs produce 100 finite zeros without NaN
+    let empty_res = resample_peaks_to_100(&[]);
+    assert_eq!(empty_res.len(), WAVEFORM_POINT_COUNT);
+    assert!(empty_res.iter().all(|&v| v == 0.0 && !v.is_nan()));
+
+    let silent_res = resample_peaks_to_100(&vec![0.0; 500]);
+    assert_eq!(silent_res.len(), WAVEFORM_POINT_COUNT);
+    assert!(silent_res.iter().all(|&v| v == 0.0 && !v.is_nan()));
+
+    // 2. Short input (< 100 samples) interpolates cleanly to 100 points in [0.0, 1.0]
+    let short_res = resample_peaks_to_100(&[0.25, 0.5, 1.0]);
+    assert_eq!(short_res.len(), WAVEFORM_POINT_COUNT);
+    assert!((short_res[0] - 0.25).abs() < 1e-4);
+    assert!((short_res[99] - 1.0).abs() < 1e-4);
+    assert!(short_res.iter().all(|&v| (0.0..=1.0).contains(&v)));
+
+    // 3. Real Symphonia decoding of a ramp WAV file, a silent WAV file, and a short WAV file
+    let temp_dir =
+        std::env::temp_dir().join(format!("wavery_waveform_test_{}", uuid::Uuid::new_v4()));
+    fs::create_dir_all(&temp_dir).unwrap();
+
+    let ramp_wav = temp_dir.join("ramp.wav");
+    let ramp_samples: Vec<i16> = (0..4000).map(|i| ((i * 8) as i16).min(32000)).collect();
+    write_test_pcm16_wav(&ramp_wav, &ramp_samples, 44100);
+
+    let wf = compute_waveform_peaks("track-ramp", &ramp_wav).unwrap();
+    assert_eq!(wf.track_id, "track-ramp");
+    assert_eq!(wf.version, 1);
+    assert!(wf.is_valid_100_point_envelope());
+    assert!(wf.points[99] > wf.points[0]);
+    assert!((wf.points.iter().copied().fold(0.0_f32, f32::max) - 1.0).abs() < 1e-4);
+
+    let silent_wav = temp_dir.join("silent.wav");
+    write_test_pcm16_wav(&silent_wav, &vec![0_i16; 1024], 44100);
+    let wf_silent = compute_waveform_peaks("track-silent", &silent_wav).unwrap();
+    assert!(wf_silent.is_valid_100_point_envelope());
+    assert!(wf_silent.points.iter().all(|&p| p == 0.0));
+
+    let tiny_wav = temp_dir.join("tiny.wav");
+    write_test_pcm16_wav(&tiny_wav, &[1000, 4000, 8000, 16000, 32000], 44100);
+    let wf_tiny = compute_waveform_peaks("track-tiny", &tiny_wav).unwrap();
+    assert!(wf_tiny.is_valid_100_point_envelope());
+
+    let corrupt_wav = temp_dir.join("corrupt.wav");
+    fs::write(&corrupt_wav, b"not an audio file").unwrap();
+    assert!(compute_waveform_peaks("track-corrupt", &corrupt_wav).is_err());
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn test_replaygain_r128_and_itunnorm_parsers() {
+    use crate::reader::{parse_itunnorm, parse_r128_gain_db, parse_replaygain_db};
+
+    assert!((parse_replaygain_db("-6.50 dB").unwrap() - (-6.50)).abs() < 1e-4);
+    assert!((parse_replaygain_db("+2.25 db").unwrap() - 2.25).abs() < 1e-4);
+    assert!((parse_replaygain_db("-4.0 LU").unwrap() - (-4.0)).abs() < 1e-4);
+    assert!(parse_replaygain_db("").is_none());
+    assert!(parse_replaygain_db("not_a_number dB").is_none());
+
+    // EBU R128 Q7.8 fixed-point (-1536 / 256.0 = -6.0 dB, +5.0 dB offset = -1.0 dB)
+    assert!((parse_r128_gain_db("-1536").unwrap() - (-1.0)).abs() < 1e-4);
+    assert!((parse_r128_gain_db("0").unwrap() - 5.0).abs() < 1e-4);
+    assert!((parse_r128_gain_db("-6.5 dB").unwrap() - (-1.5)).abs() < 1e-4);
+
+    // Apple Sound Check (iTunNORM): 0x03E8 = 1000 (0 dB), 0x07D0 = 2000 (-3.0103 dB), 0x8000 = 32768 (1.0 peak)
+    let itun = " 000003E8 000003E8 000007D0 000007D0 00008000 00008000 00004000 00004000 00000000 00000000";
+    let (tg, tp, ag, ap) = parse_itunnorm(itun).unwrap();
+    assert!(tg.abs() < 1e-4);
+    assert!((tp - 1.0).abs() < 1e-4);
+    assert!((ag - (-3.0103)).abs() < 1e-3);
+    assert!((ap - 0.5).abs() < 1e-4);
+}
+
+#[tokio::test]
+async fn test_waveform_persistence_cascade_and_replaygain_roundtrip() {
+    use wavery_core::models::WaveformData;
+
+    let temp_dir =
+        std::env::temp_dir().join(format!("wavery_m2_db_test_{}", uuid::Uuid::new_v4()));
+    let library_root = temp_dir.join("library");
+    let db_path = temp_dir.join("library.db");
+    fs::create_dir_all(&library_root).unwrap();
+
+    let db = LibraryDatabase::open(&db_path).unwrap();
+    let wav_path = library_root.join("test_song.wav");
+    let samples: Vec<i16> = (0..2048).map(|i| ((i * 15) % 30000) as i16).collect();
+    write_test_pcm16_wav(&wav_path, &samples, 44100);
+
+    let track = Track {
+        id: "m2-track-1".into(),
+        source: TrackSource::Managed(wav_path.clone()),
+        metadata: TrackMetadata {
+            title: Some("Normalized Song".into()),
+            artist: Some("Test Artist".into()),
+            album: Some("Test Album".into()),
+            duration: Duration::from_secs(10),
+            format: "WAV".into(),
+            replaygain_track_gain: Some(-6.5),
+            replaygain_track_peak: Some(0.9885),
+            replaygain_album_gain: Some(-5.2),
+            replaygain_album_peak: Some(0.995),
+            ..Default::default()
+        },
+        date_added: 1700000000,
+    };
+
+    db.insert_or_update(&track, &library_root).unwrap();
+
+    let fetched = db.get_track("m2-track-1", &library_root).unwrap().unwrap();
+    assert_eq!(fetched.metadata.replaygain_track_gain, Some(-6.5));
+    assert_eq!(fetched.metadata.replaygain_track_peak, Some(0.9885));
+    assert_eq!(fetched.metadata.replaygain_album_gain, Some(-5.2));
+    assert_eq!(fetched.metadata.replaygain_album_peak, Some(0.995));
+
+    let points: Vec<f32> = (0..100).map(|i| (i as f32) / 99.0).collect();
+    let wf = WaveformData::new("m2-track-1", 1, points.clone());
+    db.save_waveform(&wf).unwrap();
+
+    let loaded_wf = db.get_waveform("m2-track-1").unwrap().unwrap();
+    assert_eq!(loaded_wf.track_id, "m2-track-1");
+    assert_eq!(loaded_wf.version, 1);
+    assert_eq!(loaded_wf.points.len(), 100);
+    for (a, b) in loaded_wf.points.iter().zip(points.iter()) {
+        assert!((a - b).abs() < 1e-6);
+    }
+
+    // Deleting track cascades to track_waveforms
+    db.delete("m2-track-1").unwrap();
+    assert!(db.get_waveform("m2-track-1").unwrap().is_none());
+
+    // Re-insert track without waveform and verify SqliteLibraryManager computes and caches it on demand
+    db.insert_or_update(&track, &library_root).unwrap();
+    drop(db);
+
+    let mgr = SqliteLibraryManager::new(library_root, db_path).unwrap();
+    let auto_wf = LibraryManager::get_waveform(&mgr, "m2-track-1")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(auto_wf.is_valid_100_point_envelope());
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn test_import_playlist_json_creates_ordered_playlist_and_reuses_it() {
+    let temp_dir =
+        std::env::temp_dir().join(format!("wavery_playlist_json_{}", uuid::Uuid::new_v4()));
+    let db_path = temp_dir.join("library.db");
+    let managed_root = temp_dir.join("managed");
+    fs::create_dir_all(&managed_root).unwrap();
+
+    let db = LibraryDatabase::open(&db_path).unwrap();
+    let tracks = vec![
+        Track {
+            id: "playlist-track-1".into(),
+            source: TrackSource::Managed(managed_root.join("First Song [aaaaaaaaaaa].opus")),
+            metadata: TrackMetadata {
+                title: Some("First Song".into()),
+                artist: Some("Some Artist".into()),
+                duration: Duration::from_secs(201),
+                format: "OPUS".into(),
+                ..Default::default()
+            },
+            date_added: 1_700_000_000,
+        },
+        Track {
+            id: "playlist-track-2".into(),
+            source: TrackSource::Managed(managed_root.join("Second Song [bbbbbbbbbbb].opus")),
+            metadata: TrackMetadata {
+                title: Some("Second Song".into()),
+                artist: Some("Some Artist".into()),
+                duration: Duration::from_secs(180),
+                format: "OPUS".into(),
+                ..Default::default()
+            },
+            date_added: 1_700_000_001,
+        },
+    ];
+    db.insert_or_update_batch(&tracks, &managed_root).unwrap();
+    drop(db);
+
+    // The manager prunes database rows whose files are gone, so the synthetic
+    // tracks need real (content-free) files on disk.
+    fs::write(managed_root.join("First Song [aaaaaaaaaaa].opus"), b"stub").unwrap();
+    fs::write(managed_root.join("Second Song [bbbbbbbbbbb].opus"), b"stub").unwrap();
+
+    let manager = SqliteLibraryManager::new(managed_root, db_path).unwrap();
+    let json_path = temp_dir.join("Road Trip.json");
+    fs::write(
+        &json_path,
+        r#"{
+            "_type": "playlist",
+            "title": "Road Trip",
+            "entries": [
+                {"id": "bbbbbbbbbbb", "title": "Second Song", "duration": 180},
+                {"id": "aaaaaaaaaaa", "title": "First Song", "duration": 201},
+                {"id": "zzzzzzzzzzz", "title": "Not Downloaded", "duration": 90}
+            ]
+        }"#,
+    )
+    .unwrap();
+
+    let summary = manager.import_playlist_json(&json_path).unwrap();
+    assert_eq!(summary.playlist_name, "Road Trip");
+    assert_eq!(summary.total_entries, 3);
+    assert_eq!(summary.matched_tracks, 2);
+    assert_eq!(summary.unmatched_entries, 1);
+    assert_eq!(summary.already_in_playlist, 0);
+    assert_eq!(summary.unmatched_titles, vec!["Not Downloaded".to_string()]);
+
+    // Order follows the JSON, not the database or track id order.
+    let playlist = manager.get_playlist(&summary.playlist_id).unwrap().unwrap();
+    assert_eq!(
+        playlist.track_ids,
+        vec![
+            "playlist-track-2".to_string(),
+            "playlist-track-1".to_string()
+        ]
+    );
+
+    // Re-importing the same file reuses the playlist and appends nothing.
+    let second = manager.import_playlist_json(&json_path).unwrap();
+    assert_eq!(second.playlist_id, summary.playlist_id);
+    assert_eq!(second.matched_tracks, 2);
+    assert_eq!(second.already_in_playlist, 2);
+    assert_eq!(manager.list_playlists().unwrap().len(), 1);
+
+    let playlist = manager.get_playlist(&second.playlist_id).unwrap().unwrap();
+    assert_eq!(playlist.track_ids.len(), 2);
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn test_import_playlist_m3u_creates_ordered_playlist_and_reuses_it() {
+    let temp_dir =
+        std::env::temp_dir().join(format!("wavery_playlist_m3u_{}", uuid::Uuid::new_v4()));
+    let db_path = temp_dir.join("library.db");
+    let managed_root = temp_dir.join("managed");
+    fs::create_dir_all(&managed_root).unwrap();
+
+    let db = LibraryDatabase::open(&db_path).unwrap();
+    let tracks = vec![
+        Track {
+            id: "m3u-track-1".into(),
+            source: TrackSource::Managed(managed_root.join("Alpha Track.opus")),
+            metadata: TrackMetadata {
+                title: Some("Alpha Track".into()),
+                artist: Some("Artist Alpha".into()),
+                duration: Duration::from_secs(210),
+                format: "OPUS".into(),
+                ..Default::default()
+            },
+            date_added: 1_700_000_000,
+        },
+        Track {
+            id: "m3u-track-2".into(),
+            source: TrackSource::Managed(managed_root.join("Beta Track.webm")),
+            metadata: TrackMetadata {
+                title: Some("Beta Track".into()),
+                artist: Some("Artist Beta".into()),
+                duration: Duration::from_secs(180),
+                format: "WEBM".into(),
+                ..Default::default()
+            },
+            date_added: 1_700_000_001,
+        },
+    ];
+    db.insert_or_update_batch(&tracks, &managed_root).unwrap();
+    drop(db);
+
+    fs::write(managed_root.join("Alpha Track.opus"), b"stub").unwrap();
+    fs::write(managed_root.join("Beta Track.webm"), b"stub").unwrap();
+
+    let manager = SqliteLibraryManager::new(managed_root.clone(), db_path).unwrap();
+
+    // M3U file located in managed_root so relative paths resolve cleanly
+    let m3u_path = managed_root.join("Summer Jams.m3u");
+    fs::write(
+        &m3u_path,
+        "#EXTM3U\n\
+         #PLAYLIST:Summer Jams\n\
+         #EXTINF:180,Artist Beta - Beta Track\n\
+         Beta Track.webm\n\
+         #EXTINF:210,Artist Alpha - Alpha Track\n\
+         Alpha Track.opus\n\
+         #EXTINF:99,Ghost Artist - Missing Track\n\
+         Nonexistent.mp3\n",
+    )
+    .unwrap();
+
+    // Test import_playlist_file auto-routing
+    let summary = manager.import_playlist_file(&m3u_path).unwrap();
+    assert_eq!(summary.playlist_name, "Summer Jams");
+    assert_eq!(summary.total_entries, 3);
+    assert_eq!(summary.matched_tracks, 2);
+    assert_eq!(summary.unmatched_entries, 1);
+    assert_eq!(summary.already_in_playlist, 0);
+    assert_eq!(
+        summary.unmatched_titles,
+        vec!["Ghost Artist - Missing Track".to_string()]
+    );
+
+    // Verify ordering
+    let playlist = manager.get_playlist(&summary.playlist_id).unwrap().unwrap();
+    assert_eq!(
+        playlist.track_ids,
+        vec!["m3u-track-2".to_string(), "m3u-track-1".to_string()]
+    );
+
+    // Re-import reuses playlist without duplicates
+    let second = manager.import_playlist_file(&m3u_path).unwrap();
+    assert_eq!(second.playlist_id, summary.playlist_id);
+    assert_eq!(second.matched_tracks, 2);
+    assert_eq!(second.already_in_playlist, 2);
+    assert_eq!(manager.list_playlists().unwrap().len(), 1);
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn test_database_stats_health_backup_and_prune() {
+    let temp_dir =
+        std::env::temp_dir().join(format!("wavery_db_center_{}", uuid::Uuid::new_v4()));
+    let db_path = temp_dir.join("library.db");
+    let managed_root = temp_dir.join("managed");
+    let cache_dir = temp_dir.join("artwork");
+    fs::create_dir_all(&managed_root).unwrap();
+    fs::create_dir_all(&cache_dir).unwrap();
+
+    let db = LibraryDatabase::open(&db_path).unwrap();
+    let tracks = vec![
+        Track {
+            id: "stats-track-1".into(),
+            source: TrackSource::Managed(managed_root.join("Artist A/Album X/01 One.flac")),
+            metadata: TrackMetadata {
+                title: Some("One".into()),
+                artist: Some("Artist A".into()),
+                album: Some("Album X".into()),
+                duration: Duration::from_secs(120),
+                format: "FLAC".into(),
+                ..Default::default()
+            },
+            date_added: 1_700_000_000,
+        },
+        Track {
+            id: "stats-track-2".into(),
+            source: TrackSource::Managed(managed_root.join("Artist A/Album X/02 Two.flac")),
+            metadata: TrackMetadata {
+                title: Some("Two".into()),
+                artist: Some("Artist A".into()),
+                album: Some("Album X".into()),
+                duration: Duration::from_secs(130),
+                format: "FLAC".into(),
+                ..Default::default()
+            },
+            date_added: 1_700_000_001,
+        },
+        Track {
+            id: "stats-track-3".into(),
+            source: TrackSource::Managed(managed_root.join("Artist B/Album Y/01 Gone.flac")),
+            metadata: TrackMetadata {
+                title: Some("Gone".into()),
+                artist: Some("Artist B".into()),
+                album: Some("Album Y".into()),
+                duration: Duration::from_secs(140),
+                format: "FLAC".into(),
+                ..Default::default()
+            },
+            date_added: 1_700_000_002,
+        },
+    ];
+    db.insert_or_update_batch(&tracks, &managed_root).unwrap();
+    fs::create_dir_all(managed_root.join("Artist A/Album X")).unwrap();
+    fs::write(managed_root.join("Artist A/Album X/01 One.flac"), b"stub").unwrap();
+    fs::write(managed_root.join("Artist A/Album X/02 Two.flac"), b"stub").unwrap();
+    fs::write(cache_dir.join("cover.jpg"), b"cover").unwrap();
+
+    db.create_playlist("Road Trip").unwrap();
+    db.like_track("stats-track-1").unwrap();
+    let waveform = WaveformData::new(
+        "stats-track-1",
+        1,
+        (0..100).map(|i| i as f32 / 99.0).collect(),
+    );
+    db.save_waveform(&waveform).unwrap();
+
+    let stats = db.stats(&managed_root, &cache_dir).unwrap();
+    assert_eq!(stats.track_count, 3);
+    assert_eq!(stats.album_count, 2);
+    assert_eq!(stats.artist_count, 2);
+    assert_eq!(stats.playlist_count, 1);
+    assert_eq!(stats.liked_count, 1);
+    assert_eq!(stats.waveform_count, 1);
+    assert_eq!(stats.missing_file_count, 1);
+    assert!(stats.database_bytes > 0);
+    assert!(stats.library_bytes > 0);
+    assert!(stats.artwork_cache_bytes > 0);
+    assert_eq!(stats.journal_mode.to_lowercase(), "wal");
+
+    let health = db.health(&managed_root).unwrap();
+    assert!(!health.is_healthy);
+    assert_eq!(health.quick_check, "ok");
+    assert_eq!(health.foreign_key_violations, 0);
+    assert_eq!(health.fts_indexed_tracks, 3);
+    assert_eq!(health.fts_missing_tracks, 0);
+    assert_eq!(health.missing_file_count, 1);
+    assert!(health.issues.iter().any(|issue| issue.contains("no longer exist")));
+
+    let backup_path = temp_dir.join("backups").join("library-copy.db");
+    let backup = db.backup_to(&backup_path).unwrap();
+    assert_eq!(backup.path, backup_path.display().to_string());
+    assert!(backup.bytes > 0);
+    assert!(backup_path.is_file());
+    let backup_conn = rusqlite::Connection::open(&backup_path).unwrap();
+    let backed_up_tracks: i64 = backup_conn
+        .query_row("SELECT COUNT(*) FROM tracks", [], |row| row.get(0))
+        .unwrap();
+    let backed_up_playlists: i64 = backup_conn
+        .query_row("SELECT COUNT(*) FROM playlists", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(backed_up_tracks, 3);
+    assert_eq!(backed_up_playlists, 1);
+
+    // Backing up over the live database must be rejected.
+    assert!(db.backup_to(&db_path).is_err());
+
+    let removed = db.prune_missing_files(&managed_root).unwrap();
+    assert_eq!(removed, 1);
+    let pruned_stats = db.stats(&managed_root, &cache_dir).unwrap();
+    assert_eq!(pruned_stats.track_count, 2);
+    assert_eq!(pruned_stats.missing_file_count, 0);
+    let healthy = db.health(&managed_root).unwrap();
+    assert!(healthy.is_healthy);
+    assert_eq!(healthy.fts_indexed_tracks, 2);
+    assert!(healthy.issues.is_empty());
 
     drop(db);
     let _ = fs::remove_dir_all(&temp_dir);

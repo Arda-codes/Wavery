@@ -354,3 +354,47 @@ fn challenge_default_config_path_resolution() {
         path
     );
 }
+
+#[test]
+fn challenge_server_lan_mode_and_replay_gain_adversarial() {
+    // 1. Deserialization of LAN enabled host
+    let lan_toml = r#"
+[server]
+host = "0.0.0.0"
+port = 4242
+"#;
+    let cfg: Config = toml::from_str(lan_toml).expect("LAN TOML must parse");
+    assert!(cfg.server.is_lan_enabled());
+    assert_eq!(cfg.server.host, "0.0.0.0");
+
+    // 2. Deserialization of empty host and sanitization
+    let empty_host_toml = r#"
+[server]
+host = ""
+"#;
+    let mut cfg2: Config = toml::from_str(empty_host_toml).expect("Empty host TOML must parse");
+    cfg2.sanitize();
+    assert_eq!(cfg2.server.host, "127.0.0.1");
+    assert!(!cfg2.server.is_lan_enabled());
+
+    // 3. Deserialization of invalid replay gain mode and sanitization
+    let bad_audio_toml = r#"
+[audio]
+replay_gain_mode = "mega_bass_boost"
+"#;
+    let mut cfg3: Config = toml::from_str(bad_audio_toml).expect("Bad audio TOML must parse");
+    cfg3.sanitize();
+    assert_eq!(cfg3.audio.replay_gain_mode, "off");
+    assert!(!cfg3.audio.is_replay_gain_enabled());
+
+    // 4. Case insensitive valid replay gain modes
+    let track_audio_toml = r#"
+[audio]
+replay_gain_mode = "TrAcK"
+"#;
+    let mut cfg4: Config = toml::from_str(track_audio_toml).expect("Track audio TOML must parse");
+    cfg4.sanitize();
+    assert_eq!(cfg4.audio.replay_gain_mode, "track");
+    assert!(cfg4.audio.is_replay_gain_enabled());
+}
+

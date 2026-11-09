@@ -1,7 +1,7 @@
-import React from "react";
-import { useEnrichmentStore } from "../stores/enrichmentStore";
+import React, { useMemo } from "react";
+import { useEnrichmentStore, trackNeedsEnrichment } from "../stores/enrichmentStore";
 import {
-  Sparkles,
+  CloudDownload,
   X,
   Play,
   Pause,
@@ -11,6 +11,7 @@ import {
   Sliders,
   Check,
 } from "lucide-react";
+import { useTransitionMount } from "../utils/useTransitionMount";
 
 export const BatchEnrichmentModal: React.FC = () => {
   const {
@@ -25,6 +26,7 @@ export const BatchEnrichmentModal: React.FC = () => {
     currentTrackTitle,
     log,
     options,
+    tracksQueue,
     closeModal,
     setOptions,
     startEnrichment,
@@ -33,25 +35,41 @@ export const BatchEnrichmentModal: React.FC = () => {
     cancelEnrichment,
   } = useEnrichmentStore();
 
-  if (!isOpen) return null;
+  /**
+   * Tracks that still have at least one selected field missing. With "only
+   * fill missing fields" enabled this is the exact set that will be processed;
+   * the rest are skipped without a network request.
+   */
+  const pendingCount = useMemo(
+    () => tracksQueue.filter((track) => trackNeedsEnrichment(track, options)).length,
+    [tracksQueue, options]
+  );
+
+  const { isRendered, isExiting } = useTransitionMount(isOpen, 160);
+
+  if (!isRendered) return null;
 
   const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
   const isFinished = !isRunning && completed > 0 && completed === total;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md ${
+        isExiting ? "animate-backdrop-out" : "animate-backdrop-in"
+      }`}
+    >
       <div
-        className="bg-surface/95 backdrop-blur-xl border border-white/[0.08] w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden animate-scaleUp"
+        className={`bg-surface/95 backdrop-blur-xl border border-white/[0.08] w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden ${
+          isExiting ? "animate-scale-down pointer-events-none" : "animate-scale-up"
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06] flex-shrink-0">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent">
-              <Sparkles className="w-5 h-5" />
-            </div>
+            <CloudDownload className="w-5 h-5 text-accent flex-shrink-0" />
             <div>
-              <h2 className="text-sm font-bold text-white flex items-center gap-2">
+              <h2 className="text-sm font-semibold text-white flex items-center gap-2">
                 Batch Metadata & Lyrics Enrichment
                 <span className="text-2xs font-normal px-2 py-1 rounded-full bg-white/[0.06] text-textSecondary">
                   {total} {total === 1 ? "track" : "tracks"}
@@ -77,13 +95,28 @@ export const BatchEnrichmentModal: React.FC = () => {
           {!isRunning && !isFinished && (
             <div className="bg-deck/60 border border-white/[0.06] rounded-xl p-4 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-textSecondary uppercase tracking-wider flex items-center gap-2">
-                  <Sliders className="w-3.5 h-3.5" />
+                <span className="text-xs font-bold text-white flex items-center gap-2">
+                  <Sliders className="w-3.5 h-3.5 text-accent" />
                   Enrichment Options
                 </span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <label className="flex items-start space-x-3 cursor-pointer select-none text-textSecondary hover:text-white transition sm:col-span-2">
+                  <input
+                    type="checkbox"
+                    checked={options.onlyMissing}
+                    onChange={(e) => setOptions({ onlyMissing: e.target.checked })}
+                    className="mt-1 w-4 h-4 rounded bg-surface border-white/[0.12] text-accent accent-accent"
+                  />
+                  <span>
+                    Only fill missing fields
+                    <span className="block text-2xs text-textMuted mt-1">
+                      Tracks that already have lyrics, year, and genre are skipped without a lookup.
+                    </span>
+                  </span>
+                </label>
+
                 <label className="flex items-center space-x-3 cursor-pointer select-none text-textSecondary hover:text-white transition">
                   <input
                     type="checkbox"
@@ -91,7 +124,7 @@ export const BatchEnrichmentModal: React.FC = () => {
                     onChange={(e) => setOptions({ fetchMetadata: e.target.checked })}
                     className="w-4 h-4 rounded bg-surface border-white/[0.12] text-accent accent-accent"
                   />
-                  <span>Release Year, Genre, Track #</span>
+                  <span>Fetch year, genre, and track numbers</span>
                 </label>
 
                 <label className="flex items-center space-x-3 cursor-pointer select-none text-textSecondary hover:text-white transition">
@@ -101,7 +134,7 @@ export const BatchEnrichmentModal: React.FC = () => {
                     onChange={(e) => setOptions({ fetchLyrics: e.target.checked })}
                     className="w-4 h-4 rounded bg-surface border-white/[0.12] text-accent accent-accent"
                   />
-                  <span>Time-Synced & Plain Lyrics</span>
+                  <span>Fetch time-synced and plain lyrics</span>
                 </label>
 
                 <label className="flex items-center space-x-3 cursor-pointer select-none text-textSecondary hover:text-white transition">
@@ -111,19 +144,39 @@ export const BatchEnrichmentModal: React.FC = () => {
                     onChange={(e) => setOptions({ writeTags: e.target.checked })}
                     className="w-4 h-4 rounded bg-surface border-white/[0.12] text-accent accent-accent"
                   />
-                  <span>Write tags to audio files</span>
+                  <span>Save tags directly to audio files</span>
                 </label>
 
-                <label className="flex items-center space-x-3 cursor-pointer select-none text-textSecondary hover:text-white transition">
+                <label
+                  className={`flex items-center space-x-3 select-none transition ${
+                    options.onlyMissing
+                      ? "opacity-40 cursor-not-allowed text-textMuted"
+                      : "cursor-pointer text-textSecondary hover:text-white"
+                  }`}
+                  title={
+                    options.onlyMissing
+                      ? "Turn off 'Only fill missing fields' to replace existing tags"
+                      : undefined
+                  }
+                >
                   <input
                     type="checkbox"
-                    checked={options.overwriteExisting}
+                    checked={options.overwriteExisting && !options.onlyMissing}
+                    disabled={options.onlyMissing}
                     onChange={(e) => setOptions({ overwriteExisting: e.target.checked })}
-                    className="w-4 h-4 rounded bg-surface border-white/[0.12] text-accent accent-accent"
+                    className="w-4 h-4 rounded bg-surface border-white/[0.12] text-accent accent-accent disabled:cursor-not-allowed"
                   />
-                  <span>Overwrite existing tags</span>
+                  <span>Replace existing metadata tags</span>
                 </label>
               </div>
+
+              <p className="text-2xs text-textMuted">
+                {pendingCount === 0
+                  ? "Every selected track already has the fields you chose. Nothing to fetch."
+                  : options.onlyMissing
+                    ? `${pendingCount} of ${total} ${total === 1 ? "track needs" : "tracks need"} enrichment; the rest already have the selected fields.`
+                    : `${pendingCount} of ${total} ${total === 1 ? "track will" : "tracks will"} be checked.`}
+              </p>
             </div>
           )}
 
@@ -177,7 +230,7 @@ export const BatchEnrichmentModal: React.FC = () => {
           {/* Live Activity Log */}
           {log.length > 0 && (
             <div className="space-y-2">
-              <span className="text-2xs font-semibold text-textMuted uppercase tracking-wider">
+              <span className="text-xs font-semibold text-textSecondary">
                 Activity Stream
               </span>
               <div className="bg-deck/70 border border-white/[0.06] rounded-xl p-3 max-h-48 overflow-y-auto space-y-2 font-mono text-xs">
@@ -196,8 +249,8 @@ export const BatchEnrichmentModal: React.FC = () => {
                           {item.details.join(", ")}
                         </span>
                       ) : item.status === "skipped" ? (
-                        <span className="px-2 py-1 rounded bg-white/[0.04] text-textMuted">
-                          Skipped
+                        <span className="px-2 py-1 rounded bg-white/[0.04] text-textMuted border border-white/[0.04]">
+                          {item.details[0] || "Already up to date"}
                         </span>
                       ) : (
                         <span className="px-2 py-1 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20">
@@ -219,7 +272,7 @@ export const BatchEnrichmentModal: React.FC = () => {
               ? "Running in background • Safe to minimize"
               : isFinished
               ? "All tracks successfully processed."
-              : "Grouped by album for maximum efficiency."}
+              : "Metadata and artwork will be automatically retrieved for selected tracks."}
           </div>
 
           <div className="flex items-center space-x-3">
@@ -262,10 +315,12 @@ export const BatchEnrichmentModal: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => void startEnrichment()}
-                  className="inline-flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-semibold text-white bg-accent-fill hover:bg-accentHover active:scale-98 transition shadow-lg shadow-accent/20"
+                  disabled={pendingCount === 0}
+                  title={pendingCount === 0 ? "Nothing to enrich with the current options" : undefined}
+                  className="inline-flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-semibold text-white bg-accent-fill hover:bg-accentHover active:scale-98 transition shadow-lg shadow-accent/20 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Start Mass Fill</span>
+                  <CloudDownload className="w-3.5 h-3.5" />
+                  <span>Start Enrichment</span>
                 </button>
               </>
             )}

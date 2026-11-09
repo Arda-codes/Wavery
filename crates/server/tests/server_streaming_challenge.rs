@@ -18,7 +18,8 @@ struct TestFixture {
 
 impl TestFixture {
     async fn new(file_size: usize) -> Self {
-        let temp_dir = std::env::temp_dir().join(format!("wavery_srv_challenge_{}", uuid::Uuid::new_v4()));
+        let temp_dir =
+            std::env::temp_dir().join(format!("wavery_srv_challenge_{}", uuid::Uuid::new_v4()));
         let lib_dir = temp_dir.join("library");
         let db_path = temp_dir.join("library.db");
         fs::create_dir_all(&lib_dir).unwrap();
@@ -32,7 +33,10 @@ impl TestFixture {
             f.write_all(&expected_data).unwrap();
         }
 
-        let track = manager.import_track(&song_path, ImportStrategy::Copy).await.unwrap();
+        let track = manager
+            .import_track(&song_path, ImportStrategy::Copy)
+            .await
+            .unwrap();
 
         let state = Arc::new(AppState::new(
             Arc::new(tokio::sync::Mutex::new(manager)),
@@ -71,7 +75,10 @@ async fn test_challenge_single_byte_file_range_boundaries() {
         .unwrap();
     let res = fixture.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::PARTIAL_CONTENT);
-    assert_eq!(res.headers().get(header::CONTENT_RANGE).unwrap(), "bytes 0-0/1");
+    assert_eq!(
+        res.headers().get(header::CONTENT_RANGE).unwrap(),
+        "bytes 0-0/1"
+    );
     assert_eq!(res.headers().get(header::CONTENT_LENGTH).unwrap(), "1");
     let body = to_bytes(res.into_body(), 1024).await.unwrap();
     assert_eq!(&body[..], &fixture.expected_data[0..1]);
@@ -84,7 +91,10 @@ async fn test_challenge_single_byte_file_range_boundaries() {
         .unwrap();
     let res = fixture.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::PARTIAL_CONTENT);
-    assert_eq!(res.headers().get(header::CONTENT_RANGE).unwrap(), "bytes 0-0/1");
+    assert_eq!(
+        res.headers().get(header::CONTENT_RANGE).unwrap(),
+        "bytes 0-0/1"
+    );
     assert_eq!(res.headers().get(header::CONTENT_LENGTH).unwrap(), "1");
 
     // 3. bytes=-1 -> 206 Partial Content (1 byte)
@@ -95,7 +105,10 @@ async fn test_challenge_single_byte_file_range_boundaries() {
         .unwrap();
     let res = fixture.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::PARTIAL_CONTENT);
-    assert_eq!(res.headers().get(header::CONTENT_RANGE).unwrap(), "bytes 0-0/1");
+    assert_eq!(
+        res.headers().get(header::CONTENT_RANGE).unwrap(),
+        "bytes 0-0/1"
+    );
     assert_eq!(res.headers().get(header::CONTENT_LENGTH).unwrap(), "1");
 
     // 4. Out-of-bounds start: bytes=1-1 -> 416
@@ -106,7 +119,10 @@ async fn test_challenge_single_byte_file_range_boundaries() {
         .unwrap();
     let res = fixture.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::RANGE_NOT_SATISFIABLE);
-    assert_eq!(res.headers().get(header::CONTENT_RANGE).unwrap(), "bytes */1");
+    assert_eq!(
+        res.headers().get(header::CONTENT_RANGE).unwrap(),
+        "bytes */1"
+    );
 
     // 5. Out-of-bounds open: bytes=1- -> 416
     let req = Request::builder()
@@ -125,7 +141,10 @@ async fn test_challenge_single_byte_file_range_boundaries() {
         .unwrap();
     let res = fixture.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::PARTIAL_CONTENT);
-    assert_eq!(res.headers().get(header::CONTENT_RANGE).unwrap(), "bytes 0-0/1");
+    assert_eq!(
+        res.headers().get(header::CONTENT_RANGE).unwrap(),
+        "bytes 0-0/1"
+    );
     assert_eq!(res.headers().get(header::CONTENT_LENGTH).unwrap(), "1");
 }
 
@@ -144,7 +163,10 @@ async fn test_challenge_exact_byte_boundaries_and_clamping() {
         .unwrap();
     let res = fixture.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::PARTIAL_CONTENT);
-    assert_eq!(res.headers().get(header::CONTENT_RANGE).unwrap(), "bytes 0-0/5000");
+    assert_eq!(
+        res.headers().get(header::CONTENT_RANGE).unwrap(),
+        "bytes 0-0/5000"
+    );
     assert_eq!(res.headers().get(header::CONTENT_LENGTH).unwrap(), "1");
     let body = to_bytes(res.into_body(), 1024).await.unwrap();
     assert_eq!(&body[..], &fixture.expected_data[0..1]);
@@ -157,7 +179,10 @@ async fn test_challenge_exact_byte_boundaries_and_clamping() {
         .unwrap();
     let res = fixture.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::PARTIAL_CONTENT);
-    assert_eq!(res.headers().get(header::CONTENT_RANGE).unwrap(), "bytes 4999-4999/5000");
+    assert_eq!(
+        res.headers().get(header::CONTENT_RANGE).unwrap(),
+        "bytes 4999-4999/5000"
+    );
     assert_eq!(res.headers().get(header::CONTENT_LENGTH).unwrap(), "1");
     let body = to_bytes(res.into_body(), 1024).await.unwrap();
     assert_eq!(&body[..], &fixture.expected_data[4999..5000]);
@@ -170,7 +195,10 @@ async fn test_challenge_exact_byte_boundaries_and_clamping() {
         .unwrap();
     let res = fixture.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::PARTIAL_CONTENT);
-    assert_eq!(res.headers().get(header::CONTENT_RANGE).unwrap(), "bytes 4900-4999/5000");
+    assert_eq!(
+        res.headers().get(header::CONTENT_RANGE).unwrap(),
+        "bytes 4900-4999/5000"
+    );
     assert_eq!(res.headers().get(header::CONTENT_LENGTH).unwrap(), "100");
     let body = to_bytes(res.into_body(), 2048).await.unwrap();
     assert_eq!(&body[..], &fixture.expected_data[4900..5000]);
@@ -183,7 +211,10 @@ async fn test_challenge_exact_byte_boundaries_and_clamping() {
         .unwrap();
     let res = fixture.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::PARTIAL_CONTENT);
-    assert_eq!(res.headers().get(header::CONTENT_RANGE).unwrap(), "bytes 4900-4999/5000");
+    assert_eq!(
+        res.headers().get(header::CONTENT_RANGE).unwrap(),
+        "bytes 4900-4999/5000"
+    );
     assert_eq!(res.headers().get(header::CONTENT_LENGTH).unwrap(), "100");
     let body = to_bytes(res.into_body(), 2048).await.unwrap();
     assert_eq!(&body[..], &fixture.expected_data[4900..5000]);
@@ -196,7 +227,10 @@ async fn test_challenge_exact_byte_boundaries_and_clamping() {
         .unwrap();
     let res = fixture.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::PARTIAL_CONTENT);
-    assert_eq!(res.headers().get(header::CONTENT_RANGE).unwrap(), "bytes 4500-4999/5000");
+    assert_eq!(
+        res.headers().get(header::CONTENT_RANGE).unwrap(),
+        "bytes 4500-4999/5000"
+    );
     assert_eq!(res.headers().get(header::CONTENT_LENGTH).unwrap(), "500");
     let body = to_bytes(res.into_body(), 2048).await.unwrap();
     assert_eq!(&body[..], &fixture.expected_data[4500..5000]);
@@ -209,7 +243,10 @@ async fn test_challenge_exact_byte_boundaries_and_clamping() {
         .unwrap();
     let res = fixture.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::PARTIAL_CONTENT);
-    assert_eq!(res.headers().get(header::CONTENT_RANGE).unwrap(), "bytes 4900-4999/5000");
+    assert_eq!(
+        res.headers().get(header::CONTENT_RANGE).unwrap(),
+        "bytes 4900-4999/5000"
+    );
     assert_eq!(res.headers().get(header::CONTENT_LENGTH).unwrap(), "100");
 
     // 7. Suffix larger than file: bytes=-100000
@@ -220,7 +257,10 @@ async fn test_challenge_exact_byte_boundaries_and_clamping() {
         .unwrap();
     let res = fixture.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::PARTIAL_CONTENT);
-    assert_eq!(res.headers().get(header::CONTENT_RANGE).unwrap(), "bytes 0-4999/5000");
+    assert_eq!(
+        res.headers().get(header::CONTENT_RANGE).unwrap(),
+        "bytes 0-4999/5000"
+    );
     assert_eq!(res.headers().get(header::CONTENT_LENGTH).unwrap(), "5000");
     let body = to_bytes(res.into_body(), 10000).await.unwrap();
     assert_eq!(&body[..], &fixture.expected_data[..]);
@@ -233,7 +273,10 @@ async fn test_challenge_exact_byte_boundaries_and_clamping() {
         .unwrap();
     let res = fixture.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::RANGE_NOT_SATISFIABLE);
-    assert_eq!(res.headers().get(header::CONTENT_RANGE).unwrap(), "bytes */5000");
+    assert_eq!(
+        res.headers().get(header::CONTENT_RANGE).unwrap(),
+        "bytes */5000"
+    );
 }
 
 /// Adversarial Challenge 3: Negative byte ranges, inverted bounds, and malformed syntax.
@@ -301,10 +344,7 @@ async fn test_challenge_negative_inverted_and_malformed_ranges() {
             "bytes */2000",
             "Header '{hdr}' Content-Range header mismatch"
         );
-        assert_eq!(
-            res.headers().get(header::ACCEPT_RANGES).unwrap(),
-            "bytes"
-        );
+        assert_eq!(res.headers().get(header::ACCEPT_RANGES).unwrap(), "bytes");
     }
 
     // Explicitly test plus-signed range parsing behavior
@@ -315,7 +355,10 @@ async fn test_challenge_negative_inverted_and_malformed_ranges() {
         .unwrap();
     let plus_res = fixture.app.clone().oneshot(plus_req).await.unwrap();
     assert_eq!(plus_res.status(), StatusCode::PARTIAL_CONTENT);
-    assert_eq!(plus_res.headers().get(header::CONTENT_RANGE).unwrap(), "bytes 0-100/2000");
+    assert_eq!(
+        plus_res.headers().get(header::CONTENT_RANGE).unwrap(),
+        "bytes 0-100/2000"
+    );
 }
 
 /// Adversarial Challenge 4: Extreme ranges, integer overflows, and u64 bounds.
@@ -333,7 +376,10 @@ async fn test_challenge_extreme_ranges_and_u64_limits() {
         .unwrap();
     let res = fixture.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::PARTIAL_CONTENT);
-    assert_eq!(res.headers().get(header::CONTENT_RANGE).unwrap(), "bytes 0-999/1000");
+    assert_eq!(
+        res.headers().get(header::CONTENT_RANGE).unwrap(),
+        "bytes 0-999/1000"
+    );
     assert_eq!(res.headers().get(header::CONTENT_LENGTH).unwrap(), "1000");
 
     // 2. u64::MAX as start bound -> 416 Range Not Satisfiable
@@ -382,8 +428,14 @@ async fn test_challenge_concurrent_streaming_and_full_content() {
         .unwrap();
     let full_res = app.clone().oneshot(full_req).await.unwrap();
     assert_eq!(full_res.status(), StatusCode::OK);
-    assert_eq!(full_res.headers().get(header::CONTENT_LENGTH).unwrap(), "10000");
-    assert_eq!(full_res.headers().get(header::ACCEPT_RANGES).unwrap(), "bytes");
+    assert_eq!(
+        full_res.headers().get(header::CONTENT_LENGTH).unwrap(),
+        "10000"
+    );
+    assert_eq!(
+        full_res.headers().get(header::ACCEPT_RANGES).unwrap(),
+        "bytes"
+    );
     let full_body = to_bytes(full_res.into_body(), 20_000).await.unwrap();
     assert_eq!(&full_body[..], &expected[..]);
 
@@ -409,10 +461,7 @@ async fn test_challenge_concurrent_streaming_and_full_content() {
                 res.headers().get(header::CONTENT_RANGE).unwrap(),
                 &format!("bytes {start}-{end}/10000")
             );
-            assert_eq!(
-                res.headers().get(header::CONTENT_LENGTH).unwrap(),
-                "400"
-            );
+            assert_eq!(res.headers().get(header::CONTENT_LENGTH).unwrap(), "400");
             let body = to_bytes(res.into_body(), 1024).await.unwrap();
             assert_eq!(&body[..], &exp[start..=end]);
         }));

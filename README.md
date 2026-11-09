@@ -142,6 +142,12 @@ npm --prefix ui test
 
 ---
 
+## Design & Artwork
+
+I don't appreciate AI-generated design or artwork. If you are an artist or designer and want to help with icons, visual assets, or interface design, contributions are more than welcome. Feel free to open an issue or pull request.
+
+---
+
 ## License
 
 Dual-licensed under either the [MIT License](LICENSE-MIT) or the [Apache License 2.0](LICENSE-APACHE).

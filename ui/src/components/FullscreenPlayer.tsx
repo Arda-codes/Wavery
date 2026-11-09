@@ -14,8 +14,9 @@ import {
   Volume1,
   VolumeX,
   Mic2,
-  Sparkles,
+  Search,
   Loader2,
+  Disc,
 } from "lucide-react";
 import { fetchLyrics } from "../services/lyrics";
 import { playerAdapter } from "../services/adapter";
@@ -25,7 +26,7 @@ import { useNavigationStore } from "../stores/navigationStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import { useArtwork } from "../utils/useArtwork";
 import { getFullTrackArtistString } from "../utils/library";
-import { parseLrc, getActiveLyricIndex } from "../utils/lyrics";
+import { parseLrc, getActiveLyricIndex, hasLrcTimestamps } from "../utils/lyrics";
 import { ArtistLinks } from "./ArtistLinks";
 import { useVsyncScrubber, formatTime, formatRemainingTime } from "../hooks/useVsyncScrubber";
 import { VolumeSlider } from "./VolumeSlider";
@@ -56,11 +57,11 @@ const FullscreenVolumeControl: React.FC = React.memo(() => {
   }, [volume]);
 
   return (
-    <div className="hidden sm:flex items-center space-x-2 w-1/4">
+    <div className="group/volume hidden sm:flex items-center space-x-2 w-1/4">
       <button
         type="button"
         onClick={handleToggleMute}
-        className="text-textMuted hover:text-textPrimary hover:bg-surfaceHover transition p-2 focus:outline-none rounded-lg"
+        className="text-textMuted hover:text-textPrimary hover:bg-surfaceHover active:scale-[0.88] transition-[color,background-color,transform] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] p-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-lg"
         title={volume === 0 ? "Unmute" : `Mute (${Math.round(volume * 100)}%)`}
       >
         <VolumeIcon className="w-4 h-4" />
@@ -106,23 +107,64 @@ export const FullscreenPlayer: React.FC = () => {
   const artworkUrl = useArtwork(currentTrack?.id);
   const lyricsContainerRef = useRef<HTMLDivElement>(null);
 
+  // Transition lifecycle for smooth interruptible stage enter/exit
+  const [isRendered, setIsRendered] = useState(isOpen);
+  const [isExiting, setIsExiting] = useState(false);
+  const lastActiveTrackRef = useRef(currentTrack);
+  const exitTimeoutRef = useRef<number | null>(null);
+
+  if (currentTrack) {
+    lastActiveTrackRef.current = currentTrack;
+  }
+  const activeTrack = currentTrack || lastActiveTrackRef.current;
+
+  useEffect(() => {
+    if (isOpen) {
+      if (exitTimeoutRef.current !== null) {
+        window.clearTimeout(exitTimeoutRef.current);
+        exitTimeoutRef.current = null;
+      }
+      setIsRendered(true);
+      setIsExiting(false);
+    } else if (isRendered && !isExiting) {
+      setIsExiting(true);
+      exitTimeoutRef.current = window.setTimeout(() => {
+        setIsRendered(false);
+        setIsExiting(false);
+        exitTimeoutRef.current = null;
+      }, 220); // Matches .fullscreen-stage-exiting animation duration (200ms + buffer)
+    }
+
+    return () => {
+      if (exitTimeoutRef.current !== null) {
+        window.clearTimeout(exitTimeoutRef.current);
+      }
+    };
+  }, [isOpen, isRendered, isExiting]);
+
   const [isFetchingLyrics, setIsFetchingLyrics] = useState(false);
   const [lyricsFetchError, setLyricsFetchError] = useState<string | null>(null);
 
-  const handleFetchLyricsOnline = async () => {
-    if (!currentTrack) return;
+  const isSyncedLyrics = useMemo(
+    () => hasLrcTimestamps(activeTrack?.metadata.lyrics),
+    [activeTrack?.metadata.lyrics]
+  );
+
+  const handleFetchLyricsOnline = async (forceRefresh: boolean = false) => {
+    if (!activeTrack) return;
     setIsFetchingLyrics(true);
     setLyricsFetchError(null);
     try {
       const res = await fetchLyrics(
-        currentTrack.metadata.artist || "",
-        currentTrack.metadata.title || "",
-        currentTrack.metadata.album,
-        currentTrack.metadata.duration.secs
+        activeTrack.metadata.artist || "",
+        activeTrack.metadata.title || "",
+        activeTrack.metadata.album,
+        activeTrack.metadata.duration.secs,
+        forceRefresh
       );
       if (res?.bestLyrics) {
         const updated = await playerAdapter.updateTrackMetadata({
-          track_id: currentTrack.id,
+          track_id: activeTrack.id,
           lyrics: res.bestLyrics,
           write_tags: false,
         });
@@ -154,8 +196,8 @@ export const FullscreenPlayer: React.FC = () => {
   } = useVsyncScrubber({
     positionSecs,
     durationSecs,
-    isPlaying: isOpen && isPlaying,
-    hasTrack: isOpen && !!currentTrack,
+    isPlaying: isRendered && isPlaying,
+    hasTrack: isRendered && !!activeTrack,
     showRemaining: true,
     onSeek: seek,
   });
@@ -193,10 +235,10 @@ export const FullscreenPlayer: React.FC = () => {
 
   // Parse real lyrics only (no placeholder fallback)
   const lyrics = useMemo(() => {
-    if (!currentTrack) return [];
-    let rawLyrics = currentTrack.metadata?.lyrics;
+    if (!activeTrack) return [];
+    let rawLyrics = activeTrack.metadata?.lyrics;
     if (!rawLyrics || !rawLyrics.trim()) {
-      const libraryTrack = useLibraryStore.getState().tracks.find((t) => t.id === currentTrack.id);
+      const libraryTrack = useLibraryStore.getState().tracks.find((t) => t.id === activeTrack.id);
       if (libraryTrack?.metadata?.lyrics) {
         rawLyrics = libraryTrack.metadata.lyrics;
       }
@@ -205,32 +247,96 @@ export const FullscreenPlayer: React.FC = () => {
       return parseLrc(rawLyrics);
     }
     return [];
-  }, [currentTrack]);
+  }, [activeTrack]);
 
   const activeLyricIndex = useMemo(() => {
     return getActiveLyricIndex(lyrics, displayPos);
   }, [lyrics, displayPos]);
 
+  // Apple Music-style lyrics browsing: manual scroll lifts optical depth-of-field blur;
+  // re-focusing (clicking a line or idle timeout) brings blur back and centers active lyric.
+  const [isLyricsBrowsing, setIsLyricsBrowsing] = useState(false);
+  const isPointerDownRef = useRef(false);
+  const browsingTimeoutRef = useRef<number | null>(null);
+
+  const scrollActiveLyric = useCallback(() => {
+    const container = lyricsContainerRef.current;
+    if (!container || activeLyricIndex < 0) return;
+    const activeEl = container.children[activeLyricIndex] as HTMLElement;
+    if (activeEl) {
+      const targetScroll =
+        activeEl.offsetTop - container.clientHeight / 2 + activeEl.clientHeight / 2;
+      // If already within 4px of target scroll, don't trigger unnecessary scroll animations
+      if (Math.abs(container.scrollTop - targetScroll) < 4) return;
+      container.scrollTo({
+        top: Math.max(0, targetScroll),
+        behavior: showLyricsSmoothScroll ? "smooth" : "auto",
+      });
+    }
+  }, [activeLyricIndex, showLyricsSmoothScroll]);
+
+  const handleUserScroll = useCallback(() => {
+    setIsLyricsBrowsing(true);
+
+    if (browsingTimeoutRef.current !== null) {
+      window.clearTimeout(browsingTimeoutRef.current);
+    }
+    browsingTimeoutRef.current = window.setTimeout(() => {
+      setIsLyricsBrowsing(false);
+      browsingTimeoutRef.current = null;
+    }, 3500);
+  }, []);
+
+  const handleLyricsPointerDown = useCallback(() => {
+    isPointerDownRef.current = true;
+  }, []);
+
+  useEffect(() => {
+    const handleGlobalPointerUp = () => {
+      isPointerDownRef.current = false;
+    };
+    window.addEventListener("pointerup", handleGlobalPointerUp);
+    window.addEventListener("pointercancel", handleGlobalPointerUp);
+    return () => {
+      window.removeEventListener("pointerup", handleGlobalPointerUp);
+      window.removeEventListener("pointercancel", handleGlobalPointerUp);
+    };
+  }, []);
+
+  const handleContainerScroll = useCallback(() => {
+    // Only user pointer drags (e.g. dragging the scrollbar thumb) count as user scrolling.
+    // Programmatic auto-scroll from playback will never have isPointerDownRef.current === true.
+    if (isPointerDownRef.current) {
+      handleUserScroll();
+    }
+  }, [handleUserScroll]);
+
+  const handleFocusLyrics = useCallback(() => {
+    if (browsingTimeoutRef.current !== null) {
+      window.clearTimeout(browsingTimeoutRef.current);
+      browsingTimeoutRef.current = null;
+    }
+    setIsLyricsBrowsing(false);
+    scrollActiveLyric();
+  }, [scrollActiveLyric]);
+
+  // Reset browsing state on unmount or track switch
+  useEffect(() => {
+    setIsLyricsBrowsing(false);
+    if (browsingTimeoutRef.current !== null) {
+      window.clearTimeout(browsingTimeoutRef.current);
+      browsingTimeoutRef.current = null;
+    }
+  }, [activeTrack?.id]);
+
   // Auto-scroll lyrics container to active line, re-centering immediately on window state change
   useEffect(() => {
-    if (!isOpen || activeLyricIndex < 0 || !lyricsContainerRef.current) return;
-    const scrollActiveLyric = () => {
-      const container = lyricsContainerRef.current;
-      if (!container) return;
-      const activeEl = container.children[activeLyricIndex] as HTMLElement;
-      if (activeEl) {
-        const targetScroll =
-          activeEl.offsetTop - container.clientHeight / 2 + activeEl.clientHeight / 2;
-        container.scrollTo({
-          top: Math.max(0, targetScroll),
-          behavior: showLyricsSmoothScroll ? "smooth" : "auto",
-        });
-      }
-    };
+    if (!isRendered || activeLyricIndex < 0 || !lyricsContainerRef.current) return;
+    if (isLyricsBrowsing) return;
 
     scrollActiveLyric();
     return windowService.onWindowStateChange(scrollActiveLyric);
-  }, [activeLyricIndex, isOpen, showLyricsSmoothScroll]);
+  }, [activeLyricIndex, isRendered, isLyricsBrowsing, scrollActiveLyric]);
 
 
 
@@ -263,23 +369,41 @@ export const FullscreenPlayer: React.FC = () => {
 
   const enableGradients = useSettingsStore((s) => s.enableGradients);
 
-  if (!isOpen || !currentTrack) return null;
+  if (!isRendered || !activeTrack) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-background text-textPrimary flex flex-col justify-between overflow-hidden select-none animate-fade-in">
+    <div
+      className={`fixed inset-0 z-50 bg-background text-textPrimary flex flex-col justify-between overflow-hidden select-none ${
+        isExiting ? "fullscreen-stage-exiting" : "fullscreen-stage-entering"
+      }`}
+    >
       {/* Calm Ambient Background Depth */}
       {enableGradients && (
         <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-25">
-          <div className="absolute -top-1/4 -left-1/4 w-[90vw] h-[90vw] rounded-full bg-gradient-to-br from-accent/15 via-accent/5 to-transparent blur-[160px]" />
-          <div className="absolute -bottom-1/4 -right-1/4 w-[80vw] h-[80vw] rounded-full bg-gradient-to-tl from-surfaceHover/30 via-transparent to-transparent blur-[180px]" />
+          {artworkUrl && (
+            <div
+              className="absolute inset-0 bg-cover bg-center opacity-30 blur-[120px] scale-110 transition-opacity duration-700 ease-out"
+              style={{ backgroundImage: `url(${artworkUrl})` }}
+            />
+          )}
+          <div
+            className={`absolute -top-1/4 -left-1/4 w-[90vw] h-[90vw] rounded-full bg-gradient-to-br from-accent/15 via-accent/5 to-transparent blur-[160px] ${
+              isPlaying ? "animate-ambient-drift" : ""
+            }`}
+          />
+          <div
+            className={`absolute -bottom-1/4 -right-1/4 w-[80vw] h-[80vw] rounded-full bg-gradient-to-tl from-surfaceHover/30 via-transparent to-transparent blur-[180px] ${
+              isPlaying ? "animate-ambient-drift-reverse" : ""
+            }`}
+          />
         </div>
       )}
 
       {/* Top Bar */}
-      <header className="relative z-10 px-4 py-4 sm:px-8 sm:py-6 flex items-center justify-between flex-shrink-0">
+      <header className="fullscreen-header-choreo relative z-10 px-4 py-4 safe-fullscreen-header sm:px-8 sm:py-6 flex items-center justify-between flex-shrink-0">
         {/* Left: View Identifier (Clean typography without W icon) */}
         <div className="flex items-center">
-          <span className="text-xs font-semibold text-textMuted uppercase tracking-widest select-none">
+          <span className="text-xs font-medium text-textMuted select-none">
             Now Playing
           </span>
         </div>
@@ -291,7 +415,7 @@ export const FullscreenPlayer: React.FC = () => {
             className="flex flex-col items-center group transition text-center focus:outline-none max-w-[200px] sm:max-w-sm truncate"
             title={`Jump to ${playbackContext.name}`}
           >
-            <span className="text-2xs sm:text-2xs text-textMuted uppercase font-semibold tracking-wider transition-colors group-hover:text-textSecondary truncate">
+            <span className="text-2xs sm:text-2xs text-textMuted font-medium transition-colors group-hover:text-textSecondary truncate">
               {playbackContext.type === "liked" ? "Playing from Liked Songs" : `Playing from ${playbackContext.type}`}
             </span>
             <span className="text-xs sm:text-sm font-medium text-textSecondary group-hover:text-textPrimary transition-colors truncate">
@@ -320,12 +444,19 @@ export const FullscreenPlayer: React.FC = () => {
       {/* Main Split Screen Area */}
       <main className="relative z-10 flex-1 flex flex-col lg:flex-row items-center justify-center px-4 sm:px-8 md:px-16 lg:px-24 gap-6 sm:gap-10 lg:gap-20 overflow-y-auto lg:overflow-hidden max-w-7xl mx-auto w-full">
         {/* Left Column: Huge Album Art & Credits */}
-        <div className="flex flex-col items-center lg:items-start text-center lg:text-left space-y-4 sm:space-y-6 max-w-lg w-full flex-shrink-0">
-          <div className="relative aspect-square w-48 sm:w-64 md:w-80 lg:w-96 rounded-2xl bg-surfaceActive/40 overflow-hidden shadow-2xl shadow-black/25 dark:shadow-black/90 border border-border group">
+        <div className="fullscreen-artwork-choreo flex flex-col items-center lg:items-start text-center lg:text-left space-y-4 sm:space-y-6 max-w-lg w-full flex-shrink-0">
+          <div
+            key={`art-${activeTrack.id}`}
+            className={`relative aspect-square w-48 sm:w-64 md:w-80 lg:w-96 rounded-2xl bg-surfaceActive/40 overflow-hidden border border-border group animate-track-switch transition-[transform,opacity,box-shadow] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+              isPlaying
+                ? "scale-100 shadow-2xl shadow-black/80"
+                : "scale-95 shadow-xl shadow-black/50 opacity-90"
+            }`}
+          >
             {artworkUrl ? (
               <img
                 src={artworkUrl}
-                alt={currentTrack.metadata.title || "Artwork"}
+                alt={activeTrack.metadata.title || "Artwork"}
                 className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-500 ease-out"
               />
             ) : (
@@ -335,13 +466,13 @@ export const FullscreenPlayer: React.FC = () => {
             )}
           </div>
 
-          <div className="space-y-2 w-full">
+          <div key={`meta-${activeTrack.id}`} className="space-y-2 w-full animate-track-switch">
             <div className="flex items-start justify-center lg:justify-start gap-3">
               <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-textPrimary tracking-tight leading-snug line-clamp-2">
-                {currentTrack.metadata.title || "Untitled"}
+                {activeTrack.metadata.title || "Untitled"}
               </h1>
               <button
-                onClick={() => toggleLike(currentTrack.id)}
+                onClick={() => toggleLike(activeTrack.id)}
                 className={`p-2 mt-1 rounded-lg transition-transform active:scale-75 focus:outline-none ${
                   isLiked ? "text-accent scale-110" : "text-textMuted hover:text-textPrimary"
                 }`}
@@ -353,7 +484,7 @@ export const FullscreenPlayer: React.FC = () => {
 
             <div className="text-base text-textSecondary font-medium truncate">
               <ArtistLinks
-                artistName={getFullTrackArtistString(currentTrack)}
+                artistName={getFullTrackArtistString(activeTrack)}
                 onSelectArtist={(name) => {
                   closeFullscreen();
                   selectArtist(name);
@@ -364,50 +495,48 @@ export const FullscreenPlayer: React.FC = () => {
               />
             </div>
 
-            {currentTrack.metadata.album && (
+            {activeTrack.metadata.album && (
               <p
                 onClick={() => {
                   closeFullscreen();
                   selectAlbum(
-                    currentTrack.metadata.album || "",
-                    currentTrack.metadata.artist || ""
+                    activeTrack.metadata.album || "",
+                    activeTrack.metadata.artist || ""
                   );
                 }}
                 className="text-xs text-textMuted hover:text-textPrimary cursor-pointer hover:underline truncate transition inline-block"
               >
-                {currentTrack.metadata.album}
-                {currentTrack.metadata.year ? ` • ${currentTrack.metadata.year}` : ""}
+                {activeTrack.metadata.album}
+                {activeTrack.metadata.year ? ` • ${activeTrack.metadata.year}` : ""}
               </p>
             )}
 
             <div className="pt-1 flex items-center justify-center lg:justify-start">
-              <span className="inline-flex items-center px-2 py-1 rounded-[4px] bg-surfaceHover border border-border text-2xs font-semibold tracking-wider uppercase text-textSecondary">
-                {currentTrack.metadata.format.toUpperCase() === "FLAC" ||
-                currentTrack.metadata.format.toUpperCase() === "WAV"
+              <span className="inline-flex items-center px-2 py-1 rounded-[4px] bg-surfaceHover border border-border text-2xs font-medium text-textSecondary">
+                {activeTrack.metadata.format.toUpperCase() === "FLAC" ||
+                activeTrack.metadata.format.toUpperCase() === "WAV"
                   ? "Lossless"
                   : "High Quality"}{" "}
-                • {currentTrack.metadata.format.toUpperCase()}
+                • {activeTrack.metadata.format.toUpperCase()}
               </span>
             </div>
           </div>
         </div>
 
         {/* Right Column: Time-Synchronized Live Lyrics */}
-        <div className="flex-1 w-full h-80 sm:h-96 lg:h-[500px] flex flex-col overflow-hidden relative">
+        <div className="fullscreen-lyrics-choreo flex-1 w-full h-80 sm:h-96 lg:h-[500px] flex flex-col overflow-hidden relative">
           {lyrics.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-center p-8 space-y-4">
-              <div className="w-14 h-14 rounded-2xl bg-surfaceHover border border-border flex items-center justify-center shadow-lg">
-                <Mic2 className="w-6 h-6 text-textMuted/50" />
-              </div>
+            <div className="flex-1 flex flex-col items-center justify-center text-center p-8 space-y-3">
+              <Mic2 className="w-10 h-10 text-textMuted/40 stroke-[1.5]" />
               <p className="text-sm font-semibold text-textSecondary">
-                No lyrics found for this song
+                No lyrics available for this track
               </p>
               <p className="text-xs text-textMuted max-w-xs">
-                Embedded LRC or tag lyrics will appear here during playback.
+                Search online or place an .lrc file in your track folder.
               </p>
               <button
                 type="button"
-                onClick={handleFetchLyricsOnline}
+                onClick={() => handleFetchLyricsOnline(true)}
                 disabled={isFetchingLyrics}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-accent-fill hover:bg-accentHover active:scale-95 transition shadow-lg shadow-accent/20 disabled:opacity-50"
               >
@@ -418,7 +547,7 @@ export const FullscreenPlayer: React.FC = () => {
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-3.5 h-3.5" />
+                    <Search className="w-3.5 h-3.5" />
                     <span>Search Lyrics Online</span>
                   </>
                 )}
@@ -428,37 +557,107 @@ export const FullscreenPlayer: React.FC = () => {
               )}
             </div>
           ) : (
-            <div
-              ref={lyricsContainerRef}
-              className="flex-1 overflow-y-auto space-y-6 py-24 scroll-smooth pr-4"
-            >
-              {lyrics.map((line, idx) => {
-                const isActive = idx === activeLyricIndex;
-                const isPast = idx < activeLyricIndex;
-
-                return (
-                  <p
-                    key={`${line.time}-${idx}`}
-                    onClick={() => seek(line.time)}
-                    className={`cursor-pointer transition-[transform,opacity,color] duration-250 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform transform origin-left select-none ${
-                      isActive
-                        ? "text-2xl sm:text-3xl md:text-4xl font-extrabold text-textPrimary scale-105 translate-x-2 text-shadow-lg opacity-100"
-                        : isPast
-                        ? "text-lg sm:text-xl md:text-2xl font-bold text-textMuted/40 hover:text-textSecondary hover:translate-x-1"
-                        : "text-lg sm:text-xl md:text-2xl font-bold text-textMuted hover:text-textPrimary hover:translate-x-1"
-                    }`}
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+              {!isSyncedLyrics && (
+                <div className="flex items-center justify-between pb-3 border-b border-border/40 mb-2 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xs font-medium text-textMuted bg-surface px-2 py-1 rounded border border-border/50">
+                      Plain Lyrics
+                    </span>
+                    <span className="text-2xs text-textMuted">Not synced to audio</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleFetchLyricsOnline(true)}
+                    disabled={isFetchingLyrics}
+                    className="inline-flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-semibold text-textPrimary bg-surfaceHover hover:bg-border/60 border border-border active:scale-95 transition disabled:opacity-50"
+                    title="Search LRCLIB for time-synced lyrics"
                   >
-                    {line.text}
-                  </p>
-                );
-              })}
+                    {isFetchingLyrics ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Searching...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Search className="w-3.5 h-3.5 text-accent" />
+                        <span>Search Synced Lyrics</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+              <div
+                ref={lyricsContainerRef}
+                key={`lyrics-${activeTrack.id}`}
+                data-lyrics-browsing={isLyricsBrowsing ? "true" : "false"}
+                onWheel={handleUserScroll}
+                onTouchMove={handleUserScroll}
+                onPointerDown={handleLyricsPointerDown}
+                onScroll={handleContainerScroll}
+                className="wavery-lyrics-mask flex-1 overflow-y-auto space-y-6 py-20 scroll-smooth pr-4 relative"
+              >
+                {lyrics.map((line, idx) => {
+                  if (!isSyncedLyrics) {
+                    return (
+                      <p
+                        key={`plain-${idx}`}
+                        className="text-xl sm:text-2xl md:text-3xl font-semibold text-textSecondary select-text leading-relaxed hover:text-textPrimary transition"
+                      >
+                        {line.text}
+                      </p>
+                    );
+                  }
+
+                  const isActive = idx === activeLyricIndex;
+                  const isPast = idx < activeLyricIndex;
+                  const distance = Math.abs(idx - activeLyricIndex);
+                  const distanceAttr = isActive ? "0" : distance === 1 ? "1" : distance === 2 ? "2" : "far";
+                  const stateAttr = isActive ? "active" : isPast ? "past" : "upcoming";
+
+                  return (
+                    <p
+                      key={`${line.time}-${idx}`}
+                      onClick={() => {
+                        seek(line.time);
+                        handleFocusLyrics();
+                      }}
+                      data-lyric-state={stateAttr}
+                      data-lyric-distance={distanceAttr}
+                      style={{ "--lyric-stagger": Math.min(idx, 12) } as React.CSSProperties}
+                      className={`wavery-lyric-line lyric-line-cascade cursor-pointer transition-[transform,opacity,color,filter] duration-250 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform transform origin-left select-none ${
+                        isActive
+                          ? "text-2xl sm:text-3xl md:text-4xl font-bold text-textPrimary scale-105 translate-x-2 text-shadow-lg opacity-100"
+                          : isPast
+                          ? "text-lg sm:text-xl md:text-2xl font-bold text-textMuted/40 hover:text-textSecondary hover:translate-x-1"
+                          : "text-lg sm:text-xl md:text-2xl font-bold text-textMuted hover:text-textPrimary hover:translate-x-1"
+                      }`}
+                    >
+                      {line.text}
+                    </p>
+                  );
+                })}
+              </div>
+
+              {/* Floating Return-to-Sync Pill (Apple Music style) */}
+              {isLyricsBrowsing && isSyncedLyrics && (
+                <button
+                  type="button"
+                  onClick={handleFocusLyrics}
+                  className="absolute bottom-6 right-8 z-20 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-surface/90 hover:bg-surfaceActive text-textPrimary text-xs font-medium border border-border shadow-lg backdrop-blur-md active:scale-95 transition-all duration-200 animate-fade-in"
+                  title="Resume auto-scroll and focus current lyric"
+                >
+                  <Disc className="w-3.5 h-3.5 text-accent animate-spin" style={{ animationDuration: "3s" }} />
+                  <span>Sync with Song</span>
+                </button>
+              )}
             </div>
           )}
         </div>
       </main>
 
       {/* Bottom Transport Controls & Scrubber */}
-      <footer className="relative z-10 px-4 py-4 sm:px-8 sm:py-6 max-w-5xl mx-auto w-full flex-shrink-0 space-y-3 sm:space-y-4">
+      <footer className="fullscreen-transport-choreo relative z-10 px-4 py-4 safe-fullscreen-footer sm:px-8 sm:py-6 max-w-5xl mx-auto w-full flex-shrink-0 space-y-3 sm:space-y-4">
         {/* Scrubber Bar */}
         <div className="w-full flex items-center space-x-2 sm:space-x-4 text-xs select-none">
           <span
@@ -480,6 +679,7 @@ export const FullscreenPlayer: React.FC = () => {
               step={0.05}
               defaultValue={displayPos}
               onPointerDown={handlePointerDown}
+              onInput={handleChange}
               onChange={handleChange}
               onPointerUp={handlePointerUp}
               onPointerCancel={handlePointerUp}
@@ -505,7 +705,7 @@ export const FullscreenPlayer: React.FC = () => {
             <button
               type="button"
               onClick={toggleShuffle}
-              className={`p-2 rounded-xl transition ${
+              className={`p-2 rounded-xl transition-[color,background-color,transform] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] active:scale-[0.92] ${
                 isShuffle ? "text-accent bg-accent/15 hover:bg-accent/20" : "text-textMuted hover:text-textPrimary hover:bg-surfaceHover"
               }`}
               title="Shuffle"
@@ -516,7 +716,7 @@ export const FullscreenPlayer: React.FC = () => {
             <button
               type="button"
               onClick={playPrevious}
-              className="text-textSecondary hover:text-textPrimary hover:scale-110 active:scale-95 transition p-2 rounded-xl hover:bg-surfaceHover"
+              className="text-textSecondary hover:text-textPrimary active:scale-[0.88] transition-[color,background-color,transform] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] p-2 rounded-xl hover:bg-surfaceHover"
               title="Previous"
             >
               <SkipBack className="w-5 h-5 fill-current" />
@@ -525,20 +725,20 @@ export const FullscreenPlayer: React.FC = () => {
             <button
               type="button"
               onClick={isPlaying ? pause : resume}
-              className="w-12 h-12 rounded-full bg-textPrimary text-background hover:scale-105 active:scale-95 flex items-center justify-center transition shadow-xl"
+              className="w-12 h-12 rounded-full bg-white text-black hover:bg-white/90 active:scale-[0.92] flex items-center justify-center transition-[transform,background-color,box-shadow] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] shadow-[0_4px_16px_rgba(0,0,0,0.4)]"
               title={isPlaying ? "Pause" : "Play"}
             >
               {isPlaying ? (
                 <Pause className="w-5 h-5 fill-current" />
               ) : (
-                <Play className="w-5 h-5 ml-1 fill-current" />
+                <Play className="w-5 h-5 fill-current" />
               )}
             </button>
 
             <button
               type="button"
               onClick={playNext}
-              className="text-textSecondary hover:text-textPrimary hover:scale-110 active:scale-95 transition p-2 rounded-xl hover:bg-surfaceHover"
+              className="text-textSecondary hover:text-textPrimary active:scale-[0.88] transition-[color,background-color,transform] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] p-2 rounded-xl hover:bg-surfaceHover"
               title="Next"
             >
               <SkipForward className="w-5 h-5 fill-current" />
@@ -547,7 +747,7 @@ export const FullscreenPlayer: React.FC = () => {
             <button
               type="button"
               onClick={cycleLoopMode}
-              className={`p-2 rounded-xl transition ${
+              className={`p-2 rounded-xl transition-[color,background-color,transform] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] active:scale-[0.92] ${
                 loopMode !== "Off"
                   ? "text-accent bg-accent/15 hover:bg-accent/20"
                   : "text-textMuted hover:text-textPrimary hover:bg-surfaceHover"

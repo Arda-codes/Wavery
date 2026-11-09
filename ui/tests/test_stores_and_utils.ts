@@ -867,6 +867,46 @@ export async function runStoresAndUtilsTests(jiti: any) {
     assert(!mprisCargoContent.includes("lofty ="), "crates/mpris does not depend on lofty");
   }
 
+  // --- 8. Null / Undefined Metadata Tags Resilience (e.g. Meme / Untagged Downloads) ---
+  console.log("--- 8. Testing Null / Undefined Metadata Fields Resilience ---");
+  const nullMetaTrack: Track = {
+    id: "null-meta-1",
+    source: { Managed: "/music/Maxwell the Cat Theme.mp3" },
+    metadata: {
+      title: "Maxwell the Cat Theme",
+      artist: null as unknown as undefined,
+      album: null as unknown as undefined,
+      album_artist: null as unknown as undefined,
+      track_number: null as unknown as undefined,
+      disc_number: null as unknown as undefined,
+      year: null as unknown as undefined,
+      genre: null as unknown as undefined,
+      duration: { secs: 132, nanos: 0 },
+      format: "MP3",
+      lyrics: null as unknown as undefined,
+    },
+    playback: {
+      play_count: 0,
+      skip_count: 0,
+      last_played: null,
+      date_added: "2026-11-01T12:00:00Z",
+    },
+  };
+
+  const fullArtistNull = libUtils.getFullTrackArtistString(nullMetaTrack);
+  assert(fullArtistNull === "Unknown Artist", "Null artist gracefully resolves to 'Unknown Artist'");
+  
+  const allTrackArtistsNull = libUtils.extractAllTrackArtists(nullMetaTrack);
+  assert(allTrackArtistsNull.length === 1 && allTrackArtistsNull[0] === "Unknown Artist", "extractAllTrackArtists handles null artist safely");
+
+  // Verify safe string conversions for null track_number, disc_number, and year
+  const safeTrackNum = nullMetaTrack.metadata.track_number != null ? String(nullMetaTrack.metadata.track_number) : "";
+  const safeDiscNum = nullMetaTrack.metadata.disc_number != null ? String(nullMetaTrack.metadata.disc_number) : "";
+  const safeYear = nullMetaTrack.metadata.year != null ? String(nullMetaTrack.metadata.year) : "";
+  assert(safeTrackNum === "", "Null track_number safely yields empty string");
+  assert(safeDiscNum === "", "Null disc_number safely yields empty string");
+  assert(safeYear === "", "Null year safely yields empty string");
+
   console.log(`\n=======================================================`);
   console.log(`  ALL ${passedAssertions}/${totalAssertions} STORE, UTILS & ARCH TESTS PASSED`);
   console.log(`=======================================================\n`);

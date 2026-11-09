@@ -8,11 +8,14 @@ description = "Concrete audio playback engine implementing PlayerEngine using Ro
 
 [dependencies]
 wavery-core = { workspace = true }
-rodio = { version = "0.20", default-features = false, features = ["symphonia-all"] }
+rodio = { version = "0.20", default-features = true, features = ["symphonia-all", "symphonia-alac", "symphonia-aiff"] }
+symphonia = { version = "0.5", features = ["all"] }
 async-trait = { workspace = true }
 parking_lot = "0.12"
 rand = "0.8"
 tokio = { workspace = true }
+opus-pure = "0.2.2"
 
 [dev-dependencies]
 uuid = { workspace = true }
+serde_json = { workspace = true }

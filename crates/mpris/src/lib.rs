@@ -51,7 +51,11 @@ impl MprisBridge for ZbusMprisBridge {
         Ok(())
     }
 
-    async fn update_metadata(&mut self, track: &Track, _art_url: Option<&str>) -> Result<(), MprisError> {
+    async fn update_metadata(
+        &mut self,
+        track: &Track,
+        _art_url: Option<&str>,
+    ) -> Result<(), MprisError> {
         self.current_track = Some(track.clone());
         Ok(())
     }
@@ -86,7 +90,10 @@ mod tests {
         bridge.update_status(PlaybackState::Playing).await.unwrap();
         assert_eq!(bridge.current_state, PlaybackState::Playing);
 
-        bridge.update_position(Duration::from_secs(45)).await.unwrap();
+        bridge
+            .update_position(Duration::from_secs(45))
+            .await
+            .unwrap();
         assert_eq!(bridge.current_position, Duration::from_secs(45));
 
         let track = Track {
@@ -107,6 +114,7 @@ mod tests {
                 channels: None,
                 format: "MP3".into(),
                 lyrics: None,
+                ..Default::default()
             },
             date_added: 0,
         };
@@ -133,15 +141,25 @@ mod tests {
         #[async_trait]
         impl MprisBridge for FailingMprisBridge {
             async fn update_status(&mut self, _state: PlaybackState) -> Result<(), MprisError> {
-                Err(MprisError::ConnectionFailed("Cannot connect to session D-Bus: org.freedesktop.DBus.Error.NoServer".into()))
+                Err(MprisError::ConnectionFailed(
+                    "Cannot connect to session D-Bus: org.freedesktop.DBus.Error.NoServer".into(),
+                ))
             }
 
-            async fn update_metadata(&mut self, _track: &Track, _art_url: Option<&str>) -> Result<(), MprisError> {
-                Err(MprisError::PropertyError("Failed to update org.mpris.MediaPlayer2.Player.Metadata".into()))
+            async fn update_metadata(
+                &mut self,
+                _track: &Track,
+                _art_url: Option<&str>,
+            ) -> Result<(), MprisError> {
+                Err(MprisError::PropertyError(
+                    "Failed to update org.mpris.MediaPlayer2.Player.Metadata".into(),
+                ))
             }
 
             async fn update_position(&mut self, _position: Duration) -> Result<(), MprisError> {
-                Err(MprisError::EmitError("Seeked signal delivery failed".into()))
+                Err(MprisError::EmitError(
+                    "Seeked signal delivery failed".into(),
+                ))
             }
 
             async fn poll_events(&mut self) -> Vec<MprisCommand> {
@@ -180,6 +198,7 @@ mod tests {
                 channels: None,
                 format: "MP3".into(),
                 lyrics: None,
+                ..Default::default()
             },
             date_added: 0,
         };
@@ -232,4 +251,3 @@ mod tests {
         assert!(empty.is_empty());
     }
 }
-

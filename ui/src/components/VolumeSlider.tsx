@@ -34,11 +34,25 @@ export const VolumeSlider: React.FC<VolumeSliderProps> = React.memo(
       }
     }, [volume]);
 
-    const handlePointerDown = useCallback(() => {
+    const handlePointerDown = useCallback((e: React.PointerEvent<HTMLInputElement>) => {
       isDraggingRef.current = true;
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {
+        // Ignore if pointer capture is unsupported
+      }
     }, []);
 
-    const handlePointerUp = useCallback(() => {
+    const handlePointerUp = useCallback((e?: React.PointerEvent<HTMLInputElement>) => {
+      if (e) {
+        try {
+          if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+            e.currentTarget.releasePointerCapture(e.pointerId);
+          }
+        } catch {
+          // Ignore pointer release errors
+        }
+      }
       isDraggingRef.current = false;
       if (inputRef.current) {
         const val = parseFloat(inputRef.current.value);
@@ -51,6 +65,33 @@ export const VolumeSlider: React.FC<VolumeSliderProps> = React.memo(
           setVolume(clamped);
         }
       }
+    }, [setVolume]);
+
+    // Safety window listener to guarantee dragging state never gets orphaned on mouse release outside window
+    useEffect(() => {
+      const handleGlobalPointerUp = () => {
+        if (isDraggingRef.current) {
+          isDraggingRef.current = false;
+          if (inputRef.current) {
+            const val = parseFloat(inputRef.current.value);
+            if (!isNaN(val)) {
+              const clamped = Math.max(0, Math.min(1, val));
+              inputRef.current.style.setProperty(
+                "--slider-progress",
+                `${clamped * 100}%`
+              );
+              setVolume(clamped);
+            }
+          }
+        }
+      };
+
+      window.addEventListener("pointerup", handleGlobalPointerUp);
+      window.addEventListener("pointercancel", handleGlobalPointerUp);
+      return () => {
+        window.removeEventListener("pointerup", handleGlobalPointerUp);
+        window.removeEventListener("pointercancel", handleGlobalPointerUp);
+      };
     }, [setVolume]);
 
     const handleInput = useCallback(
@@ -71,6 +112,8 @@ export const VolumeSlider: React.FC<VolumeSliderProps> = React.memo(
 
     const handleWheel = useCallback(
       (e: React.WheelEvent<HTMLInputElement>) => {
+        e.preventDefault();
+        e.stopPropagation();
         const delta = e.deltaY < 0 ? volumeStep : -volumeStep;
         const next = Math.max(0, Math.min(1, volume + delta));
         if (inputRef.current) {
@@ -100,7 +143,7 @@ export const VolumeSlider: React.FC<VolumeSliderProps> = React.memo(
         onInput={handleInput}
         onChange={handleInput}
         onWheel={handleWheel}
-        className={`wavery-slider ${className}`}
+        className={`wavery-slider cursor-pointer active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-accent focus:outline-none ${className}`}
         title={`Volume: ${Math.round(volume * 100)}%`}
         style={
           {

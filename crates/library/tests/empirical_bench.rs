@@ -11,7 +11,8 @@ use wavery_library::db::LibraryDatabase;
 use wavery_library::manager::SqliteLibraryManager;
 
 fn create_temp_db_env(name: &str) -> (PathBuf, PathBuf, PathBuf) {
-    let temp_dir = std::env::temp_dir().join(format!("wavery_bench_{name}_{}", uuid::Uuid::new_v4()));
+    let temp_dir =
+        std::env::temp_dir().join(format!("wavery_bench_{name}_{}", uuid::Uuid::new_v4()));
     let db_path = temp_dir.join("library.db");
     let managed_root = temp_dir.join("managed");
     fs::create_dir_all(&managed_root).unwrap();
@@ -19,12 +20,37 @@ fn create_temp_db_env(name: &str) -> (PathBuf, PathBuf, PathBuf) {
 }
 
 fn generate_synthetic_tracks(count: usize, managed_root: &Path) -> Vec<Track> {
-    let genres = ["Synthwave", "Electronic", "Rock", "Jazz", "Classical", "Hip Hop", "Ambient", "Metal"];
+    let genres = [
+        "Synthwave",
+        "Electronic",
+        "Rock",
+        "Jazz",
+        "Classical",
+        "Hip Hop",
+        "Ambient",
+        "Metal",
+    ];
     let artists = [
-        "Kavinsky", "Gunship", "Daft Punk", "Justice", "Perturbator",
-        "Carpenter Brut", "The Midnight", "Timecop1983", "FM-84", "Lazerhawk",
-        "Dance With the Dead", "Com Truise", "Tycho", "Deadmau5", "Kraftwerk",
-        "Jean-Michel Jarre", "Tangerine Dream", "Vangelis", "Giorgio Moroder", "Chvrches"
+        "Kavinsky",
+        "Gunship",
+        "Daft Punk",
+        "Justice",
+        "Perturbator",
+        "Carpenter Brut",
+        "The Midnight",
+        "Timecop1983",
+        "FM-84",
+        "Lazerhawk",
+        "Dance With the Dead",
+        "Com Truise",
+        "Tycho",
+        "Deadmau5",
+        "Kraftwerk",
+        "Jean-Michel Jarre",
+        "Tangerine Dream",
+        "Vangelis",
+        "Giorgio Moroder",
+        "Chvrches",
     ];
 
     let mut tracks = Vec::with_capacity(count);
@@ -39,7 +65,8 @@ fn generate_synthetic_tracks(count: usize, managed_root: &Path) -> Vec<Track> {
         let year = 1980 + ((i % 44) as i32);
         let duration_secs = 120 + (i % 300) as u64;
         let id = format!("synthetic-track-{i:06}");
-        let rel_path = format!("{artist_name}/{album_name}/{disc_num:02}-{track_num:02}-track-{i}.flac");
+        let rel_path =
+            format!("{artist_name}/{album_name}/{disc_num:02}-{track_num:02}-track-{i}.flac");
         let full_path = managed_root.join(&rel_path);
 
         tracks.push(Track {
@@ -60,6 +87,7 @@ fn generate_synthetic_tracks(count: usize, managed_root: &Path) -> Vec<Track> {
                 channels: Some(2),
                 format: "FLAC".to_string(),
                 lyrics: None,
+                ..Default::default()
             },
             date_added: 1700000000 + i as u64,
         });
@@ -82,15 +110,28 @@ fn bench_pragmas_and_query_plans() {
          PRAGMA busy_timeout = 5000;
          PRAGMA temp_store = MEMORY;
          PRAGMA mmap_size = 268435456;",
-    ).unwrap();
+    )
+    .unwrap();
 
     // 1. Verify PRAGMAs on configured connection
-    let journal_mode: String = conn.query_row("PRAGMA journal_mode", [], |r| r.get(0)).unwrap();
-    let synchronous: i64 = conn.query_row("PRAGMA synchronous", [], |r| r.get(0)).unwrap();
-    let foreign_keys: i64 = conn.query_row("PRAGMA foreign_keys", [], |r| r.get(0)).unwrap();
-    let cache_size: i64 = conn.query_row("PRAGMA cache_size", [], |r| r.get(0)).unwrap();
-    let busy_timeout: i64 = conn.query_row("PRAGMA busy_timeout", [], |r| r.get(0)).unwrap();
-    let mmap_size: i64 = conn.query_row("PRAGMA mmap_size", [], |r| r.get(0)).unwrap();
+    let journal_mode: String = conn
+        .query_row("PRAGMA journal_mode", [], |r| r.get(0))
+        .unwrap();
+    let synchronous: i64 = conn
+        .query_row("PRAGMA synchronous", [], |r| r.get(0))
+        .unwrap();
+    let foreign_keys: i64 = conn
+        .query_row("PRAGMA foreign_keys", [], |r| r.get(0))
+        .unwrap();
+    let cache_size: i64 = conn
+        .query_row("PRAGMA cache_size", [], |r| r.get(0))
+        .unwrap();
+    let busy_timeout: i64 = conn
+        .query_row("PRAGMA busy_timeout", [], |r| r.get(0))
+        .unwrap();
+    let mmap_size: i64 = conn
+        .query_row("PRAGMA mmap_size", [], |r| r.get(0))
+        .unwrap();
 
     println!("[PRAGMA METRICS - CONFIGURED CONNECTION]");
     println!("  journal_mode: {journal_mode}");
@@ -109,7 +150,8 @@ fn bench_pragmas_and_query_plans() {
 
     // Ingest 1000 sample tracks for query plan analysis
     let sample_tracks = generate_synthetic_tracks(1000, &managed_root);
-    db.insert_or_update_batch(&sample_tracks, &managed_root).unwrap();
+    db.insert_or_update_batch(&sample_tracks, &managed_root)
+        .unwrap();
 
     // 2. Analyze EXPLAIN QUERY PLAN
     println!("\n[QUERY PLAN ANALYSIS]");
@@ -180,12 +222,18 @@ fn bench_batch_ingestion_scaling_and_upsert() {
         db.insert_or_update_batch(chunk, &managed_root).unwrap();
     }
     let duration = start.elapsed();
-    println!("  Primary DB Ingestion (250 batch): {duration:8.2?} ({:.1} tracks/sec)", total_tracks as f64 / duration.as_secs_f64());
+    println!(
+        "  Primary DB Ingestion (250 batch): {duration:8.2?} ({:.1} tracks/sec)",
+        total_tracks as f64 / duration.as_secs_f64()
+    );
 
     // Test Upsert / Update Performance on 5,000 existing tracks
     let mut updated_tracks = tracks.clone();
     for t in &mut updated_tracks {
-        t.metadata.title = Some(format!("Updated: {}", t.metadata.title.as_deref().unwrap_or("")));
+        t.metadata.title = Some(format!(
+            "Updated: {}",
+            t.metadata.title.as_deref().unwrap_or("")
+        ));
     }
 
     let update_start = Instant::now();
@@ -193,7 +241,10 @@ fn bench_batch_ingestion_scaling_and_upsert() {
         db.insert_or_update_batch(chunk, &managed_root).unwrap();
     }
     let update_duration = update_start.elapsed();
-    println!("  Upsert/Update 5,000 Tracks: {update_duration:8.2?} ({:.1} tracks/sec)", total_tracks as f64 / update_duration.as_secs_f64());
+    println!(
+        "  Upsert/Update 5,000 Tracks: {update_duration:8.2?} ({:.1} tracks/sec)",
+        total_tracks as f64 / update_duration.as_secs_f64()
+    );
 
     // Verify update reflected in FTS
     let fts_results = db.search_fts("Updated", &managed_root).unwrap();
@@ -246,7 +297,10 @@ fn bench_fts5_and_aggregations_at_scale() {
         album_count = albums.len();
     }
     let album_duration = start.elapsed();
-    println!("  db.list_albums(): avg {:.2} ms/query | unique albums: {album_count}", album_duration.as_secs_f64() * 1000.0 / 50.0);
+    println!(
+        "  db.list_albums(): avg {:.2} ms/query | unique albums: {album_count}",
+        album_duration.as_secs_f64() * 1000.0 / 50.0
+    );
 
     // list_artists
     let start = Instant::now();
@@ -256,17 +310,25 @@ fn bench_fts5_and_aggregations_at_scale() {
         artist_count = artists.len();
     }
     let artist_duration = start.elapsed();
-    println!("  db.list_artists(): avg {:.2} ms/query | unique artists: {artist_count}", artist_duration.as_secs_f64() * 1000.0 / 50.0);
+    println!(
+        "  db.list_artists(): avg {:.2} ms/query | unique artists: {artist_count}",
+        artist_duration.as_secs_f64() * 1000.0 / 50.0
+    );
 
     // get_album_tracks
     let start = Instant::now();
     let mut track_count = 0;
     for _ in 0..100 {
-        let alb_tracks = db.get_album_tracks("Album Kavinsky 0", Some("Kavinsky"), &managed_root).unwrap();
+        let alb_tracks = db
+            .get_album_tracks("Album Kavinsky 0", Some("Kavinsky"), &managed_root)
+            .unwrap();
         track_count = alb_tracks.len();
     }
     let tracks_duration = start.elapsed();
-    println!("  db.get_album_tracks(): avg {:.2} µs/query | tracks in album: {track_count}", tracks_duration.as_micros() as f64 / 100.0);
+    println!(
+        "  db.get_album_tracks(): avg {:.2} µs/query | tracks in album: {track_count}",
+        tracks_duration.as_micros() as f64 / 100.0
+    );
 
     // get_track by id
     let start = Instant::now();
@@ -276,7 +338,10 @@ fn bench_fts5_and_aggregations_at_scale() {
         assert!(t.is_some());
     }
     let get_track_dur = start.elapsed();
-    println!("  db.get_track(id): avg {:.2} µs/lookup", get_track_dur.as_micros() as f64 / 100.0);
+    println!(
+        "  db.get_track(id): avg {:.2} µs/lookup",
+        get_track_dur.as_micros() as f64 / 100.0
+    );
 
     drop(db);
     let _ = fs::remove_dir_all(&temp_dir);
@@ -328,7 +393,10 @@ fn bench_playlist_stress_and_cascades() {
             |r| r.get(0),
         )
         .unwrap();
-    assert_eq!(orphaned_entries, 0, "Orphaned playlist_tracks should be 0 due to CASCADE");
+    assert_eq!(
+        orphaned_entries, 0,
+        "Orphaned playlist_tracks should be 0 due to CASCADE"
+    );
     println!("  Cascade track deletion verified: 0 orphaned playlist_track records");
 
     // Delete 25 playlists and verify cascade deletion of playlist_tracks
@@ -345,7 +413,10 @@ fn bench_playlist_stress_and_cascades() {
             |r| r.get(0),
         )
         .unwrap();
-    assert_eq!(orphaned_pt, 0, "Orphaned playlist_tracks should be 0 after playlist deletion");
+    assert_eq!(
+        orphaned_pt, 0,
+        "Orphaned playlist_tracks should be 0 after playlist deletion"
+    );
     println!("  Cascade playlist deletion verified: 0 orphaned playlist_tracks");
 
     drop(conn);
@@ -409,7 +480,10 @@ fn bench_concurrent_read_write_wal_stress() {
                         }
                     }
                     _ => {
-                        if db_clone.get_album_tracks("Album Kavinsky 0", Some("Kavinsky"), &m_root).is_err() {
+                        if db_clone
+                            .get_album_tracks("Album Kavinsky 0", Some("Kavinsky"), &m_root)
+                            .is_err()
+                        {
                             r_err.fetch_add(1, Ordering::Relaxed);
                         }
                     }
@@ -439,7 +513,9 @@ fn bench_concurrent_read_write_wal_stress() {
                         let idx = offset + i;
                         Track {
                             id: format!("concurrent-track-{idx}"),
-                            source: TrackSource::Managed(m_root.join(format!("artist/album/{idx}.flac"))),
+                            source: TrackSource::Managed(
+                                m_root.join(format!("artist/album/{idx}.flac")),
+                            ),
                             metadata: TrackMetadata {
                                 title: Some(format!("Concurrent Song {idx}")),
                                 artist: Some("Concurrent Artist".into()),
@@ -455,13 +531,17 @@ fn bench_concurrent_read_write_wal_stress() {
                                 channels: Some(2),
                                 format: "FLAC".into(),
                                 lyrics: None,
+                                ..Default::default()
                             },
                             date_added: 1700000000 + idx as u64,
                         }
                     })
                     .collect();
 
-                if db_clone.insert_or_update_batch(&new_tracks, &m_root).is_err() {
+                if db_clone
+                    .insert_or_update_batch(&new_tracks, &m_root)
+                    .is_err()
+                {
                     w_err.fetch_add(1, Ordering::Relaxed);
                 } else {
                     w_ops.fetch_add(new_tracks.len(), Ordering::Relaxed);
@@ -489,15 +569,33 @@ fn bench_concurrent_read_write_wal_stress() {
     let total_w_err = write_errors.load(Ordering::SeqCst);
 
     println!("  Duration: {elapsed:.2?}");
-    println!("  Total Read Operations:  {total_reads:6} ({:.1} ops/sec)", total_reads as f64 / elapsed.as_secs_f64());
-    println!("  Total Tracks Ingested:  {total_writes:6} ({:.1} tracks/sec)", total_writes as f64 / elapsed.as_secs_f64());
+    println!(
+        "  Total Read Operations:  {total_reads:6} ({:.1} ops/sec)",
+        total_reads as f64 / elapsed.as_secs_f64()
+    );
+    println!(
+        "  Total Tracks Ingested:  {total_writes:6} ({:.1} tracks/sec)",
+        total_writes as f64 / elapsed.as_secs_f64()
+    );
     println!("  Read Errors / Busy:     {total_r_err}");
     println!("  Write Errors / Busy:    {total_w_err}");
 
-    assert_eq!(total_r_err, 0, "Zero read errors allowed under WAL concurrency");
-    assert_eq!(total_w_err, 0, "Zero write errors allowed under WAL concurrency");
-    assert!(total_reads > 200, "Should achieve high read throughput under concurrent writes");
-    assert!(total_writes > 100, "Should achieve steady writes during concurrent reads");
+    assert_eq!(
+        total_r_err, 0,
+        "Zero read errors allowed under WAL concurrency"
+    );
+    assert_eq!(
+        total_w_err, 0,
+        "Zero write errors allowed under WAL concurrency"
+    );
+    assert!(
+        total_reads > 200,
+        "Should achieve high read throughput under concurrent writes"
+    );
+    assert!(
+        total_writes > 100,
+        "Should achieve steady writes during concurrent reads"
+    );
 
     drop(db);
     let _ = fs::remove_dir_all(&temp_dir);
@@ -515,10 +613,14 @@ async fn bench_parallel_directory_scanner_scale() {
 
     for artist_i in 1..=5 {
         for album_j in 1..=5 {
-            let album_dir = source_dir.join(format!("Artist_{artist_i}")).join(format!("Album_{album_j}"));
+            let album_dir = source_dir
+                .join(format!("Artist_{artist_i}"))
+                .join(format!("Album_{album_j}"));
             fs::create_dir_all(&album_dir).unwrap();
             for track_k in 1..=10 {
-                let file_path = album_dir.join(format!("{track_k:02} - Song_{artist_i}_{album_j}_{track_k}.mp3"));
+                let file_path = album_dir.join(format!(
+                    "{track_k:02} - Song_{artist_i}_{album_j}_{track_k}.mp3"
+                ));
                 let mut f = File::create(&file_path).unwrap();
                 f.write_all(b"ID3\x04\x00\x00\x00\x00\x00\x20TIT2\x00\x00\x00\x09\x00\x00\x03TestSongTPE1\x00\x00\x00\x0b\x00\x00\x03TestArtistTALB\x00\x00\x00\x0a\x00\x00\x03TestAlbum").unwrap();
             }
@@ -558,7 +660,10 @@ async fn bench_parallel_directory_scanner_scale() {
     println!("  Discovered: {disc}, Processed: {proc}, Batched Ingested: {batches}");
     println!("  Imported Tracks: {}", imported.len());
     if let Some(s) = summary {
-        println!("  Summary: scanned={}, imported={}, failed={}, duration_ms={}ms", s.scanned_files, s.imported_tracks, s.failed_files, s.duration_ms);
+        println!(
+            "  Summary: scanned={}, imported={}, failed={}, duration_ms={}ms",
+            s.scanned_files, s.imported_tracks, s.failed_files, s.duration_ms
+        );
         assert_eq!(s.imported_tracks, file_count);
         assert_eq!(s.failed_files, 0);
     }
@@ -568,7 +673,10 @@ async fn bench_parallel_directory_scanner_scale() {
 
     // Verify managed file structure exists on disk
     let sample_managed = manager.all_tracks()[0].source.path();
-    assert!(sample_managed.exists(), "Managed file must exist on disk after Copy");
+    assert!(
+        sample_managed.exists(),
+        "Managed file must exist on disk after Copy"
+    );
     assert!(sample_managed.starts_with(&library_root));
 
     let _ = fs::remove_dir_all(&temp_dir);

@@ -16,16 +16,16 @@ import {
   FilePenLine,
   Trash2,
   CornerDownRight,
-  Sparkles,
+  EyeOff,
+  Eye,
 } from "lucide-react";
 import { useArtwork } from "../utils/useArtwork";
 import { ArtistLinks } from "./ArtistLinks";
 import { useLibraryStore } from "../stores/libraryStore";
 import { usePlayerStore } from "../stores/playerStore";
 import { useContextMenuStore, ContextMenuItem } from "../stores/contextMenuStore";
-import { useEnrichmentStore } from "../stores/enrichmentStore";
 import { EqualizerWave } from "./EqualizerWave";
-import { RowDensity } from "../stores/settingsStore";
+import { RowDensity, useSettingsStore } from "../stores/settingsStore";
 
 interface TrackRowProps {
   track: Track;
@@ -61,13 +61,6 @@ const TrackRowInner: React.FC<TrackRowProps> = ({
   rowDensity = "comfortable",
 }) => {
   const isLiked = useLibraryStore((s) => s.likedTrackIds.has(track.id));
-  const toggleLike = useLibraryStore((s) => s.toggleLike);
-  const playlists = useLibraryStore((s) => s.playlists);
-  const addTracksToPlaylist = useLibraryStore((s) => s.addTracksToPlaylist);
-
-  const insertAfterCurrent = usePlayerStore((s) => s.insertAfterCurrent);
-  const addToQueue = usePlayerStore((s) => s.addToQueue);
-  const openContextMenu = useContextMenuStore((s) => s.openContextMenu);
 
   const fetchedArtwork = useArtwork(track.id);
   const artworkUrl = propArtworkUrl || fetchedArtwork;
@@ -80,7 +73,7 @@ const TrackRowInner: React.FC<TrackRowProps> = ({
   const handleToggleLike = async (e: React.MouseEvent) => {
     e.stopPropagation();
     try {
-      await toggleLike(track.id);
+      await useLibraryStore.getState().toggleLike(track.id);
     } catch (err) {
       console.error("Failed to toggle like:", err);
     }
@@ -90,6 +83,11 @@ const TrackRowInner: React.FC<TrackRowProps> = ({
     (e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
+
+      const { playlists, addTracksToPlaylist, toggleLike } = useLibraryStore.getState();
+      const { insertAfterCurrent, addToQueue } = usePlayerStore.getState();
+      const { isArtistHidden, toggleHideArtist } = useSettingsStore.getState();
+      const openContextMenu = useContextMenuStore.getState().openContextMenu;
 
       const playlistSubmenuItems: ContextMenuItem[] = [];
 
@@ -200,6 +198,19 @@ const TrackRowInner: React.FC<TrackRowProps> = ({
         });
       }
 
+      const targetArtist = extractPrimaryArtist(track.metadata.album_artist || track.metadata.artist || artistName);
+      if (targetArtist && targetArtist !== "Unknown Artist") {
+        const isHidden = isArtistHidden(targetArtist);
+        menuItems.push({
+          id: "toggle-hide-artist",
+          label: isHidden ? `Unhide Artist (${targetArtist})` : `Hide Artist (${targetArtist})`,
+          icon: isHidden ? Eye : EyeOff,
+          onClick: () => {
+            toggleHideArtist(targetArtist);
+          },
+        });
+      }
+
       menuItems.push(
         {
           id: "divider-copy",
@@ -267,14 +278,6 @@ const TrackRowInner: React.FC<TrackRowProps> = ({
             onClick: () => {
               onEditMetadata(track);
             },
-          },
-          {
-            id: "pull-online-track",
-            label: "Pull Online Metadata & Lyrics...",
-            icon: Sparkles,
-            onClick: () => {
-              useEnrichmentStore.getState().openModal([track]);
-            },
           }
         );
       }
@@ -308,7 +311,6 @@ const TrackRowInner: React.FC<TrackRowProps> = ({
       isLiked,
       artistName,
       albumTitle,
-      playlists,
       onPlay,
       onSelectArtist,
       onSelectAlbum,
@@ -316,15 +318,20 @@ const TrackRowInner: React.FC<TrackRowProps> = ({
       onRemoveFromPlaylist,
       onDeleteTrack,
       onEditMetadata,
-      insertAfterCurrent,
-      addToQueue,
-      toggleLike,
-      addTracksToPlaylist,
-      openContextMenu,
     ]
   );
 
   const isCompact = rowDensity === "compact";
+
+  // A click on the row starts playback immediately. Interactive
+  // children (buttons, links) handle their own activation and are excluded.
+  const handleRowClick = useCallback(
+    (e: React.MouseEvent) => {
+      if ((e.target as HTMLElement).closest("button, a, input, [role='button']")) return;
+      onPlay(track, index);
+    },
+    [onPlay, track, index]
+  );
 
   return (
     <div
@@ -333,6 +340,7 @@ const TrackRowInner: React.FC<TrackRowProps> = ({
       aria-rowindex={index + 1}
       data-index={index}
       style={style}
+      onClick={handleRowClick}
       onDoubleClick={() => onPlay(track, index)}
       onContextMenu={handleContextMenu}
       className={`grid grid-cols-[36px_minmax(0,1fr)_auto] md:grid-cols-[40px_minmax(160px,1fr)_140px_80px] lg:grid-cols-[44px_minmax(180px,1fr)_150px_150px_90px] xl:grid-cols-[48px_minmax(180px,1fr)_160px_160px_80px_110px] gap-2 sm:gap-3 px-3 sm:px-6 items-center group cursor-pointer hover:bg-white/[0.06] transition-colors duration-150 ease-out border-b border-white/[0.03] select-none ${
@@ -344,10 +352,10 @@ const TrackRowInner: React.FC<TrackRowProps> = ({
       {/* 1. Track Number / Play-Pause Button */}
       <div
         role="cell"
-        className={`flex items-center justify-center text-textMuted flex-shrink-0 w-8 ${isCompact ? "text-2xs" : "text-xs"}`}
+        className={`relative flex items-center justify-center text-textMuted flex-shrink-0 w-8 ${isCompact ? "text-2xs" : "text-xs"}`}
       >
-        {/* Not hovered state */}
-        <span className="group-hover:hidden font-mono tabular-nums flex items-center justify-center">
+        {/* Not hovered state (desktop only — touch devices get a persistent play button) */}
+        <span className="hidden md:flex font-mono tabular-nums items-center justify-center transition-all duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] md:group-hover:opacity-0 md:group-hover:scale-75 pointer-events-none">
           {isSelected && isPlaying ? (
             <EqualizerWave isPlaying={true} size="xs" />
           ) : isSelected ? (
@@ -357,14 +365,14 @@ const TrackRowInner: React.FC<TrackRowProps> = ({
           )}
         </span>
 
-        {/* Hovered state: Interactive Play/Pause Button */}
+        {/* Interactive Play/Pause Button (always visible on touch, hover-revealed on desktop with in-place crossfade) */}
         <button
           type="button"
           onClick={(e) => {
             e.stopPropagation();
             onPlay(track, index);
           }}
-          className="hidden group-hover:inline-flex text-white hover:text-accent hover:scale-110 active:scale-95 transition items-center justify-center"
+          className="inline-flex md:absolute text-white hover:text-accent active:scale-95 transition-all duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] items-center justify-center md:opacity-0 md:scale-75 md:group-hover:opacity-100 md:group-hover:scale-100 md:pointer-events-none md:group-hover:pointer-events-auto"
           title={isSelected && isPlaying ? "Pause Track" : isSelected ? "Resume Track" : "Play Track"}
         >
           {isSelected && isPlaying ? (
@@ -438,7 +446,7 @@ const TrackRowInner: React.FC<TrackRowProps> = ({
 
       {/* 5. Format (visible on xl+) */}
       <div role="cell" className="hidden xl:flex items-center justify-center">
-        <span className="px-2 py-1 text-2xs font-bold bg-white/[0.06] text-textSecondary rounded-md tracking-wider border border-white/[0.04]">
+        <span className="px-2 py-1 text-2xs font-semibold bg-white/[0.06] text-textSecondary rounded-md border border-white/[0.04]">
           {track.metadata.format}
         </span>
       </div>
@@ -452,10 +460,10 @@ const TrackRowInner: React.FC<TrackRowProps> = ({
         <button
           type="button"
           onClick={handleToggleLike}
-          className={`p-1 rounded transition ${
+          className={`p-2 md:p-1 rounded transition ${
             isLiked
               ? "text-accent opacity-100"
-              : "text-textMuted opacity-0 group-hover:opacity-100 hover:text-white"
+              : "text-textMuted opacity-100 md:opacity-0 md:group-hover:opacity-100 hover:text-white"
           }`}
           title={isLiked ? "Unlike song" : "Like song"}
         >
@@ -470,7 +478,7 @@ const TrackRowInner: React.FC<TrackRowProps> = ({
               e.stopPropagation();
               onAddToPlaylist(track);
             }}
-            className="p-1 text-textMuted hover:text-white opacity-0 group-hover:opacity-100 transition"
+            className="p-2 md:p-1 text-textMuted hover:text-white opacity-100 md:opacity-0 md:group-hover:opacity-100 transition"
             title="Add to Playlist"
           >
             <ListPlus className="w-3.5 h-3.5" />
@@ -478,7 +486,7 @@ const TrackRowInner: React.FC<TrackRowProps> = ({
         )}
 
         {/* Duration */}
-        <span className="font-mono pr-1">{formatDuration(durationSecs)}</span>
+        <span className="font-mono tabular-nums pr-1">{formatDuration(durationSecs)}</span>
       </div>
     </div>
   );

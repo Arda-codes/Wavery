@@ -59,18 +59,80 @@ export const MIN_WAVEFORM_HEIGHT = 4;
 export const MAX_WAVEFORM_HEIGHT = 22;
 
 /**
+ * Maps an array of normalized [0.0, 1.0] waveform envelope points to pixel bar heights
+ * in [MIN_WAVEFORM_HEIGHT, MAX_WAVEFORM_HEIGHT].
+ */
+export function mapWaveformPointsToBarHeights(
+  points: number[],
+  barCount: number = DEFAULT_WAVEFORM_BAR_COUNT
+): number[] {
+  const safeCount = Math.max(2, Math.floor(barCount));
+  if (!points || points.length === 0) {
+    return Array.from({ length: safeCount }, () => FLAT_BAR_HEIGHT);
+  }
+
+  const heights: number[] = new Array(safeCount);
+  const srcLen = points.length;
+
+  for (let i = 0; i < safeCount; i++) {
+    let val = 0;
+    if (srcLen >= safeCount) {
+      const start = Math.floor((i * srcLen) / safeCount);
+      const end = Math.max(
+        start + 1,
+        Math.min(srcLen, Math.floor(((i + 1) * srcLen) / safeCount))
+      );
+      for (let j = start; j < end; j++) {
+        const p = points[j];
+        if (typeof p === "number" && !isNaN(p) && p > val) {
+          val = p;
+        }
+      }
+    } else {
+      const exactPos = srcLen > 1 ? (i / (safeCount - 1)) * (srcLen - 1) : 0;
+      const idx0 = Math.floor(exactPos);
+      const idx1 = Math.min(srcLen - 1, idx0 + 1);
+      const frac = exactPos - idx0;
+      const p0 =
+        typeof points[idx0] === "number" && !isNaN(points[idx0])
+          ? points[idx0]
+          : 0;
+      const p1 =
+        typeof points[idx1] === "number" && !isNaN(points[idx1])
+          ? points[idx1]
+          : 0;
+      val = p0 + (p1 - p0) * frac;
+    }
+
+    const clamped = Math.max(0, Math.min(1, val));
+    heights[i] = Math.round(
+      MIN_WAVEFORM_HEIGHT + clamped * (MAX_WAVEFORM_HEIGHT - MIN_WAVEFORM_HEIGHT)
+    );
+  }
+
+  return heights;
+}
+
+/**
  * Generates an array of pixel heights for the waveform scrubber.
  *
  * @param track The current track, or null/undefined if idle.
  * @param barCount Number of bars across the scrubber.
+ * @param cachedPoints Optional cached 100-point normalized [0.0, 1.0] waveform envelope from backend.
  * @returns An array of bar heights in pixels (all FLAT_BAR_HEIGHT if no track).
  */
 export function generateWaveformBarHeights(
   track: TrackWaveformSource | null | undefined,
-  barCount: number = DEFAULT_WAVEFORM_BAR_COUNT
+  barCount: number = DEFAULT_WAVEFORM_BAR_COUNT,
+  cachedPoints?: number[] | null
 ): number[] {
+  const safeCount = Math.max(2, Math.floor(barCount));
   if (!track) {
-    return Array.from({ length: barCount }, () => FLAT_BAR_HEIGHT);
+    return Array.from({ length: safeCount }, () => FLAT_BAR_HEIGHT);
+  }
+
+  if (Array.isArray(cachedPoints) && cachedPoints.length > 0) {
+    return mapWaveformPointsToBarHeights(cachedPoints, safeCount);
   }
 
   // Derive unique seed from track attributes
@@ -90,10 +152,10 @@ export function generateWaveformBarHeights(
   // Track temperament (dynamic range factor)
   const dynamicFactor = 0.65 + rng() * 0.35; // 0.65 - 1.0
 
-  const heights: number[] = new Array(barCount);
+  const heights: number[] = new Array(safeCount);
 
-  for (let i = 0; i < barCount; i++) {
-    const t = i / (barCount - 1); // 0.0 to 1.0
+  for (let i = 0; i < safeCount; i++) {
+    const t = i / (safeCount - 1); // 0.0 to 1.0
 
     // 1. Musical structure envelope (intro -> verse -> chorus -> breakdown -> climax -> outro)
     let envelope: number;

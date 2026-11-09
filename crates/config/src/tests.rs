@@ -1,6 +1,6 @@
 use crate::{
     load_or_create, load_session, save, save_session_atomic, AudioBackendKind, Config, ConfigError,
-    ThemeMode,
+    ServerConfig, ThemeMode,
 };
 use std::fs;
 use std::sync::Arc;
@@ -358,3 +358,149 @@ fn test_session_atomic_save_and_load() {
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
+
+#[test]
+fn test_server_config_lan_toggle_and_helpers() {
+    let mut cfg = ServerConfig::default();
+    assert!(!cfg.is_lan_enabled());
+    assert_eq!(cfg.host, "127.0.0.1");
+
+    cfg.set_lan_enabled(true);
+    assert!(cfg.is_lan_enabled());
+    assert_eq!(cfg.host, "0.0.0.0");
+
+    cfg.set_lan_enabled(false);
+    assert!(!cfg.is_lan_enabled());
+    assert_eq!(cfg.host, "127.0.0.1");
+
+    // IPv6 all-interfaces
+    cfg.host = "::".into();
+    assert!(cfg.is_lan_enabled());
+
+    // Host with whitespace
+    cfg.host = "  0.0.0.0  ".into();
+    assert!(cfg.is_lan_enabled());
+
+    // Loopback variations and named hosts are not LAN enabled
+    cfg.host = "::1".into();
+    assert!(!cfg.is_lan_enabled());
+
+    cfg.host = "localhost".into();
+    assert!(!cfg.is_lan_enabled());
+
+    cfg.host = "192.168.1.100".into();
+    assert!(!cfg.is_lan_enabled());
+
+    // Config delegation
+    let mut root_cfg = Config::default();
+    assert!(!root_cfg.is_lan_enabled());
+    root_cfg.set_lan_enabled(true);
+    assert!(root_cfg.is_lan_enabled());
+    assert_eq!(root_cfg.server.host, "0.0.0.0");
+}
+
+#[test]
+fn test_server_config_host_sanitization() {
+    let mut cfg = Config::default();
+
+    // Empty host defaults to 127.0.0.1
+    cfg.server.host = "".into();
+    cfg.sanitize();
+    assert_eq!(cfg.server.host, "127.0.0.1");
+
+    // Whitespace-only host defaults to 127.0.0.1
+    cfg.server.host = "   \t\n  ".into();
+    cfg.sanitize();
+    assert_eq!(cfg.server.host, "127.0.0.1");
+
+    // Valid host with leading/trailing whitespace is trimmed
+    cfg.server.host = "  192.168.1.120  ".into();
+    cfg.sanitize();
+    assert_eq!(cfg.server.host, "192.168.1.120");
+
+    // Port 0 defaults to 4242
+    cfg.server.port = 0;
+    cfg.sanitize();
+    assert_eq!(cfg.server.port, 4242);
+
+    // Valid hosts remain intact
+    let valid_hosts = ["0.0.0.0", "127.0.0.1", "localhost", "10.0.0.1", "::1", "::"];
+    for host in valid_hosts {
+        cfg.server.host = host.into();
+        cfg.sanitize();
+        assert_eq!(cfg.server.host, host);
+    }
+}
+
+#[test]
+fn test_audio_config_replay_gain_validation() {
+    let mut cfg = Config::default();
+
+    // Default is "off"
+    assert_eq!(cfg.audio.replay_gain_mode, "off");
+    assert!(!cfg.audio.is_replay_gain_enabled());
+
+    // "track" is valid
+    cfg.audio.replay_gain_mode = "track".into();
+    cfg.sanitize();
+    assert_eq!(cfg.audio.replay_gain_mode, "track");
+    assert!(cfg.audio.is_replay_gain_enabled());
+
+    // "album" is valid
+    cfg.audio.replay_gain_mode = "album".into();
+    cfg.sanitize();
+    assert_eq!(cfg.audio.replay_gain_mode, "album");
+    assert!(cfg.audio.is_replay_gain_enabled());
+
+    // Case insensitivity normalization
+    cfg.audio.replay_gain_mode = "TRACK".into();
+    cfg.sanitize();
+    assert_eq!(cfg.audio.replay_gain_mode, "track");
+
+    cfg.audio.replay_gain_mode = "  Album  ".into();
+    cfg.sanitize();
+    assert_eq!(cfg.audio.replay_gain_mode, "album");
+
+    // Invalid mode defaults to "off"
+    cfg.audio.replay_gain_mode = "invalid_mode".into();
+    cfg.sanitize();
+    assert_eq!(cfg.audio.replay_gain_mode, "off");
+    assert!(!cfg.audio.is_replay_gain_enabled());
+
+    cfg.audio.replay_gain_mode = "".into();
+    cfg.sanitize();
+    assert_eq!(cfg.audio.replay_gain_mode, "off");
+}
+
+#[test]
+fn test_config_atomic_save_sanitization_and_lan_roundtrip() {
+    let temp_dir = std::env::temp_dir().join(format!("wavery_cfg_lan_{}", uuid::Uuid::new_v4()));
+    let cfg_path = temp_dir.join("config.toml");
+    fs::create_dir_all(&temp_dir).unwrap();
+
+    let mut cfg = Config::default();
+    cfg.server.set_lan_enabled(true);
+    cfg.audio.replay_gain_mode = "TRACK".into();
+
+    save(&cfg_path, &cfg).unwrap();
+    assert!(cfg_path.exists());
+
+    let loaded = load_or_create(&cfg_path).unwrap();
+    assert!(loaded.server.is_lan_enabled());
+    assert_eq!(loaded.server.host, "0.0.0.0");
+    assert_eq!(loaded.audio.replay_gain_mode, "track");
+    assert!(loaded.audio.is_replay_gain_enabled());
+
+    // Now test save with empty host and invalid replay gain mode
+    let mut corrupted = Config::default();
+    corrupted.server.host = "".into();
+    corrupted.audio.replay_gain_mode = "super_boost".into();
+
+    save(&cfg_path, &corrupted).unwrap();
+    let reloaded = load_or_create(&cfg_path).unwrap();
+    assert_eq!(reloaded.server.host, "127.0.0.1");
+    assert_eq!(reloaded.audio.replay_gain_mode, "off");
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+

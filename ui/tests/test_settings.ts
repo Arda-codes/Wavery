@@ -63,6 +63,47 @@ export async function runSettingsComprehensiveTests() {
   assert.strictEqual(useSettingsStore.getState().themeMode, "latte");
   assert.strictEqual(useSettingsStore.getState().accentColor, "#1E66F5");
 
+  // New Light and Dark Ecosystem presets
+  store.setThemePreset("nord");
+  assert.strictEqual(useSettingsStore.getState().themeMode, "nord");
+  assert.strictEqual(useSettingsStore.getState().accentColor, "#88C0D0");
+
+  store.setThemePreset("snow");
+  assert.strictEqual(useSettingsStore.getState().themeMode, "snow");
+  assert.strictEqual(useSettingsStore.getState().accentColor, "#5E81AC");
+
+  store.setThemePreset("solarized");
+  assert.strictEqual(useSettingsStore.getState().themeMode, "solarized");
+  assert.strictEqual(useSettingsStore.getState().accentColor, "#2AA198");
+
+  store.setThemePreset("sand");
+  assert.strictEqual(useSettingsStore.getState().themeMode, "sand");
+  assert.strictEqual(useSettingsStore.getState().accentColor, "#B58900");
+
+  store.setThemePreset("tokyo");
+  assert.strictEqual(useSettingsStore.getState().themeMode, "tokyo");
+  assert.strictEqual(useSettingsStore.getState().accentColor, "#7AA2F7");
+
+  store.setThemePreset("dawn");
+  assert.strictEqual(useSettingsStore.getState().themeMode, "dawn");
+  assert.strictEqual(useSettingsStore.getState().accentColor, "#2E7DE9");
+
+  store.setThemePreset("gruvbox");
+  assert.strictEqual(useSettingsStore.getState().themeMode, "gruvbox");
+  assert.strictEqual(useSettingsStore.getState().accentColor, "#FE8019");
+
+  store.setThemePreset("parchment");
+  assert.strictEqual(useSettingsStore.getState().themeMode, "parchment");
+  assert.strictEqual(useSettingsStore.getState().accentColor, "#AF3A03");
+
+  store.setThemePreset("rosepine");
+  assert.strictEqual(useSettingsStore.getState().themeMode, "rosepine");
+  assert.strictEqual(useSettingsStore.getState().accentColor, "#EBBCBA");
+
+  store.setThemePreset("bloom");
+  assert.strictEqual(useSettingsStore.getState().themeMode, "bloom");
+  assert.strictEqual(useSettingsStore.getState().accentColor, "#D7827E");
+
   // Custom Theme Maker operations
   const customMockTheme = {
     id: "test-theme-cyber",

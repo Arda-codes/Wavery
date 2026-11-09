@@ -25,6 +25,7 @@ fn make_test_track(id: &str, title: &str) -> Track {
             channels: None,
             format: "MP3".into(),
             lyrics: None,
+            ..Default::default()
         },
         date_added: 0,
     }
@@ -82,8 +83,14 @@ fn test_challenge_queue_size_1_transitions() {
         assert_eq!(q.current_track().map(|t| t.id.as_str()), Some("single_0"));
 
         // Previous on single track always returns current track
-        assert_eq!(q.previous(Duration::from_secs(1)).map(|t| t.id.as_str()), Some("single_0"));
-        assert_eq!(q.previous(Duration::from_secs(10)).map(|t| t.id.as_str()), Some("single_0"));
+        assert_eq!(
+            q.previous(Duration::from_secs(1)).map(|t| t.id.as_str()),
+            Some("single_0")
+        );
+        assert_eq!(
+            q.previous(Duration::from_secs(10)).map(|t| t.id.as_str()),
+            Some("single_0")
+        );
     }
 
     // 2. LoopMode::Track high-iteration loop
@@ -151,12 +158,18 @@ fn test_challenge_queue_size_2_permutations() {
             q.set_shuffle(true);
 
             // First track must be the chosen start track
-            assert_eq!(q.current_track().map(|t| t.id.as_str()), Some(expected_first.as_str()));
+            assert_eq!(
+                q.current_track().map(|t| t.id.as_str()),
+                Some(expected_first.as_str())
+            );
 
             // Next track must be the other track (complete 2-item permutation)
             let next_track = q.next().expect("Expected next track in 2-item shuffle");
             assert_eq!(next_track.id, expected_second);
-            assert_eq!(q.current_track().map(|t| t.id.as_str()), Some(expected_second.as_str()));
+            assert_eq!(
+                q.current_track().map(|t| t.id.as_str()),
+                Some(expected_second.as_str())
+            );
 
             // In LoopMode::Off, subsequent next returns None
             q.set_loop_mode(LoopMode::Off);
@@ -164,7 +177,10 @@ fn test_challenge_queue_size_2_permutations() {
 
             // Previous navigates back to first track
             let prev_track = q.previous(Duration::from_secs(1));
-            assert_eq!(prev_track.map(|t| t.id.as_str()), Some(expected_first.as_str()));
+            assert_eq!(
+                prev_track.map(|t| t.id.as_str()),
+                Some(expected_first.as_str())
+            );
         }
     }
 }
@@ -188,24 +204,37 @@ fn test_challenge_queue_size_50_shuffle_permutations_and_stress() {
         q.set_loop_mode(LoopMode::Off);
 
         let initial_id = format!("track_{start_idx}");
-        assert_eq!(q.current_track().map(|t| t.id.as_str()), Some(initial_id.as_str()));
+        assert_eq!(
+            q.current_track().map(|t| t.id.as_str()),
+            Some(initial_id.as_str())
+        );
 
         let mut visited = Vec::with_capacity(size);
         visited.push(initial_id);
 
         for _ in 1..size {
-            let next_t = q.next().unwrap_or_else(|| panic!("Cycle {cycle}: next() returned None unexpectedly before visiting all items"));
+            let next_t = q.next().unwrap_or_else(|| {
+                panic!("Cycle {cycle}: next() returned None unexpectedly before visiting all items")
+            });
             visited.push(next_t.id.clone());
         }
 
         // Verify complete permutation of exactly 50 items
         assert_eq!(visited.len(), size);
         let unique_set: HashSet<&String> = visited.iter().collect();
-        assert_eq!(unique_set.len(), size, "Cycle {cycle} produced duplicate tracks in shuffle permutation: {:?}", visited);
+        assert_eq!(
+            unique_set.len(),
+            size,
+            "Cycle {cycle} produced duplicate tracks in shuffle permutation: {:?}",
+            visited
+        );
 
         for i in 0..size {
             let expected_id = format!("track_{i}");
-            assert!(unique_set.contains(&expected_id), "Cycle {cycle} missing track {expected_id}");
+            assert!(
+                unique_set.contains(&expected_id),
+                "Cycle {cycle} missing track {expected_id}"
+            );
         }
 
         // LoopMode::Off -> next() returns None at end of queue
@@ -213,7 +242,9 @@ fn test_challenge_queue_size_50_shuffle_permutations_and_stress() {
 
         // Previous navigation backwards through the shuffle sequence
         for back_idx in (0..size - 1).rev() {
-            let prev_t = q.previous(Duration::from_secs(1)).expect("Expected previous track during back navigation");
+            let prev_t = q
+                .previous(Duration::from_secs(1))
+                .expect("Expected previous track during back navigation");
             assert_eq!(prev_t.id, visited[back_idx]);
         }
     }
@@ -265,7 +296,11 @@ fn test_challenge_queue_size_50_shuffle_permutations_and_stress() {
         } else {
             assert!(curr_idx.is_some());
             let idx = curr_idx.unwrap();
-            assert!(idx < q.queue().len(), "Step {step}: current_index {idx} out of bounds for queue len {}", q.queue().len());
+            assert!(
+                idx < q.queue().len(),
+                "Step {step}: current_index {idx} out of bounds for queue len {}",
+                q.queue().len()
+            );
             assert!(curr_track.is_some());
             assert_eq!(curr_track.unwrap().id, q.queue()[idx].id);
         }
@@ -291,19 +326,28 @@ fn test_challenge_queue_size_1000_large_scale() {
         q.set_loop_mode(LoopMode::Off);
 
         let initial_id = format!("trk_{start_idx:04}");
-        assert_eq!(q.current_track().map(|t| t.id.as_str()), Some(initial_id.as_str()));
+        assert_eq!(
+            q.current_track().map(|t| t.id.as_str()),
+            Some(initial_id.as_str())
+        );
 
         let mut visited = Vec::with_capacity(size);
         visited.push(initial_id);
 
         for _ in 1..size {
-            let next_t = q.next().unwrap_or_else(|| panic!("Large Scale Cycle {cycle}: unexpected None before 1000 items"));
+            let next_t = q.next().unwrap_or_else(|| {
+                panic!("Large Scale Cycle {cycle}: unexpected None before 1000 items")
+            });
             visited.push(next_t.id.clone());
         }
 
         assert_eq!(visited.len(), size);
         let unique_set: HashSet<&String> = visited.iter().collect();
-        assert_eq!(unique_set.len(), size, "Large scale cycle {cycle} failed 1000-permutation uniqueness");
+        assert_eq!(
+            unique_set.len(),
+            size,
+            "Large scale cycle {cycle} failed 1000-permutation uniqueness"
+        );
         assert_eq!(q.next(), None);
     }
 
@@ -313,7 +357,9 @@ fn test_challenge_queue_size_1000_large_scale() {
     q.set_loop_mode(LoopMode::Queue);
 
     for step in 0..100_000 {
-        let next_track = q.next().expect("LoopMode::Queue must never return None on non-empty queue");
+        let next_track = q
+            .next()
+            .expect("LoopMode::Queue must never return None on non-empty queue");
         assert!(next_track.id.starts_with("trk_"));
         if step % 5_000 == 0 {
             // Toggle shuffle or restart track occasionally

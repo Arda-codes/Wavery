@@ -88,6 +88,20 @@ export async function runContextMenuTests(jiti: any) {
   assert(closedState.isOpen === false, "closeContextMenu reset isOpen to false");
   assert(closedState.items.length === 0, "closeContextMenu emptied items");
 
+  // 1b. Test ContextMenu windowService subscription lifecycle immunity
+  console.log("--- 1b. Testing Context Menu Immunity to windowService Initial State ---");
+  const { windowService } = jiti("../src/services/windowService.ts");
+  useContextMenuStore.getState().openContextMenu(mockEvent as any, testItems);
+  assert(useContextMenuStore.getState().isOpen === true, "Context menu reopened");
+  const unsubWindowState = windowService.onWindowStateChange(useContextMenuStore.getState().closeContextMenu);
+  assert(
+    useContextMenuStore.getState().isOpen === true,
+    "Context menu remains open upon subscribing to onWindowStateChange (not prematurely killed)"
+  );
+  unsubWindowState();
+  useContextMenuStore.getState().closeContextMenu();
+  assert(useContextMenuStore.getState().isOpen === false, "Context menu successfully closed manually");
+
   // 2. Test PlayerStore insertAfterCurrent queue operation
   console.log("\n--- 2. Testing insertAfterCurrent Queue Operations ---");
   const track1 = { id: "t1", path: "/music/1.mp3", metadata: { title: "Track 1", artist: "Artist A", album: "Album X", duration: { secs: 180, nanos: 0 }, format: "mp3" } };

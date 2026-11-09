@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Track } from "../types";
 import { Trash2, X, AlertTriangle, Music } from "lucide-react";
 import { formatDuration } from "../utils/library";
+import { useTransitionMount } from "../utils/useTransitionMount";
 
 interface DeleteTrackModalProps {
   isOpen: boolean;
@@ -20,6 +21,13 @@ export const DeleteTrackModal: React.FC<DeleteTrackModalProps> = ({
   const [isDeleting, setIsDeleting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
+
+  const { isRendered, isExiting } = useTransitionMount(isOpen && !!track, 160);
+  const lastTrackRef = useRef(track);
+  if (track) {
+    lastTrackRef.current = track;
+  }
+  const displayTrack = track || lastTrackRef.current;
 
   // Reset state when opening/closing
   useEffect(() => {
@@ -49,21 +57,21 @@ export const DeleteTrackModal: React.FC<DeleteTrackModalProps> = ({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, isDeleting, onClose]);
 
-  if (!isOpen || !track) return null;
+  if (!isRendered || !displayTrack) return null;
 
-  const title = track.metadata.title || "Untitled Track";
-  const artist = track.metadata.artist || "Unknown Artist";
-  const album = track.metadata.album || "Unknown Album";
-  const durationSecs = track.metadata.duration?.secs || 0;
+  const title = displayTrack.metadata.title || "Untitled Track";
+  const artist = displayTrack.metadata.artist || "Unknown Artist";
+  const album = displayTrack.metadata.album || "Unknown Album";
+  const durationSecs = displayTrack.metadata.duration?.secs || 0;
   const durationFormatted = formatDuration(durationSecs);
-  const audioFormat = track.metadata.format ? track.metadata.format.toUpperCase() : "AUDIO";
+  const audioFormat = displayTrack.metadata.format ? displayTrack.metadata.format.toUpperCase() : "AUDIO";
 
   const handleConfirm = async () => {
     if (isDeleting) return;
     try {
       setIsDeleting(true);
       setErrorMessage(null);
-      await onConfirm(track.id, deleteFromDisk);
+      await onConfirm(displayTrack.id, deleteFromDisk);
       onClose();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -77,26 +85,30 @@ export const DeleteTrackModal: React.FC<DeleteTrackModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="delete-track-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-fadeIn"
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 ${
+        isExiting ? "animate-backdrop-out" : "animate-backdrop-in"
+      }`}
       onClick={(e) => {
         if (e.target === e.currentTarget && !isDeleting) {
           onClose();
         }
       }}
     >
-      <div className="bg-surface border border-white/[0.12] rounded-2xl w-full max-w-md overflow-hidden shadow-2xl shadow-black/80 animate-scaleUp">
+      <div
+        className={`bg-surface border border-white/[0.12] rounded-2xl w-full max-w-md overflow-hidden shadow-2xl shadow-black/80 ${
+          isExiting ? "animate-scale-down pointer-events-none" : "animate-scale-up"
+        }`}
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.08]">
           <div className="flex items-center space-x-3">
-            <div className="w-9 h-9 rounded-xl bg-danger/15 border border-danger/30 flex items-center justify-center text-danger shadow-md shadow-danger/10">
-              <Trash2 className="w-4 h-4" />
-            </div>
+            <Trash2 className="w-5 h-5 text-danger flex-shrink-0" />
             <div>
-              <h2 id="delete-track-title" className="text-sm font-bold text-white">
-                Delete Song
+              <h2 id="delete-track-title" className="text-sm font-semibold text-white">
+                Delete Track
               </h2>
               <p className="text-2xs text-textMuted">
-                Remove from library or delete permanently
+                Choose whether to remove from library or delete from disk
               </p>
             </div>
           </div>
@@ -194,11 +206,11 @@ export const DeleteTrackModal: React.FC<DeleteTrackModalProps> = ({
               className="flex items-center space-x-2 px-4 py-2 bg-danger hover:bg-danger active:scale-[0.98] disabled:opacity-40 text-white rounded-xl text-xs font-bold shadow-md shadow-danger/25 transition"
             >
               {isDeleting ? (
-                <span>Deleting...</span>
+                <span>{deleteFromDisk ? "Deleting from disk..." : "Removing from library..."}</span>
               ) : (
                 <>
                   <Trash2 className="w-3.5 h-3.5" />
-                  <span>{deleteFromDisk ? "Delete File & Track" : "Delete Track"}</span>
+                  <span>{deleteFromDisk ? "Permanently Delete from Disk" : "Remove from Library"}</span>
                 </>
               )}
             </button>

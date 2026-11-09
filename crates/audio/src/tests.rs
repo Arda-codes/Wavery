@@ -1,4 +1,6 @@
-use crate::player::RodioPlayer;
+use crate::player::{
+    calculate_replay_gain_multiplier, compute_loudness_attenuation, RodioPlayer,
+};
 use crate::queue::StandardQueueManager;
 use std::collections::HashSet;
 use std::fs;
@@ -27,6 +29,7 @@ fn make_test_track(id: &str, title: &str) -> Track {
             channels: None,
             format: "MP3".into(),
             lyrics: None,
+            ..Default::default()
         },
         date_added: 0,
     }
@@ -191,8 +194,14 @@ fn test_queue_single_track_loop_modes() {
     assert_eq!(q.current_index(), Some(0));
 
     // previous() behavior on single track
-    assert_eq!(q.previous(Duration::from_secs(1)).map(|t| t.id.as_str()), Some("1"));
-    assert_eq!(q.previous(Duration::from_secs(10)).map(|t| t.id.as_str()), Some("1"));
+    assert_eq!(
+        q.previous(Duration::from_secs(1)).map(|t| t.id.as_str()),
+        Some("1")
+    );
+    assert_eq!(
+        q.previous(Duration::from_secs(10)).map(|t| t.id.as_str()),
+        Some("1")
+    );
 }
 
 #[test]
@@ -218,7 +227,10 @@ fn test_queue_linear_boundary_clamping_and_wrap() {
     assert_eq!(q.current_index(), Some(0));
 
     // At index 0, previous(1s) does not underflow or wrap
-    assert_eq!(q.previous(Duration::from_secs(1)).map(|t| t.id.as_str()), Some("0"));
+    assert_eq!(
+        q.previous(Duration::from_secs(1)).map(|t| t.id.as_str()),
+        Some("0")
+    );
     assert_eq!(q.current_index(), Some(0));
 }
 
@@ -241,7 +253,9 @@ fn test_queue_shuffle_permutation_completeness_and_loop_queue() {
 
     // Advance 9 times to traverse all 10 tracks
     for _ in 0..9 {
-        let next_track = q.next().expect("Expected next track in shuffle permutation");
+        let next_track = q
+            .next()
+            .expect("Expected next track in shuffle permutation");
         visited.push(next_track.id.clone());
     }
 
@@ -266,7 +280,10 @@ fn test_queue_shuffle_permutation_completeness_and_loop_queue() {
     q.set_loop_mode(LoopMode::Queue);
     let wrapped_id = q.next().map(|t| t.id.clone());
     assert!(wrapped_id.is_some());
-    assert_eq!(q.current_index(), Some(wrapped_id.unwrap().parse::<usize>().unwrap()));
+    assert_eq!(
+        q.current_index(),
+        Some(wrapped_id.unwrap().parse::<usize>().unwrap())
+    );
 
     // Reverse traversal under shuffle
     let before_prev = q.current_track().unwrap().id.clone();
@@ -329,6 +346,7 @@ async fn test_rodio_player_error_handling() {
                     channels: None,
                     format: "MP3".into(),
                     lyrics: None,
+                    ..Default::default()
                 },
                 date_added: 0,
             };
@@ -337,7 +355,8 @@ async fn test_rodio_player_error_handling() {
             assert!(matches!(res, Err(AudioError::FileNotFound(_))));
 
             // 2. Corrupt / empty file -> DecoderError
-            let temp_dir = std::env::temp_dir().join(format!("wavery_audio_test_{}", uuid::Uuid::new_v4()));
+            let temp_dir =
+                std::env::temp_dir().join(format!("wavery_audio_test_{}", uuid::Uuid::new_v4()));
             fs::create_dir_all(&temp_dir).unwrap();
             let corrupt_file = temp_dir.join("corrupt.mp3");
             fs::write(&corrupt_file, b"NOT_AN_AUDIO_STREAM").unwrap();
@@ -360,6 +379,7 @@ async fn test_rodio_player_error_handling() {
                     channels: None,
                     format: "MP3".into(),
                     lyrics: None,
+                    ..Default::default()
                 },
                 date_added: 0,
             };
@@ -413,17 +433,25 @@ fn test_shuffle_play_next_preserves_history_and_splices_immediately() {
     assert_eq!(next_after_splice.id, "spliced_next");
 
     // Previous should go back to history[3]
-    let prev_1 = q.previous(Duration::from_secs(1)).expect("Expected prev track");
+    let prev_1 = q
+        .previous(Duration::from_secs(1))
+        .expect("Expected prev track");
     assert_eq!(prev_1.id, history[3]);
 
     // Back step through all history
-    let prev_2 = q.previous(Duration::from_secs(1)).expect("Expected prev track");
+    let prev_2 = q
+        .previous(Duration::from_secs(1))
+        .expect("Expected prev track");
     assert_eq!(prev_2.id, history[2]);
 
-    let prev_3 = q.previous(Duration::from_secs(1)).expect("Expected prev track");
+    let prev_3 = q
+        .previous(Duration::from_secs(1))
+        .expect("Expected prev track");
     assert_eq!(prev_3.id, history[1]);
 
-    let prev_4 = q.previous(Duration::from_secs(1)).expect("Expected prev track");
+    let prev_4 = q
+        .previous(Duration::from_secs(1))
+        .expect("Expected prev track");
     assert_eq!(prev_4.id, history[0]);
 
     // Forward traverse through history back to spliced_next
@@ -539,7 +567,10 @@ fn test_crossfade_equal_power_curve_mathematical_invariants() {
         let out_gain = (t * std::f32::consts::FRAC_PI_2).cos();
 
         let power = in_gain * in_gain + out_gain * out_gain;
-        assert!((power - 1.0).abs() < 1e-5, "Equal power identity failed at t={t}: power={power}");
+        assert!(
+            (power - 1.0).abs() < 1e-5,
+            "Equal power identity failed at t={t}: power={power}"
+        );
 
         if step == 0 {
             assert!((in_gain - 0.0).abs() < 1e-5);
@@ -660,4 +691,171 @@ fn test_playback_history_recording() {
     assert_eq!(q.history()[1].id, "t2");
 }
 
+#[test]
+fn test_replaygain_linear_conversion_and_off_mode() {
+    let mut track = make_test_track("rg1", "RG Track");
+    track.metadata.replaygain_track_gain = Some(-6.0206);
+    track.metadata.replaygain_track_peak = Some(0.95);
 
+    // Off mode returns 1.0 regardless of tags
+    assert!((calculate_replay_gain_multiplier(&track, "off", 0.0) - 1.0).abs() < 1e-5);
+    assert!((calculate_replay_gain_multiplier(&track, "OFF", 0.0) - 1.0).abs() < 1e-5);
+    assert!((calculate_replay_gain_multiplier(&track, "invalid_mode", 0.0) - 1.0).abs() < 1e-5);
+
+    // -6.0206 dB in track mode -> linear gain ~ 0.500
+    let mult_neg6 = calculate_replay_gain_multiplier(&track, "track", 0.0);
+    assert!(
+        (mult_neg6 - 0.5).abs() < 0.005,
+        "Expected ~0.5 for -6.02 dB, got {mult_neg6}"
+    );
+
+    // +6.0206 dB with low peak (0.4) -> linear gain ~ 2.0 (capped at 2.0)
+    track.metadata.replaygain_track_gain = Some(6.0206);
+    track.metadata.replaygain_track_peak = Some(0.4);
+    let mult_pos6 = calculate_replay_gain_multiplier(&track, "track", 0.0);
+    assert!(
+        (mult_pos6 - 2.0).abs() < 0.01,
+        "Expected ~2.0 for +6.02 dB, got {mult_pos6}"
+    );
+}
+
+#[test]
+fn test_replaygain_anti_clipping_peak_limiter() {
+    // Track has +6.0 dB gain (~1.995x) and peak 0.8 -> 1.995 * 0.8 = 1.596 > 1.0
+    // Anti-clipping limiter must clamp multiplier to 1.0 / 0.8 = 1.25
+    let mult = compute_loudness_attenuation(Some(6.0), Some(0.8), "track", 0.0);
+    assert!(
+        (mult - 1.25).abs() < 1e-4,
+        "Expected anti-clipping clamp to 1.25, got {mult}"
+    );
+    assert!(mult * 0.8 <= 1.0 + 1e-6);
+
+    // Track with peak > 1.0 (e.g., 1.25 lossy inter-sample peak) and 0.0 dB gain
+    // Multiplier * 1.25 > 1.0 -> clamped to 1.0 / 1.25 = 0.8
+    let mult_over_unity = compute_loudness_attenuation(Some(0.0), Some(1.25), "track", 0.0);
+    assert!(
+        (mult_over_unity - 0.8).abs() < 1e-4,
+        "Expected anti-clipping clamp to 0.8 for 1.25 peak, got {mult_over_unity}"
+    );
+}
+
+#[test]
+fn test_replaygain_extreme_bounds_and_nan_safety() {
+    // Extreme negative dB (-80 dB) clamps gain to -60 dB -> 10^(-60/20) = 0.001 (above 0.0001 floor)
+    let mult_low = compute_loudness_attenuation(Some(-80.0), Some(1.0), "track", 0.0);
+    assert!(
+        (mult_low - 0.001).abs() < 1e-5,
+        "Expected 0.001 for -80 dB clamped to -60 dB, got {mult_low}"
+    );
+
+    // Extreme positive dB (+45 dB) with tiny peak (0.01) clamps to hard ceiling 2.0
+    let mult_high = compute_loudness_attenuation(Some(45.0), Some(0.01), "track", 0.0);
+    assert!(
+        (mult_high - 2.0).abs() < 1e-5,
+        "Expected 2.0 ceiling for +45 dB, got {mult_high}"
+    );
+
+    // Missing or NaN gain returns 1.0 safely without NaN propagation
+    assert!((compute_loudness_attenuation(None, Some(0.9), "track", 0.0) - 1.0).abs() < 1e-5);
+    assert!(
+        (compute_loudness_attenuation(Some(f32::NAN), Some(0.9), "track", 0.0) - 1.0).abs() < 1e-5
+    );
+    assert!(
+        (compute_loudness_attenuation(Some(f32::INFINITY), Some(0.9), "track", 0.0) - 1.0).abs()
+            < 1e-5
+    );
+}
+
+#[test]
+fn test_replaygain_album_vs_track_mode_selection_and_fallback() {
+    let mut track = make_test_track("rg_modes", "Album vs Track");
+    track.metadata.replaygain_track_gain = Some(-6.0206); // ~0.5
+    track.metadata.replaygain_track_peak = Some(0.9);
+    track.metadata.replaygain_album_gain = Some(-12.0412); // ~0.25
+    track.metadata.replaygain_album_peak = Some(0.95);
+
+    let track_mult = calculate_replay_gain_multiplier(&track, "track", 0.0);
+    let album_mult = calculate_replay_gain_multiplier(&track, "album", 0.0);
+
+    assert!((track_mult - 0.5).abs() < 0.005);
+    assert!((album_mult - 0.25).abs() < 0.005);
+
+    // Fallback: when album gain is None in "album" mode, falls back to track gain
+    track.metadata.replaygain_album_gain = None;
+    let album_fallback = calculate_replay_gain_multiplier(&track, "album", 0.0);
+    assert!((album_fallback - 0.5).abs() < 0.005);
+
+    // Fallback: when track gain is None in "track" mode, falls back to album gain
+    track.metadata.replaygain_track_gain = None;
+    track.metadata.replaygain_album_gain = Some(-12.0412);
+    let track_fallback = calculate_replay_gain_multiplier(&track, "track", 0.0);
+    assert!((track_fallback - 0.25).abs() < 0.005);
+}
+
+#[test]
+fn test_rodio_player_replaygain_mode_live_switching() {
+    if let Ok(mut player) = RodioPlayer::try_new() {
+        assert_eq!(player.replay_gain_mode(), "off");
+
+        player.set_replay_gain_mode("track");
+        assert_eq!(player.replay_gain_mode(), "track");
+
+        player.set_replay_gain_mode("ALBUM");
+        assert_eq!(player.replay_gain_mode(), "album");
+
+        player.set_replay_gain_mode("unknown");
+        assert_eq!(player.replay_gain_mode(), "off");
+
+        // Also test via PlayerEngine trait
+        PlayerEngine::set_replay_gain_mode(&mut player, "track");
+        assert_eq!(player.replay_gain_mode(), "track");
+    }
+}
+
+#[test]
+fn test_opus_decoding_and_seeking() {
+    use crate::opus::OpusSource;
+    use rodio::Source;
+    use std::fs::File;
+    use std::io::BufReader;
+    use std::path::Path;
+
+    let sample_path = Path::new("/home/arda/.local/share/wavery/library/Alice In Chains/Dirt/03 - Them Bones (2022 Remaster).opus");
+    if !sample_path.exists() {
+        return;
+    }
+
+    let file = File::open(sample_path).expect("failed to open opus test file");
+    let reader = BufReader::new(file);
+    let mut opus_source = OpusSource::new(reader).expect("failed to initialize OpusSource");
+
+    assert_eq!(opus_source.channels(), 2);
+    assert_eq!(opus_source.sample_rate(), 48000);
+
+    // Read 48000 samples (0.5 second of stereo audio = 24000 samples per channel)
+    let mut samples = Vec::new();
+    for _ in 0..48000 {
+        if let Some(s) = opus_source.next() {
+            samples.push(s);
+        } else {
+            break;
+        }
+    }
+    assert_eq!(samples.len(), 48000);
+    // Audio has non-zero amplitude
+    assert!(samples.iter().any(|&s| s != 0));
+
+    // Test seeking forward to 5 seconds
+    let seek_res = opus_source.try_seek(Duration::from_secs(5));
+    assert!(seek_res.is_ok());
+
+    let mut post_seek_samples = Vec::new();
+    for _ in 0..4800 {
+        if let Some(s) = opus_source.next() {
+            post_seek_samples.push(s);
+        } else {
+            break;
+        }
+    }
+    assert_eq!(post_seek_samples.len(), 4800);
+}

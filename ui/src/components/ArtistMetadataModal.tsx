@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { ArtistInfo, Track } from "../types";
 import { playerAdapter } from "../services/adapter";
 import { useLibraryStore } from "../stores/libraryStore";
 import { usePlayerStore } from "../stores/playerStore";
 import { useArtwork } from "../utils/useArtwork";
 import { X, Save, User, Check, AlertCircle, Loader2, Music, Disc } from "lucide-react";
+import { useTransitionMount } from "../utils/useTransitionMount";
 
 interface ArtistMetadataModalProps {
   artist: ArtistInfo | null;
@@ -99,12 +100,25 @@ export const ArtistMetadataModal: React.FC<ArtistMetadataModalProps> = ({
     }
   };
 
-  if (!isOpen || !artist) return null;
+  const { isRendered, isExiting } = useTransitionMount(isOpen && !!artist, 160);
+  const lastArtistRef = useRef(artist);
+  if (artist) {
+    lastArtistRef.current = artist;
+  }
+  const displayArtist = artist || lastArtistRef.current;
+
+  if (!isRendered || !displayArtist) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md ${
+        isExiting ? "animate-backdrop-out" : "animate-backdrop-in"
+      }`}
+    >
       <div
-        className="bg-surface border border-white/[0.08] w-full max-w-lg rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-scaleUp"
+        className={`bg-surface border border-white/[0.08] w-full max-w-lg rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden ${
+          isExiting ? "animate-scale-down pointer-events-none" : "animate-scale-up"
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
@@ -120,7 +134,7 @@ export const ArtistMetadataModal: React.FC<ArtistMetadataModalProps> = ({
             <div>
               <h2 className="text-sm font-bold text-white">Edit Artist Metadata</h2>
               <p className="text-xs text-textMuted truncate max-w-xs sm:max-w-sm">
-                Rename &ldquo;{artist.name}&rdquo; across library
+                Rename &ldquo;{displayArtist.name}&rdquo; across library
               </p>
             </div>
           </div>
@@ -147,13 +161,13 @@ export const ArtistMetadataModal: React.FC<ArtistMetadataModalProps> = ({
             <div className="flex items-center space-x-3 p-3 bg-white/[0.03] border border-white/[0.06] rounded-xl">
               <div className="flex items-center space-x-2 text-xs text-textSecondary">
                 <Music className="w-3.5 h-3.5 text-accent" />
-                <span className="font-semibold text-white">{artist.trackCount}</span>
+                <span className="font-semibold text-white">{displayArtist.trackCount}</span>
                 <span>tracks</span>
               </div>
               <span className="text-white/[0.2]">•</span>
               <div className="flex items-center space-x-2 text-xs text-textSecondary">
                 <Disc className="w-3.5 h-3.5 text-accent" />
-                <span className="font-semibold text-white">{artist.albumCount}</span>
+                <span className="font-semibold text-white">{displayArtist.albumCount}</span>
                 <span>albums</span>
               </div>
             </div>
@@ -165,7 +179,7 @@ export const ArtistMetadataModal: React.FC<ArtistMetadataModalProps> = ({
               </label>
               <input
                 type="text"
-                value={artist.name}
+                value={displayArtist.name}
                 disabled
                 className="w-full bg-deck/60 border border-white/[0.04] rounded-xl px-3 py-2 text-xs text-textMuted cursor-not-allowed select-none"
               />
@@ -201,7 +215,7 @@ export const ArtistMetadataModal: React.FC<ArtistMetadataModalProps> = ({
                     Update Album Artist tags
                   </span>
                   <span className="text-2xs text-textMuted leading-relaxed">
-                    Also rename Album Artist tags matching &ldquo;{artist.name}&rdquo; across albums
+                    Also rename Album Artist tags matching &ldquo;{displayArtist.name}&rdquo; across albums
                   </span>
                 </div>
               </label>

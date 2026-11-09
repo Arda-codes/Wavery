@@ -26,7 +26,14 @@ fn create_challenge_env(name: &str) -> (PathBuf, PathBuf, PathBuf) {
     (temp_dir, db_path, managed_root)
 }
 
-fn create_sample_track(id: &str, title: &str, artist: &str, album: &str, genre: &str, managed_root: &Path) -> Track {
+fn create_sample_track(
+    id: &str,
+    title: &str,
+    artist: &str,
+    album: &str,
+    genre: &str,
+    managed_root: &Path,
+) -> Track {
     Track {
         id: id.to_string(),
         source: TrackSource::Managed(managed_root.join(format!("{artist}/{album}/{id}.flac"))),
@@ -45,6 +52,7 @@ fn create_sample_track(id: &str, title: &str, artist: &str, album: &str, genre: 
             channels: Some(2),
             format: "FLAC".to_string(),
             lyrics: None,
+            ..Default::default()
         },
         date_added: 1700000000,
     }
@@ -71,7 +79,8 @@ fn challenge_wal_high_concurrency_stress_zero_locks() {
             &managed_root,
         ));
     }
-    db.insert_or_update_batch(&initial_tracks, &managed_root).unwrap();
+    db.insert_or_update_batch(&initial_tracks, &managed_root)
+        .unwrap();
 
     let running = Arc::new(AtomicBool::new(true));
     let read_ops = Arc::new(AtomicUsize::new(0));
@@ -191,11 +200,17 @@ fn challenge_wal_high_concurrency_stress_zero_locks() {
                     }
                 };
                 match res {
-                    Ok(_) => { r_ops.fetch_add(1, Ordering::Relaxed); }
-                    Err(LibraryError::IndexError(msg)) if msg.contains("locked") || msg.contains("busy") => {
+                    Ok(_) => {
+                        r_ops.fetch_add(1, Ordering::Relaxed);
+                    }
+                    Err(LibraryError::IndexError(msg))
+                        if msg.contains("locked") || msg.contains("busy") =>
+                    {
                         r_lock_err.fetch_add(1, Ordering::Relaxed);
                     }
-                    Err(_) => { r_oth_err.fetch_add(1, Ordering::Relaxed); }
+                    Err(_) => {
+                        r_oth_err.fetch_add(1, Ordering::Relaxed);
+                    }
                 }
             }
         }));
@@ -234,7 +249,9 @@ fn challenge_wal_high_concurrency_stress_zero_locks() {
                     Ok(_) => {
                         w_ops.fetch_add(batch_size, Ordering::Relaxed);
                     }
-                    Err(LibraryError::IndexError(msg)) if msg.contains("locked") || msg.contains("busy") => {
+                    Err(LibraryError::IndexError(msg))
+                        if msg.contains("locked") || msg.contains("busy") =>
+                    {
                         w_lock_err.fetch_add(1, Ordering::Relaxed);
                     }
                     Err(_) => {
@@ -285,19 +302,43 @@ fn challenge_wal_high_concurrency_stress_zero_locks() {
 
     println!("\n=== EMPIRICAL WAL CONCURRENCY STRESS REPORT ===");
     println!("Duration:           {elapsed:?}");
-    println!("Total Read Ops:     {total_reads} ({:.1} ops/sec)", total_reads as f64 / elapsed.as_secs_f64());
-    println!("Total Written Rows: {total_writes} ({:.1} rows/sec)", total_writes as f64 / elapsed.as_secs_f64());
+    println!(
+        "Total Read Ops:     {total_reads} ({:.1} ops/sec)",
+        total_reads as f64 / elapsed.as_secs_f64()
+    );
+    println!(
+        "Total Written Rows: {total_writes} ({:.1} rows/sec)",
+        total_writes as f64 / elapsed.as_secs_f64()
+    );
     println!("Read Lock Errors:   {r_locks}");
     println!("Write Lock Errors:  {w_locks}");
     println!("Other Read Errors:  {r_oth}");
     println!("Other Write Errors: {w_oth}");
 
-    assert_eq!(r_locks, 0, "Zero database locked errors allowed on reads under WAL mode");
-    assert_eq!(w_locks, 0, "Zero database locked errors allowed on writes under WAL mode with busy_timeout");
-    assert_eq!(r_oth, 0, "Zero other errors allowed during concurrent reads");
-    assert_eq!(w_oth, 0, "Zero other errors allowed during concurrent writes");
-    assert!(total_reads > 500, "High read throughput expected (>500 ops)");
-    assert!(total_writes > 200, "Steady write throughput expected (>200 rows)");
+    assert_eq!(
+        r_locks, 0,
+        "Zero database locked errors allowed on reads under WAL mode"
+    );
+    assert_eq!(
+        w_locks, 0,
+        "Zero database locked errors allowed on writes under WAL mode with busy_timeout"
+    );
+    assert_eq!(
+        r_oth, 0,
+        "Zero other errors allowed during concurrent reads"
+    );
+    assert_eq!(
+        w_oth, 0,
+        "Zero other errors allowed during concurrent writes"
+    );
+    assert!(
+        total_reads > 500,
+        "High read throughput expected (>500 ops)"
+    );
+    assert!(
+        total_writes > 200,
+        "Steady write throughput expected (>200 rows)"
+    );
 
     // Clean up
     drop(db);
@@ -315,28 +356,141 @@ fn challenge_fts5_unicode_emojis_and_extreme_special_chars() {
 
     let edge_tracks = vec![
         // 1. Emoji rich titles and artists
-        create_sample_track("t_emoji_1", "🔥 Fire Track 🎸", "DJ 🎧 Beats", "Album ⭐⭐⭐", "EDM 🚀", &managed_root),
-        create_sample_track("t_emoji_2", "❤️ Love & Peace ✌️", "Artist 🌟", "Cosmic 🌌", "Ambient 🌙", &managed_root),
+        create_sample_track(
+            "t_emoji_1",
+            "🔥 Fire Track 🎸",
+            "DJ 🎧 Beats",
+            "Album ⭐⭐⭐",
+            "EDM 🚀",
+            &managed_root,
+        ),
+        create_sample_track(
+            "t_emoji_2",
+            "❤️ Love & Peace ✌️",
+            "Artist 🌟",
+            "Cosmic 🌌",
+            "Ambient 🌙",
+            &managed_root,
+        ),
         // 2. Multilingual scripts
-        create_sample_track("t_cjk_kanji", "千と千尋の神隠し", "久石譲", "Spirited Away OST", "Soundtrack", &managed_root),
-        create_sample_track("t_cjk_korean", "강남스타일 (Gangnam Style)", "싸이 (PSY)", "싸이6甲 Part 1", "K-Pop", &managed_root),
-        create_sample_track("t_arabic_rtl", "حبيبي يا نور العين", "عمرو دياب", "Nour El Ain", "Arabic Pop", &managed_root),
-        create_sample_track("t_hebrew_rtl", "הללויה", "עוזי חיטמן", "Classic Hebrew", "Folk", &managed_root),
-        create_sample_track("t_cyrillic_complex", "Спокойная ночь / Пачка сигарет", "Виктор Цой (Кино)", "Группа крови", "Rock", &managed_root),
-        create_sample_track("t_greek", "Ζορμπάς (Zorba the Greek)", "Μίκης Θεοδωράκης", "Syrtaki Classics", "Traditional", &managed_root),
+        create_sample_track(
+            "t_cjk_kanji",
+            "千と千尋の神隠し",
+            "久石譲",
+            "Spirited Away OST",
+            "Soundtrack",
+            &managed_root,
+        ),
+        create_sample_track(
+            "t_cjk_korean",
+            "강남스타일 (Gangnam Style)",
+            "싸이 (PSY)",
+            "싸이6甲 Part 1",
+            "K-Pop",
+            &managed_root,
+        ),
+        create_sample_track(
+            "t_arabic_rtl",
+            "حبيبي يا نور العين",
+            "عمرو دياب",
+            "Nour El Ain",
+            "Arabic Pop",
+            &managed_root,
+        ),
+        create_sample_track(
+            "t_hebrew_rtl",
+            "הללויה",
+            "עוזי חיטמן",
+            "Classic Hebrew",
+            "Folk",
+            &managed_root,
+        ),
+        create_sample_track(
+            "t_cyrillic_complex",
+            "Спокойная ночь / Пачка сигарет",
+            "Виктор Цой (Кино)",
+            "Группа крови",
+            "Rock",
+            &managed_root,
+        ),
+        create_sample_track(
+            "t_greek",
+            "Ζορμπάς (Zorba the Greek)",
+            "Μίκης Θεοδωράκης",
+            "Syrtaki Classics",
+            "Traditional",
+            &managed_root,
+        ),
         // 3. European Diacritics & Ligatures
-        create_sample_track("t_nordic", "Ágætis byrjun (Hoppípolla)", "Sigur Rós", "Ágætis byrjun", "Post-Rock", &managed_root),
-        create_sample_track("t_german_umlaut", "Über den Wolken", "Reinhard Mey", "Wie vor Jahr und Tag", "Liedermacher", &managed_root),
-        create_sample_track("t_french_accents", "Les Étoiles et l'Éléphant", "Camille Saint-Saëns", "Le Carnaval des animaux", "Classical", &managed_root),
-        create_sample_track("t_turkish", "İstanbul'da Sonbahar", "Teoman", "Gönülçelen", "Turkish Rock", &managed_root),
-        create_sample_track("t_spanish_ñ", "Corazón Espinado (Año 2000)", "Santana ft. Maná", "Supernatural", "Latin Rock", &managed_root),
+        create_sample_track(
+            "t_nordic",
+            "Ágætis byrjun (Hoppípolla)",
+            "Sigur Rós",
+            "Ágætis byrjun",
+            "Post-Rock",
+            &managed_root,
+        ),
+        create_sample_track(
+            "t_german_umlaut",
+            "Über den Wolken",
+            "Reinhard Mey",
+            "Wie vor Jahr und Tag",
+            "Liedermacher",
+            &managed_root,
+        ),
+        create_sample_track(
+            "t_french_accents",
+            "Les Étoiles et l'Éléphant",
+            "Camille Saint-Saëns",
+            "Le Carnaval des animaux",
+            "Classical",
+            &managed_root,
+        ),
+        create_sample_track(
+            "t_turkish",
+            "İstanbul'da Sonbahar",
+            "Teoman",
+            "Gönülçelen",
+            "Turkish Rock",
+            &managed_root,
+        ),
+        create_sample_track(
+            "t_spanish_ñ",
+            "Corazón Espinado (Año 2000)",
+            "Santana ft. Maná",
+            "Supernatural",
+            "Latin Rock",
+            &managed_root,
+        ),
         // 4. Extreme Punctuation and Technical Terms
-        create_sample_track("t_tech_punct", "track_v2.0_final (remix) [192kHz/24bit] #42", "C++ // Rust Devs", "std::sync::Arc<Mutex<T>>", "Chiptune", &managed_root),
-        create_sample_track("t_special_math", "π ≈ 3.1415926535 & ∞ / ±0", "The Mathematicians ∑∏∫", "Calculus III", "Math Rock", &managed_root),
-        create_sample_track("t_quotes_and_slashes", "Don't \"Stop\" Believin' / Any Way You Want It", "Journey & Co.", "Greatest Hits: Vol. 1", "Classic Rock", &managed_root),
+        create_sample_track(
+            "t_tech_punct",
+            "track_v2.0_final (remix) [192kHz/24bit] #42",
+            "C++ // Rust Devs",
+            "std::sync::Arc<Mutex<T>>",
+            "Chiptune",
+            &managed_root,
+        ),
+        create_sample_track(
+            "t_special_math",
+            "π ≈ 3.1415926535 & ∞ / ±0",
+            "The Mathematicians ∑∏∫",
+            "Calculus III",
+            "Math Rock",
+            &managed_root,
+        ),
+        create_sample_track(
+            "t_quotes_and_slashes",
+            "Don't \"Stop\" Believin' / Any Way You Want It",
+            "Journey & Co.",
+            "Greatest Hits: Vol. 1",
+            "Classic Rock",
+            &managed_root,
+        ),
     ];
 
-    db.insert_or_update_batch(&edge_tracks, &managed_root).unwrap();
+    db.insert_or_update_batch(&edge_tracks, &managed_root)
+        .unwrap();
 
     // Adversarial Query Tests: All must return Ok(...) and NEVER panic or error out!
     let test_queries = [
@@ -364,14 +518,14 @@ fn challenge_fts5_unicode_emojis_and_extreme_special_chars() {
         ("Love", 1),
         ("Cosmic", 1),
         // Diacritic insensitive searches
-        ("Hoppipolla", 1), // matches "Hoppípolla"
-        ("Sigur Ros", 1), // matches "Sigur Rós"
+        ("Hoppipolla", 1),      // matches "Hoppípolla"
+        ("Sigur Ros", 1),       // matches "Sigur Rós"
         ("Uber den Wolken", 1), // matches "Über den Wolken"
-        ("Etoiles", 1), // matches "Étoiles"
-        ("Saint Saens", 1), // matches "Saint-Saëns"
-        ("Corazon", 1), // matches "Corazón"
-        ("Mana", 1), // matches "Maná"
-        ("Istanbul", 1), // matches "İstanbul"
+        ("Etoiles", 1),         // matches "Étoiles"
+        ("Saint Saens", 1),     // matches "Saint-Saëns"
+        ("Corazon", 1),         // matches "Corazón"
+        ("Mana", 1),            // matches "Maná"
+        ("Istanbul", 1),        // matches "İstanbul"
         // Multilingual scripts
         ("千と千尋の神隠し", 1),
         ("久石譲", 1),
@@ -401,17 +555,32 @@ fn challenge_fts5_unicode_emojis_and_extreme_special_chars() {
     println!("\n=== EMPIRICAL FTS5 ADVERSARIAL QUERY TEST ===");
     for (q, min_expected) in test_queries {
         let res = db.search_fts(q, &managed_root);
-        assert!(res.is_ok(), "FTS query '{q}' MUST NOT return Err, got: {:?}", res.err());
+        assert!(
+            res.is_ok(),
+            "FTS query '{q}' MUST NOT return Err, got: {:?}",
+            res.err()
+        );
         let tracks = res.unwrap();
         if min_expected > 0 {
-            assert!(tracks.len() >= min_expected, "FTS query '{q}' expected >= {min_expected} matches, got {}", tracks.len());
+            assert!(
+                tracks.len() >= min_expected,
+                "FTS query '{q}' expected >= {min_expected} matches, got {}",
+                tracks.len()
+            );
         }
-        println!("  FTS query: '{q:30}' -> returned {} matches (OK)", tracks.len());
+        println!(
+            "  FTS query: '{q:30}' -> returned {} matches (OK)",
+            tracks.len()
+        );
     }
 
     // Verify DB integrity after injection attempts
     let total = db.load_all(&managed_root).unwrap().len();
-    assert_eq!(total, edge_tracks.len(), "All tracks must remain intact after adversarial SQL queries");
+    assert_eq!(
+        total,
+        edge_tracks.len(),
+        "All tracks must remain intact after adversarial SQL queries"
+    );
 
     drop(db);
     let _ = fs::remove_dir_all(&temp_dir);
@@ -427,14 +596,18 @@ async fn challenge_database_rebuild_and_path_corruption_resilience() {
     let incoming_dir = temp_dir.join("incoming");
     fs::create_dir_all(&incoming_dir).unwrap();
 
-    let mut manager = SqliteLibraryManager::new(library_root.clone(), db_path.clone()).expect("Init manager");
+    let mut manager =
+        SqliteLibraryManager::new(library_root.clone(), db_path.clone()).expect("Init manager");
 
     println!("\n=== EMPIRICAL DATABASE REBUILD RESILIENCE TEST ===");
 
     // Test 1: Rebuild on completely empty library directory
     println!("Test 1: Rebuild empty library directory...");
     let empty_res = manager.rebuild_library().await;
-    assert!(empty_res.is_ok(), "Rebuild on empty library root must succeed");
+    assert!(
+        empty_res.is_ok(),
+        "Rebuild on empty library root must succeed"
+    );
     assert_eq!(empty_res.unwrap().len(), 0);
     assert_eq!(manager.all_tracks().len(), 0);
 
@@ -462,15 +635,25 @@ async fn challenge_database_rebuild_and_path_corruption_resilience() {
     fs::write(incoming_dir.join("metadata.nfo"), b"Release details nfo").unwrap();
     fs::write(incoming_dir.join(".hidden_file"), b"hidden").unwrap();
 
-    let imported = manager.import_directory(&incoming_dir, ImportStrategy::Copy).await.unwrap();
-    println!("  Imported {} audio tracks (4 audio files imported, 3 non-audio ignored)", imported.len());
+    let imported = manager
+        .import_directory(&incoming_dir, ImportStrategy::Copy)
+        .await
+        .unwrap();
+    println!(
+        "  Imported {} audio tracks (4 audio files imported, 3 non-audio ignored)",
+        imported.len()
+    );
     assert_eq!(imported.len(), 4);
     assert_eq!(manager.all_tracks().len(), 4);
 
     // Test 3: Trigger rebuild on the managed library
     println!("Test 3: Rebuild library from managed storage...");
     let rebuild_res = manager.rebuild_library().await;
-    assert!(rebuild_res.is_ok(), "Rebuild must handle corrupt files gracefully without panic: {:?}", rebuild_res.err());
+    assert!(
+        rebuild_res.is_ok(),
+        "Rebuild must handle corrupt files gracefully without panic: {:?}",
+        rebuild_res.err()
+    );
     let tracks = rebuild_res.unwrap();
     println!("  Rebuilt {} tracks successfully", tracks.len());
 
@@ -479,15 +662,27 @@ async fn challenge_database_rebuild_and_path_corruption_resilience() {
     let track_to_delete = manager.all_tracks()[0].source.path().clone();
     let _ = fs::remove_file(&track_to_delete);
 
-    let rebuild_res2 = manager.rebuild_library().await.expect("Rebuild after deletion");
-    println!("  Rebuild after deleting 1 file returned {} tracks", rebuild_res2.len());
-    assert!(!manager.all_tracks().iter().any(|t| t.source.path() == &track_to_delete));
+    let rebuild_res2 = manager
+        .rebuild_library()
+        .await
+        .expect("Rebuild after deletion");
+    println!(
+        "  Rebuild after deleting 1 file returned {} tracks",
+        rebuild_res2.len()
+    );
+    assert!(!manager
+        .all_tracks()
+        .iter()
+        .any(|t| t.source.path() == &track_to_delete));
 
     // Test 5: Rebuild after library_root directory is completely removed
     println!("Test 5: Rebuild after library_root directory is deleted from disk...");
     let _ = fs::remove_dir_all(&library_root);
     let rebuild_deleted_root = manager.rebuild_library().await;
-    assert!(rebuild_deleted_root.is_ok(), "Rebuild must not panic if library_root was deleted");
+    assert!(
+        rebuild_deleted_root.is_ok(),
+        "Rebuild must not panic if library_root was deleted"
+    );
     assert_eq!(rebuild_deleted_root.unwrap().len(), 0);
 
     // Test 6: Database open against uncreatable path (e.g. file where directory expected)
@@ -496,7 +691,10 @@ async fn challenge_database_rebuild_and_path_corruption_resilience() {
     fs::write(&dummy_file, b"im_a_file").unwrap();
     let invalid_db_path = dummy_file.join("subpath").join("library.db");
     let open_invalid = LibraryDatabase::open(&invalid_db_path);
-    assert!(open_invalid.is_err(), "Opening DB under a regular file parent must fail with clean LibraryError");
+    assert!(
+        open_invalid.is_err(),
+        "Opening DB under a regular file parent must fail with clean LibraryError"
+    );
 
     drop(manager);
     let _ = fs::remove_dir_all(&temp_dir);

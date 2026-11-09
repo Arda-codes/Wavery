@@ -28,19 +28,46 @@ import { SearchView } from "./components/SearchView";
 import { HistoryView } from "./components/HistoryView";
 import { Breadcrumbs, BreadcrumbItem } from "./components/Breadcrumbs";
 import { ImportModal } from "./components/ImportModal";
+import { InstallAppModal } from "./components/InstallAppModal";
+import { OfflineCover } from "./components/OfflineCover";
 import { NowPlayingDrawer } from "./components/NowPlayingDrawer";
 import { FullscreenPlayer } from "./components/FullscreenPlayer";
+import { MobileNowPlayingSheet } from "./components/MobileNowPlayingSheet";
+import { useIsMobile } from "./hooks/useIsMobile";
+import { usePwaInstall } from "./hooks/usePwaInstall";
+import { useServerConnection } from "./hooks/useServerConnection";
 import { BatchEnrichmentModal } from "./components/BatchEnrichmentModal";
 import { ContextMenu } from "./components/ContextMenu";
 import { matchesKeyCombo, isEditableTarget } from "./utils/keybindings";
 import { WindowControls } from "./components/WindowControls";
 import { WindowResizeHandles } from "./components/WindowResizeHandles";
 import { windowService, useWindowState } from "./services/windowService";
-import { Search, X, ExternalLink, Home, Menu, Library, ListMusic } from "lucide-react";
+import { Search, X, ExternalLink, Home, Menu, Library, ListMusic, Maximize2, Minimize2, Download } from "lucide-react";
 
 export const App: React.FC = () => {
+  const isMobile = useIsMobile();
+  const { isFullscreen } = useWindowState();
+  const { isInstalledOrStandalone, canPromptNative, promptNativeInstall } = usePwaInstall();
+  const {
+    isOffline,
+    isChecking: isServerChecking,
+    retryCountdown: serverRetryCountdown,
+    serverAddress,
+    isCoverMinimized,
+    setIsCoverMinimized,
+    checkConnection,
+  } = useServerConnection();
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
   const [isCreatePlaylistOpen, setIsCreatePlaylistOpen] = useState(false);
+
+  const handleInstallClick = useCallback(async () => {
+    if (canPromptNative) {
+      const accepted = await promptNativeInstall();
+      if (accepted) return;
+    }
+    setIsInstallModalOpen(true);
+  }, [canPromptNative, promptNativeInstall]);
   const [isAppClosed, setIsAppClosed] = useState(() => {
     if (typeof window !== "undefined" && window.location.pathname === "/closed") {
       return true;
@@ -346,6 +373,10 @@ export const App: React.FC = () => {
 
     // Global browser context menu suppression (Edge/Chrome right-click menus)
     const handleContextMenu = (e: MouseEvent) => {
+      // Allow native context menu in input fields (copy, paste, cut, select all)
+      if (isEditableTarget(e.target as Element)) {
+        return;
+      }
       e.preventDefault();
     };
 
@@ -423,16 +454,23 @@ export const App: React.FC = () => {
     loadTracks();
     loadLiked();
     loadPlaylists();
+    restoreSession();
     const stopPolling = startPolling();
-    // Restore last session: reloads queue + track + position into the player.
-    // A small delay lets the audio element initialise before seek/play commands arrive.
-    const restoreTimer = setTimeout(() => { restoreSession(); }, 300);
+
+    // Re-synchronize library state automatically when server reconnects
+    const handleServerReconnected = () => {
+      loadTracks();
+      loadLiked();
+      loadPlaylists();
+    };
+    window.addEventListener("wavery:server-reconnected", handleServerReconnected);
+
     return () => {
-      clearTimeout(restoreTimer);
       stopPolling();
+      window.removeEventListener("wavery:server-reconnected", handleServerReconnected);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadTracks, loadLiked, loadPlaylists, startPolling]);
+  }, [loadTracks, loadLiked, loadPlaylists, startPolling, restoreSession]);
 
 
   // Fetch playlist tracks when opening a playlist detail
@@ -543,6 +581,16 @@ export const App: React.FC = () => {
     [importFolder, importFile]
   );
 
+  const handleImportPlaylist = useCallback(
+    async (path: string) => {
+      const summary = await playerAdapter.importPlaylistFile(path);
+      // Refresh counts and track lists so the new playlist opens immediately.
+      await loadPlaylists();
+      return summary;
+    },
+    [loadPlaylists]
+  );
+
   const handleDeletePlaylist = useCallback(
     async (id: string) => {
       await deletePlaylist(id);
@@ -626,7 +674,7 @@ export const App: React.FC = () => {
   }
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-background text-textPrimary font-sans antialiased selection:bg-accent/30 selection:text-white">
+    <div className="app-shell flex flex-col bg-background text-textPrimary font-sans antialiased selection:bg-accent/30 selection:text-white">
       {/* Frameless Desktop Window Resize Handles */}
       <WindowResizeHandles />
 
@@ -668,7 +716,7 @@ export const App: React.FC = () => {
             windowService.toggleMaximize().catch(() => {});
           }
         }}
-        className="relative h-13 sm:h-14 bg-sidebar/95 backdrop-blur-xl border-b border-white/[0.06] px-3 sm:px-4 flex items-center justify-between flex-shrink-0 z-30 select-none cursor-default"
+        className="relative min-h-[calc(52px+env(safe-area-inset-top))] sm:min-h-[calc(3.5rem+env(safe-area-inset-top))] safe-header-top bg-sidebar/95 backdrop-blur-xl border-b border-white/[0.06] px-3 sm:px-4 flex items-center justify-between flex-shrink-0 z-30 select-none cursor-default"
       >
         {/* Left: macOS Traffic Lights space (if on Mac) + Hamburger + Brand Text */}
         <div
@@ -691,24 +739,18 @@ export const App: React.FC = () => {
           <button
             type="button"
             onClick={() => navigate("home")}
-            className="cursor-pointer flex-shrink-0 font-bold text-base sm:text-base tracking-tight text-white hover:text-white/80 transition-colors focus:outline-none select-none hidden sm:inline"
+            className="cursor-pointer flex-shrink-0 font-bold text-base tracking-tight text-white hover:text-white/80 transition-colors focus:outline-none select-none hidden sm:inline"
           >
             Wavery
           </button>
         </div>
 
-        {/* Drag spacer between Brand and Search */}
-        <div
-          className="flex-1 h-full min-w-4 pointer-events-none"
-          data-tauri-drag-region={!isWindowMaximized ? "" : undefined}
-        />
-
-        {/* Center: Global Search Bar (Prominent Spotlight-grade Apple HIG search bar) */}
+        {/* Center: Global Search Bar (Flex child with max-w constraint, perfectly centered, never overlaps) */}
         <div
           data-tauri-drag-region="none"
-          className="absolute left-1/2 -translate-x-1/2 w-[calc(100%-110px)] sm:w-[calc(100%-200px)] md:w-full md:max-w-md lg:max-w-xl xl:max-w-2xl pointer-events-auto z-20 px-2 sm:px-0"
+          className="flex-1 flex justify-center items-center min-w-0 pointer-events-auto z-20 px-1 sm:px-2"
         >
-          <div className="relative group flex items-center w-full">
+          <div className="relative group flex items-center w-full max-w-xs sm:max-w-md lg:max-w-xl xl:max-w-2xl">
             <Search
               onClick={() => {
                 if (viewMode !== "search") navigate("search");
@@ -739,8 +781,8 @@ export const App: React.FC = () => {
                   }
                 }
               }}
-              placeholder="Search songs, albums, artists, playlists..."
-              className="w-full h-10 sm:h-10.5 bg-surface hover:bg-surfaceHover focus:bg-surfaceActive border border-white/[0.08] hover:border-white/[0.15] focus:border-accent rounded-full pl-10 sm:pl-12 pr-24 sm:pr-28 text-xs sm:text-sm text-textPrimary placeholder:text-textMuted focus:outline-none focus:ring-2 focus:ring-accent/30 transition-all duration-200 shadow-sm focus:shadow-md"
+              placeholder="Search library..."
+              className="w-full h-10 sm:h-10.5 bg-surface hover:bg-surfaceHover focus:bg-surfaceActive border border-white/[0.08] hover:border-white/[0.15] focus:border-accent rounded-full pl-10 sm:pl-12 pr-12 sm:pr-24 text-xs sm:text-sm text-textPrimary placeholder:text-textMuted focus:outline-none focus:ring-2 focus:ring-accent/30 transition-all duration-200 shadow-sm focus:shadow-md"
             />
             <div className="absolute right-2.5 sm:right-3.5 flex items-center space-x-2 pointer-events-auto">
               {globalSearch ? (
@@ -778,18 +820,42 @@ export const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Drag spacer between Search and Right controls */}
-        <div
-          className="flex-1 h-full min-w-4 pointer-events-none"
-          data-tauri-drag-region={!isWindowMaximized ? "" : undefined}
-        />
-
-        {/* Right: Windows/Linux Window Controls */}
+        {/* Right: Windows/Linux Window Controls (Desktop) or Fullscreen Toggle (Web / Mobile) */}
         <div
           data-tauri-drag-region="none"
           className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-shrink-0 z-20 pointer-events-auto"
         >
-          {!isMac && <WindowControls variant="windows" />}
+          {isTauri ? (
+            !isMac && <WindowControls variant="windows" />
+          ) : (
+            <div className="flex items-center space-x-2">
+              {!isInstalledOrStandalone && (
+                <button
+                  type="button"
+                  onClick={handleInstallClick}
+                  className="p-2 sm:px-3 sm:py-2 rounded-xl bg-accent/15 hover:bg-accent/25 active:scale-95 text-accent hover:text-white transition focus:outline-none flex items-center space-x-2 border border-accent/30 text-xs font-semibold"
+                  title={canPromptNative ? "Install Wavery App (1-Click)" : "Install Wavery App"}
+                  aria-label="Install Wavery App"
+                >
+                  <Download className="w-4 h-4 flex-shrink-0" />
+                  <span className="hidden sm:inline">Install</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => windowService.toggleFullscreen()}
+                className="p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] active:scale-95 text-textSecondary hover:text-white transition focus:outline-none flex items-center justify-center border border-white/[0.08]"
+                title={isFullscreen ? "Exit Fullscreen" : "Fullscreen (Hide Browser Bar)"}
+                aria-label={isFullscreen ? "Exit Fullscreen" : "Fullscreen (Hide Browser Bar)"}
+              >
+                {isFullscreen ? (
+                  <Minimize2 className="w-4 h-4 text-accent" />
+                ) : (
+                  <Maximize2 className="w-4 h-4" />
+                )}
+              </button>
+            </div>
+          )}
         </div>
       </header>
 
@@ -831,6 +897,7 @@ export const App: React.FC = () => {
           currentView={viewMode}
           onNavigate={navigate}
           onOpenImport={() => setIsImportModalOpen(true)}
+          onOpenInstall={handleInstallClick}
           trackCount={tracks.length}
           artistCount={artists.length}
           albumCount={albums.length}
@@ -851,7 +918,7 @@ export const App: React.FC = () => {
           />
 
           {/* View Routing with VSync smooth transition */}
-          <div key={viewMode} className="flex-1 flex flex-col min-h-0 overflow-hidden animate-fadeIn">
+          <div key={viewMode} className="flex-1 flex flex-col min-h-0 overflow-hidden animate-tab-crossfade">
             {viewMode === "home" && (
             <HomeView
               tracks={tracks}
@@ -883,6 +950,7 @@ export const App: React.FC = () => {
 
           {viewMode === "tracks" && (
             <TrackTable
+              pageKey="tracks"
               tracks={displayedTracks}
               playbackContext={{ type: "tracks", name: "All Tracks" }}
               onSelectArtist={handleSelectArtist}
@@ -976,7 +1044,9 @@ export const App: React.FC = () => {
             />
           )}
 
-            {viewMode === "settings" && <SettingsView />}
+            {viewMode === "settings" && (
+              <SettingsView onOpenInstall={handleInstallClick} />
+            )}
           </div>
         </main>
 
@@ -990,7 +1060,7 @@ export const App: React.FC = () => {
       {/* Mobile Bottom Navigation Bar (sm:hidden) */}
       <nav
         aria-label="Mobile Navigation"
-        className="sm:hidden h-14 bg-deck/95 backdrop-blur-2xl border-t border-white/[0.08] flex items-center justify-around flex-shrink-0 z-30 px-2 select-none"
+        className="sm:hidden min-h-[calc(3.5rem+env(safe-area-inset-bottom))] safe-nav-bottom bg-deck/95 backdrop-blur-2xl border-t border-white/[0.08] flex items-center justify-around flex-shrink-0 z-30 px-2 select-none"
       >
         <button
           type="button"
@@ -1056,6 +1126,8 @@ export const App: React.FC = () => {
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
         onImport={handleImport}
+        onImportPlaylist={handleImportPlaylist}
+        onOpenPlaylist={selectPlaylist}
       />
 
       {/* Create Playlist Modal */}
@@ -1068,11 +1140,32 @@ export const App: React.FC = () => {
         }}
       />
 
-      {/* Immersive Fullscreen Now Playing & Live Lyrics */}
-      <FullscreenPlayer />
+      {/* PWA / Mobile Install App Modal */}
+      <InstallAppModal
+        isOpen={isInstallModalOpen}
+        onClose={() => setIsInstallModalOpen(false)}
+      />
+
+      {/* Immersive Fullscreen Now Playing & Live Lyrics (desktop) or the
+          expandable mini-card sheet (mobile). Same navigation flag, one
+          surface per breakpoint. */}
+      {isMobile ? <MobileNowPlayingSheet /> : <FullscreenPlayer />}
 
       {/* Batch Metadata & Lyrics Enrichment Modal */}
       <BatchEnrichmentModal />
+
+      {/* Wavery Offline Indicator & Auto-Retry Cover */}
+      <OfflineCover
+        isOffline={isOffline}
+        isChecking={isServerChecking}
+        retryCountdown={serverRetryCountdown}
+        serverAddress={serverAddress}
+        isCoverMinimized={isCoverMinimized}
+        setIsCoverMinimized={setIsCoverMinimized}
+        onRetry={() => {
+          void checkConnection();
+        }}
+      />
 
       {/* Global Custom Context Menu Portal */}
       <ContextMenu />

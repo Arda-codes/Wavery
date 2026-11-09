@@ -33,7 +33,7 @@ fn create_synthesized_wav(path: &Path, duration_secs: u32) -> std::io::Result<()
     // "fmt " sub-chunk
     buf.extend_from_slice(b"fmt ");
     buf.extend_from_slice(&16u32.to_le_bytes()); // Subchunk1Size (16 for PCM)
-    buf.extend_from_slice(&1u16.to_le_bytes());  // AudioFormat (1 = PCM)
+    buf.extend_from_slice(&1u16.to_le_bytes()); // AudioFormat (1 = PCM)
     buf.extend_from_slice(&channels.to_le_bytes());
     buf.extend_from_slice(&sample_rate.to_le_bytes());
     let byte_rate = sample_rate * channels as u32 * (bits_per_sample as u32 / 8);
@@ -48,7 +48,8 @@ fn create_synthesized_wav(path: &Path, duration_secs: u32) -> std::io::Result<()
 
     // 440 Hz Sine Wave audio samples
     for i in 0..num_samples {
-        let sample = ((i as f32 * 440.0 * 2.0 * std::f32::consts::PI / sample_rate as f32).sin() * 5000.0) as i16;
+        let sample = ((i as f32 * 440.0 * 2.0 * std::f32::consts::PI / sample_rate as f32).sin()
+            * 5000.0) as i16;
         buf.extend_from_slice(&sample.to_le_bytes());
     }
 
@@ -77,6 +78,7 @@ fn make_track(id: &str, path: PathBuf, duration: Duration) -> Track {
             channels: Some(2),
             format: "WAV".into(),
             lyrics: None,
+            ..Default::default()
         },
         date_added: 1725235200,
     }
@@ -132,7 +134,10 @@ fn test_rodio_player_multithreaded_concurrency_stress() {
                     }
                     5 => {
                         let v = lock.volume();
-                        assert!((0.0..=1.0).contains(&v), "Volume {v} out of bounds [0.0, 1.0]");
+                        assert!(
+                            (0.0..=1.0).contains(&v),
+                            "Volume {v} out of bounds [0.0, 1.0]"
+                        );
                     }
                     6 => {
                         let _ = lock.state();
@@ -157,7 +162,9 @@ fn test_rodio_player_multithreaded_concurrency_stress() {
     }
 
     for h in handles {
-        let t_id = h.join().expect("Thread panicked during concurrency stress test");
+        let t_id = h
+            .join()
+            .expect("Thread panicked during concurrency stress test");
         assert!(t_id < num_threads);
     }
 
@@ -245,7 +252,8 @@ async fn test_rodio_player_buffer_and_audio_decoding_robustness() {
         Err(e) => panic!("Unexpected error: {e:?}"),
     };
 
-    let temp_dir = std::env::temp_dir().join(format!("wavery_audio_decoding_{}", uuid::Uuid::new_v4()));
+    let temp_dir =
+        std::env::temp_dir().join(format!("wavery_audio_decoding_{}", uuid::Uuid::new_v4()));
     fs::create_dir_all(&temp_dir).expect("Failed to create temp dir");
 
     let wav_path = temp_dir.join("valid_tone_3s.wav");
@@ -259,7 +267,11 @@ async fn test_rodio_player_buffer_and_audio_decoding_robustness() {
 
     // Load track
     let load_res = player.load(&track, None).await;
-    assert!(load_res.is_ok(), "Failed to load synthesized WAV file: {:?}", load_res);
+    assert!(
+        load_res.is_ok(),
+        "Failed to load synthesized WAV file: {:?}",
+        load_res
+    );
 
     // After load, state should be Playing and total duration available
     assert_eq!(player.state(), PlaybackState::Playing);
@@ -272,7 +284,11 @@ async fn test_rodio_player_buffer_and_audio_decoding_robustness() {
 
     // Small sleep to ensure paused position does not advance
     thread::sleep(Duration::from_millis(50));
-    assert_eq!(player.position(), paused_pos, "Position advanced while paused");
+    assert_eq!(
+        player.position(),
+        paused_pos,
+        "Position advanced while paused"
+    );
 
     // Seek to 1.5s
     let seek_target = Duration::from_millis(1500);
@@ -311,7 +327,8 @@ async fn test_rodio_player_corrupt_files_and_missing_paths_error_handling() {
         Err(e) => panic!("Unexpected error: {e:?}"),
     };
 
-    let temp_dir = std::env::temp_dir().join(format!("wavery_audio_corrupt_{}", uuid::Uuid::new_v4()));
+    let temp_dir =
+        std::env::temp_dir().join(format!("wavery_audio_corrupt_{}", uuid::Uuid::new_v4()));
     fs::create_dir_all(&temp_dir).expect("Failed to create temp dir");
 
     // 1. Non-existent file
@@ -363,7 +380,11 @@ async fn test_rodio_player_corrupt_files_and_missing_paths_error_handling() {
 
     // 5. JSON/HTML text file masquerading as audio
     let text_path = temp_dir.join("fake.mp3");
-    fs::write(&text_path, b"{\"error\": \"not an mp3 file\", \"status\": 404}").unwrap();
+    fs::write(
+        &text_path,
+        b"{\"error\": \"not an mp3 file\", \"status\": 404}",
+    )
+    .unwrap();
     let text_track = make_track("text", text_path, Duration::from_secs(60));
     let err_text = player.load(&text_track, None).await;
     assert!(
@@ -378,7 +399,11 @@ async fn test_rodio_player_corrupt_files_and_missing_paths_error_handling() {
     let valid_track = make_track("valid_rec", valid_path, Duration::from_secs(2));
 
     let ok_res = player.load(&valid_track, None).await;
-    assert!(ok_res.is_ok(), "Player failed to recover after decoder errors: {:?}", ok_res);
+    assert!(
+        ok_res.is_ok(),
+        "Player failed to recover after decoder errors: {:?}",
+        ok_res
+    );
     assert_eq!(player.state(), PlaybackState::Playing);
     assert!(player.stop().is_ok());
     assert_eq!(player.state(), PlaybackState::Stopped);
@@ -402,7 +427,8 @@ async fn test_rodio_player_rapid_lifecycle_reload_storm() {
         Err(e) => panic!("Unexpected error: {e:?}"),
     };
 
-    let temp_dir = std::env::temp_dir().join(format!("wavery_audio_storm_{}", uuid::Uuid::new_v4()));
+    let temp_dir =
+        std::env::temp_dir().join(format!("wavery_audio_storm_{}", uuid::Uuid::new_v4()));
     fs::create_dir_all(&temp_dir).expect("Failed to create temp dir");
 
     let wav_path_1 = temp_dir.join("storm_1.wav");
@@ -412,7 +438,11 @@ async fn test_rodio_player_rapid_lifecycle_reload_storm() {
 
     let track_1 = make_track("storm_1", wav_path_1, Duration::from_secs(2));
     let track_2 = make_track("storm_2", wav_path_2, Duration::from_secs(2));
-    let corrupt_track = make_track("corrupt", temp_dir.join("corrupt.wav"), Duration::from_secs(2));
+    let corrupt_track = make_track(
+        "corrupt",
+        temp_dir.join("corrupt.wav"),
+        Duration::from_secs(2),
+    );
     fs::write(temp_dir.join("corrupt.wav"), b"CORRUPT_PAYLOAD").unwrap();
 
     for cycle in 0..50 {
@@ -423,7 +453,10 @@ async fn test_rodio_player_rapid_lifecycle_reload_storm() {
             assert_eq!(player.state(), PlaybackState::Paused);
             assert!(player.seek(Duration::from_millis(500)).is_ok());
         } else {
-            assert!(player.load(&track_2, Some(Duration::from_millis(800))).await.is_ok());
+            assert!(player
+                .load(&track_2, Some(Duration::from_millis(800)))
+                .await
+                .is_ok());
             assert_eq!(player.state(), PlaybackState::Playing);
         }
 
@@ -532,7 +565,8 @@ async fn test_rodio_player_rapid_playback_stutter_hammering() {
         Err(e) => panic!("Unexpected error: {e:?}"),
     };
 
-    let temp_dir = std::env::temp_dir().join(format!("wavery_audio_stutter_{}", uuid::Uuid::new_v4()));
+    let temp_dir =
+        std::env::temp_dir().join(format!("wavery_audio_stutter_{}", uuid::Uuid::new_v4()));
     fs::create_dir_all(&temp_dir).expect("Failed to create temp dir");
 
     let wav_path = temp_dir.join("stutter.wav");

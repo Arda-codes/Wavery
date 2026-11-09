@@ -9,7 +9,8 @@ export function formatTime(secs: number = 0): string {
 
 export function formatRemainingTime(currentSecs: number, totalSecs: number): string {
   if (isNaN(totalSecs) || totalSecs <= 0) return formatTime(currentSecs);
-  const diff = Math.max(0, totalSecs - currentSecs);
+  const safeCurrent = isNaN(currentSecs) || currentSecs < 0 ? 0 : currentSecs;
+  const diff = Math.max(0, totalSecs - safeCurrent);
   return `-${formatTime(diff)}`;
 }
 
@@ -30,7 +31,7 @@ export interface UseVsyncScrubberResult {
   isDragging: boolean;
   dragPos: number;
   handlePointerDown: (e: React.PointerEvent<HTMLInputElement>) => void;
-  handleChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  handleChange: (e: React.ChangeEvent<HTMLInputElement> | React.FormEvent<HTMLInputElement>) => void;
   handlePointerUp: (e?: React.PointerEvent<HTMLInputElement>) => void;
   handleContainerPointerDown: (e: React.PointerEvent<HTMLDivElement>) => void;
   displayPos: number;
@@ -43,7 +44,8 @@ export interface UseVsyncScrubberResult {
  * via requestAnimationFrame.
  *
  * To achieve perfectly fluid, zero-jank progress without causing React component re-renders
- * every 7-16ms, this hook directly updates the CSS variable (--slider-progress) and DOM text nodes.
+ * during playback or dragging, this hook directly updates the CSS variable (--slider-progress),
+ * native slider value, and DOM text nodes.
  */
 export function useVsyncScrubber({
   positionSecs,
@@ -66,10 +68,8 @@ export function useVsyncScrubber({
   const showRemainingRef = useRef(showRemaining);
 
   const [isDragging, setIsDragging] = useState(false);
-  const [dragPos, setDragPos] = useState(0);
   const isDraggingRef = useRef(false);
-  const dragPosRef = useRef(0);
-  const dragRafIdRef = useRef<number | null>(null);
+  const dragPosRef = useRef(positionSecs);
 
   // Keep refs synchronized with props
   useEffect(() => {
@@ -86,7 +86,6 @@ export function useVsyncScrubber({
 
   useEffect(() => {
     isPlayingRef.current = isPlaying;
-    // When playing state transitions, re-anchor base timestamp
     baseTimeRef.current = performance.now();
   }, [isPlaying]);
 
@@ -94,8 +93,9 @@ export function useVsyncScrubber({
   const updateDOM = useCallback((pos: number) => {
     const dur = durationRef.current;
     const maxDur = dur > 0 ? dur : 100;
-    const clampedPos = Math.max(0, Math.min(pos, maxDur));
-    const progressPct = maxDur > 0 ? (clampedPos / maxDur) * 100 : 0;
+    const safePos = isNaN(pos) || pos < 0 ? 0 : pos;
+    const clampedPos = Math.max(0, Math.min(safePos, maxDur));
+    const progressPct = maxDur > 0 ? Math.max(0, Math.min(100, (clampedPos / maxDur) * 100)) : 0;
 
     if (sliderRef.current) {
       sliderRef.current.style.setProperty("--slider-progress", `${progressPct}%`);
@@ -134,8 +134,8 @@ export function useVsyncScrubber({
 
     const elapsed = (performance.now() - baseTimeRef.current) / 1000;
     const dur = durationRef.current;
-    const pos = basePosRef.current + elapsed;
-    return dur > 0 ? Math.min(pos, dur) : pos;
+    const pos = (basePosRef.current || 0) + elapsed;
+    return dur > 0 ? Math.max(0, Math.min(pos, dur)) : Math.max(0, pos);
   }, []);
 
   // VSync Animation Frame Loop
@@ -165,89 +165,63 @@ export function useVsyncScrubber({
     };
   }, [isPlaying, hasTrack, getInterpolatedPos, updateDOM]);
 
-  // Pointer drag interactions
+  // Pointer drag interactions on the range input
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLInputElement>) => {
     if (!hasTrackRef.current) return;
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId);
-    } catch {
-      // Ignore if setPointerCapture is unsupported
-    }
+    isDraggingRef.current = true;
+    setIsDragging(true);
 
     const dur = durationRef.current;
-    let targetPos: number;
-    const rect = e.currentTarget.getBoundingClientRect();
+    const rect = containerRef?.current?.getBoundingClientRect() || e.currentTarget.getBoundingClientRect();
     if (rect.width > 0 && dur > 0) {
       const pct = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1));
-      targetPos = pct * dur;
-    } else {
-      const val = parseFloat(e.currentTarget.value);
-      targetPos = !isNaN(val) ? val : getInterpolatedPos();
+      const targetPos = pct * dur;
+      dragPosRef.current = targetPos;
+      if (sliderRef.current) {
+        sliderRef.current.value = String(targetPos);
+      }
+      updateDOM(targetPos);
     }
+  }, [containerRef, updateDOM]);
 
-    isDraggingRef.current = true;
-    dragPosRef.current = targetPos;
-    setIsDragging(true);
-    setDragPos(targetPos);
-    updateDOM(targetPos);
-  }, [getInterpolatedPos, updateDOM]);
-
-  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  // Native range slider onInput: fires continuously while user drags slider
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement> | React.FormEvent<HTMLInputElement>) => {
     if (!hasTrackRef.current) return;
-    const val = parseFloat(e.target.value);
+    const val = parseFloat(e.currentTarget.value);
     if (!isNaN(val)) {
       dragPosRef.current = val;
       updateDOM(val);
-      if (dragRafIdRef.current === null) {
-        dragRafIdRef.current = requestAnimationFrame(() => {
-          setDragPos(dragPosRef.current);
-          dragRafIdRef.current = null;
-        });
-      }
     }
   }, [updateDOM]);
 
-  const handlePointerUp = useCallback((e?: React.PointerEvent<HTMLInputElement>) => {
-    if (dragRafIdRef.current !== null) {
-      cancelAnimationFrame(dragRafIdRef.current);
-      dragRafIdRef.current = null;
-    }
-
-    if (e) {
-      try {
-        if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-          e.currentTarget.releasePointerCapture(e.pointerId);
-        }
-      } catch {
-        // Ignore pointer release errors
-      }
-    }
-
+  // Pointer up on slider: commit seek
+  const handlePointerUp = useCallback((_e?: React.PointerEvent<HTMLInputElement>) => {
     if (isDraggingRef.current && hasTrackRef.current) {
-      const sliderVal = sliderRef.current ? parseFloat(sliderRef.current.value) : NaN;
-      const targetPos = !isNaN(sliderVal) ? sliderVal : dragPosRef.current;
-      onSeek(targetPos);
-      basePosRef.current = targetPos;
-      baseTimeRef.current = performance.now();
       isDraggingRef.current = false;
       setIsDragging(false);
-      setDragPos(targetPos);
-      updateDOM(targetPos);
+
+      const targetPos = sliderRef.current ? parseFloat(sliderRef.current.value) : dragPosRef.current;
+      const safePos = isNaN(targetPos) ? dragPosRef.current : targetPos;
+      basePosRef.current = safePos;
+      baseTimeRef.current = performance.now();
+      updateDOM(safePos);
+      onSeek(safePos);
     }
   }, [onSeek, updateDOM]);
 
-  // Window-level safety listener to ensure dragging state is never orphaned
+  // Window-level pointerup / pointercancel safety to catch mouse release outside window
   useEffect(() => {
     const handleGlobalPointerUp = () => {
       if (isDraggingRef.current && hasTrackRef.current) {
-        const sliderVal = sliderRef.current ? parseFloat(sliderRef.current.value) : NaN;
-        const targetPos = !isNaN(sliderVal) ? sliderVal : dragPosRef.current;
-        onSeek(targetPos);
-        basePosRef.current = targetPos;
-        baseTimeRef.current = performance.now();
         isDraggingRef.current = false;
         setIsDragging(false);
-        updateDOM(targetPos);
+
+        const targetPos = sliderRef.current ? parseFloat(sliderRef.current.value) : dragPosRef.current;
+        const safePos = isNaN(targetPos) ? dragPosRef.current : targetPos;
+        basePosRef.current = safePos;
+        baseTimeRef.current = performance.now();
+        updateDOM(safePos);
+        onSeek(safePos);
       }
     };
 
@@ -259,21 +233,24 @@ export function useVsyncScrubber({
     };
   }, [onSeek, updateDOM]);
 
-  // Container pointer down to allow clicking anywhere on the scrubber bar to seek
+  // Container pointer down to allow clicking anywhere on the scrubber bar to seek instantly
   const handleContainerPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (!hasTrackRef.current) return;
-    if (e.target === sliderRef.current) return; // Handled by input's handlePointerDown
+    if (e.target === sliderRef.current) return;
 
     const rect = e.currentTarget.getBoundingClientRect();
     const dur = durationRef.current;
     if (rect.width > 0 && dur > 0) {
       const pct = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1));
       const targetPos = pct * dur;
-      onSeek(targetPos);
+      dragPosRef.current = targetPos;
       basePosRef.current = targetPos;
       baseTimeRef.current = performance.now();
-      dragPosRef.current = targetPos;
+      if (sliderRef.current) {
+        sliderRef.current.value = String(targetPos);
+      }
       updateDOM(targetPos);
+      onSeek(targetPos);
     }
   }, [onSeek, updateDOM]);
 
@@ -282,11 +259,11 @@ export function useVsyncScrubber({
     currentTimeRef,
     remainingTimeRef,
     isDragging,
-    dragPos,
+    dragPos: dragPosRef.current,
     handlePointerDown,
     handleChange,
     handlePointerUp,
     handleContainerPointerDown,
-    displayPos: isDragging ? dragPos : positionSecs,
+    displayPos: positionSecs,
   };
 }

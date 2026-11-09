@@ -29,6 +29,7 @@ if (typeof global.Audio === "undefined") {
 
 // Robust mock fetch for Node test harness to intercept relative /api/* requests
 const originalFetch = global.fetch;
+const runnerLikedSet = new Set();
 global.fetch = async (url, options) => {
   const urlStr = typeof url === "string" ? url : (url && typeof url.href === "string" ? url.href : String(url || ""));
   if (urlStr.startsWith("/api/") || urlStr.startsWith("http://127.0.0.1") || urlStr.startsWith("http://localhost")) {
@@ -36,9 +37,66 @@ global.fetch = async (url, options) => {
       ok: true,
       status: 200,
       json: async () => {
-        if (urlStr.includes("/api/liked/ids")) return [];
+        if (urlStr.includes("/toggle")) {
+          const match = urlStr.match(/\/api\/liked\/([^/]+)\/toggle/);
+          const id = match ? decodeURIComponent(match[1]) : "track";
+          if (runnerLikedSet.has(id)) {
+            runnerLikedSet.delete(id);
+            return { liked: false };
+          } else {
+            runnerLikedSet.add(id);
+            return { liked: true };
+          }
+        }
+        if (urlStr.includes("/api/liked/ids")) return Array.from(runnerLikedSet);
         if (urlStr.includes("/api/liked")) return [];
         if (urlStr.includes("/api/playlists")) return [];
+        if (urlStr.includes("/api/library/stats")) {
+          return {
+            databasePath: "/tmp/wavery/library.db",
+            libraryPath: "/tmp/wavery/library",
+            artworkCachePath: "/tmp/wavery/album_art",
+            databaseBytes: 1048576,
+            walBytes: 4096,
+            sharedMemoryBytes: 32768,
+            libraryBytes: 52428800,
+            artworkCacheBytes: 2097152,
+            trackCount: 12345,
+            albumCount: 678,
+            artistCount: 90,
+            playlistCount: 12,
+            likedCount: 34,
+            waveformCount: 56,
+            missingFileCount: 3,
+            freeBytes: 8192,
+            pageSize: 4096,
+            pageCount: 256,
+            journalMode: "wal",
+          };
+        }
+        if (urlStr.includes("/api/library/health")) {
+          return {
+            isHealthy: true,
+            quickCheck: "ok",
+            foreignKeyViolations: 0,
+            ftsIndexedTracks: 12345,
+            ftsMissingTracks: 0,
+            missingFileCount: 3,
+            journalMode: "wal",
+            pageCount: 256,
+            freeBytes: 8192,
+            checkedAt: 1700000000,
+            issues: [],
+          };
+        }
+        if (urlStr.includes("/api/library/prune")) return { removed: 2 };
+        if (urlStr.includes("/api/library/backup")) {
+          return {
+            path: "/tmp/wavery/backups/wavery-library-backup.db",
+            bytes: 1048576,
+            createdAt: 1700000000,
+          };
+        }
         return [];
       },
       text: async () => "",
@@ -93,8 +151,16 @@ async function main() {
   const { runKeybindingsTests } = jiti("./test_keybindings.ts");
   const { runM3Challenger1Tests } = jiti("./test_m3_challenger1_stress.ts");
   const { runM4Challenger2AdversarialTests } = jiti("./test_m4_challenger2_adversarial.ts");
+  const { runM4Challenger2EdgeCaseTests } = jiti("./test_m4_challenger2_edge_cases.ts");
+  const { runChallenger1EmpiricalTests } = jiti("./test_challenger1_empirical.ts");
   const { runCrossfadeTests } = jiti("./test_crossfade.ts");
+  const { runSortPersistenceTests } = jiti("./test_sort_persistence.ts");
   const { runDesignTokenGuardTests } = jiti("./test_design_tokens.ts");
+  const { runOpaqueBoxE2ETests } = jiti("./test_e2e_opaque_box.ts");
+  const { runAdvancedE2ETests } = jiti("./e2e_advanced.test.ts");
+  const { runPlaybackResumeAndDiscordTests } = jiti("./test_resume_and_discord.ts");
+  const { runDatabaseControlCenterTests } = jiti("./test_database_control_center.ts");
+  const { runEnrichmentScopeTests } = jiti("./test_enrichment_scope.ts");
 
   const startTime = performance.now();
 
@@ -134,10 +200,31 @@ async function main() {
 
     // 12. Run M4 Challenger 2 Final Adversarial Hardening & Boundary Audit Tests
     const m4Challenger2Results = await runM4Challenger2AdversarialTests(jiti);
+    const m4EdgeCaseResults = await runM4Challenger2EdgeCaseTests(jiti);
 
-    // 13. Design token guard (spacing grid, type scale, colour tokens)
+    // 12b. Run M4 Challenger 1 Two-Tier Queue & Concurrent Mutation Stress Tests
+    const m4Challenger1Results = await runChallenger1EmpiricalTests(jiti);
+
+    // 13. Run Sort Persistence & Playlist Sort Tests
+    runSortPersistenceTests();
+
+    // 14. Design token guard (spacing grid, type scale, colour tokens)
     runDesignTokenGuardTests();
 
+    // 15. Run Master 4-Tier Opaque-Box E2E Tests (Features 1-15)
+    const e2eResults = await runOpaqueBoxE2ETests(jiti);
+
+    // 16. Run Advanced 4-Tier Opaque-Box E2E Tests (M4 Features 1-20)
+    const advancedE2EResults = await runAdvancedE2ETests(jiti);
+
+    // 17. Playback resume + Discord presence regressions
+    await runPlaybackResumeAndDiscordTests();
+
+    // 18. Database control center adapter and formatter contracts
+    await runDatabaseControlCenterTests();
+
+    // 19. Enrichment scope ("only fill missing fields") decisions
+    await runEnrichmentScopeTests();
 
     const totalDuration = performance.now() - startTime;
 
@@ -154,7 +241,10 @@ async function main() {
     console.log("  [7] Crossfade Equal-Power:   PASSED (dual element, equal-power curve & auto-crossfade)");
     console.log("  [8] M3 State & String Fuzz:  PASSED (5,000 randomized state actions & ReDoS fuzzing)");
     console.log("  [9] M4 Adversarial & Audit:  PASSED (100k scale, 10k queue ops, ReDoS & zero unwrap)");
+    console.log("  [9b] M4 Challenger 1 Stress: PASSED (two-tier priority queue, 5k seq & 1k concurrent ops)");
     console.log("  [10] Design Token Guard:     PASSED (8px grid, type scale, colour tokens)");
+    console.log("  [11] 4-Tier Opaque-Box E2E:  PASSED (Features 1-15 across Tiers 1-4)");
+    console.log("  [12] Advanced 4-Tier E2E:    PASSED (M4 Features 1-20: LAN, Waveforms, Loudness, PWA)");
     console.log("================================================================================");
     console.log("  FINAL VERDICT: >>> APPROVE <<<");
     console.log("================================================================================\n");
@@ -169,6 +259,7 @@ async function main() {
       storesAndUtilsResults,
       m3Challenger1Results,
       m4Challenger2Results,
+      e2eResults,
       totalDuration,
     };
   } catch (err) {

@@ -21,6 +21,7 @@ import {
   ThemeMode,
   useSettingsStore,
 } from "../stores/settingsStore";
+import { useTransitionMount } from "../utils/useTransitionMount";
 
 interface CustomThemeModalProps {
   isOpen: boolean;
@@ -82,7 +83,9 @@ export const CustomThemeModal: React.FC<CustomThemeModalProps> = ({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose]);
 
-  if (!isOpen) return null;
+  const { isRendered, isExiting } = useTransitionMount(isOpen, 160);
+
+  if (!isRendered) return null;
 
   const updateColor = (key: keyof CustomTheme, value: string | boolean) => {
     setImportError(null);
@@ -173,19 +176,23 @@ export const CustomThemeModal: React.FC<CustomThemeModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm ${
+        isExiting ? "animate-backdrop-out" : "animate-backdrop-in"
+      }`}
+    >
       <div
-        className="w-full max-w-4xl max-h-[90vh] flex flex-col bg-surface border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-scaleUp"
+        className={`w-full max-w-4xl max-h-[90vh] flex flex-col bg-surface border border-white/10 rounded-2xl shadow-2xl overflow-hidden ${
+          isExiting ? "animate-scale-down pointer-events-none" : "animate-scale-up"
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06] bg-sidebar/80">
           <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 rounded-xl bg-white/[0.06] border border-white/[0.08] flex items-center justify-center text-white">
-              <Palette className="w-4 h-4 text-white" />
-            </div>
+            <Palette className="w-5 h-5 text-accent flex-shrink-0" />
             <div>
-              <h2 className="text-sm font-bold text-white tracking-tight">Custom Theme Maker</h2>
+              <h2 className="text-sm font-semibold text-white tracking-tight">Custom Theme Maker</h2>
               <p className="text-2xs text-textMuted">
                 Craft your bespoke color palette with live preview.
               </p>
@@ -206,7 +213,7 @@ export const CustomThemeModal: React.FC<CustomThemeModalProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-deck/60 p-4 rounded-xl border border-white/[0.05]">
             {/* Theme Name */}
             <div>
-              <label className="block text-2xs font-semibold text-textSecondary uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-textSecondary mb-2">
                 Theme Name
               </label>
               <input
@@ -220,7 +227,7 @@ export const CustomThemeModal: React.FC<CustomThemeModalProps> = ({
 
             {/* Base Contrast Mode */}
             <div>
-              <label className="block text-2xs font-semibold text-textSecondary uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-textSecondary mb-2">
                 Base Contrast Mode
               </label>
               <div className="flex items-center space-x-2 bg-surface p-1 rounded-lg border border-white/10">
@@ -253,7 +260,7 @@ export const CustomThemeModal: React.FC<CustomThemeModalProps> = ({
 
             {/* Duplicate from Preset */}
             <div>
-              <label className="block text-2xs font-semibold text-textSecondary uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-textSecondary mb-2">
                 Clone from Preset
               </label>
               <select
@@ -280,7 +287,7 @@ export const CustomThemeModal: React.FC<CustomThemeModalProps> = ({
 
           {/* Color Channels Grid */}
           <div className="space-y-2">
-            <div className="text-2xs font-semibold text-textSecondary uppercase tracking-wider">
+            <div className="text-xs font-semibold text-textSecondary">
               Color Channels
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -345,7 +352,7 @@ export const CustomThemeModal: React.FC<CustomThemeModalProps> = ({
           {/* Interactive Live UI Preview */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-2xs font-semibold text-textSecondary uppercase tracking-wider">
+              <span className="text-xs font-semibold text-textSecondary">
                 Live Interface Preview
               </span>
               <span className="text-2xs text-textMuted">
@@ -559,7 +566,7 @@ export const CustomThemeModal: React.FC<CustomThemeModalProps> = ({
                       className="w-6 h-6 rounded shadow-sm flex items-center justify-center text-white"
                       style={{ backgroundColor: themeDraft.accentColor }}
                     >
-                      <Play className="w-2.5 h-2.5 fill-current ml-1" />
+                      <Play className="w-2.5 h-2.5 fill-current" />
                     </div>
                     <div className="truncate">
                       <div

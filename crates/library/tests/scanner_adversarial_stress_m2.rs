@@ -18,7 +18,8 @@ use wavery_library::manager::SqliteLibraryManager;
 use wavery_library::reader::LoftyMetadataReader;
 
 fn setup_stress_env(name: &str) -> (PathBuf, PathBuf, PathBuf) {
-    let temp_dir = std::env::temp_dir().join(format!("wavery_stress_{name}_{}", uuid::Uuid::new_v4()));
+    let temp_dir =
+        std::env::temp_dir().join(format!("wavery_stress_{name}_{}", uuid::Uuid::new_v4()));
     let db_path = temp_dir.join("library.db");
     let managed_root = temp_dir.join("managed");
     fs::create_dir_all(&managed_root).expect("create managed root");
@@ -49,7 +50,9 @@ fn generate_pseudo_random_bytes(seed: u64, len: usize) -> Vec<u8> {
     let mut out = Vec::with_capacity(len);
     let mut state = seed ^ 0x5DEECE66D;
     for _ in 0..len {
-        state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        state = state
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         out.push((state >> 33) as u8);
     }
     out
@@ -69,7 +72,9 @@ async fn test_hundreds_of_adversarial_corrupted_audio_files_parallel_scan_with_p
     println!(">>> STARTING TEST: Hundreds of Adversarial Audio Files Scanner");
     println!("========================================================");
 
-    let extensions = ["mp3", "flac", "ogg", "opus", "m4a", "wav", "aac", "alac", "aiff", "wma"];
+    let extensions = [
+        "mp3", "flac", "ogg", "opus", "m4a", "wav", "aac", "alac", "aiff", "webm",
+    ];
     let mut created_audio_files = 0;
     let mut created_non_audio_files = 0;
 
@@ -95,10 +100,12 @@ async fn test_hundreds_of_adversarial_corrupted_audio_files_parallel_scan_with_p
             "flac" => b"fLaC\x00\x00\x00\x22".to_vec(),
             "wav" => b"RIFF\x20\x00\x00\x00WAVEfmt ".to_vec(),
             "ogg" | "opus" => b"OggS\x00\x02\x00\x00\x00\x00".to_vec(),
-            "m4a" | "alac" => vec![0x00, 0x00, 0x00, 0x14, 0x66, 0x74, 0x79, 0x70, 0x4D, 0x34, 0x41, 0x20],
+            "m4a" | "alac" => vec![
+                0x00, 0x00, 0x00, 0x14, 0x66, 0x74, 0x79, 0x70, 0x4D, 0x34, 0x41, 0x20,
+            ],
             "aiff" => b"FORM\x00\x00\x00\x10AIFFCOMM".to_vec(),
             "aac" => vec![0xFF, 0xF1, 0x4C, 0x80],
-            "wma" => vec![0x30, 0x26, 0xB2, 0x75, 0x8E, 0x66, 0xCF, 0x11],
+            "webm" | "weba" => vec![0x1A, 0x45, 0xDF, 0xA3],
             _ => b"GENERIC_TRUNCATED_HEADER".to_vec(),
         };
         let trunc_len = (i % payload.len()).max(1);
@@ -195,6 +202,7 @@ async fn test_hundreds_of_adversarial_corrupted_audio_files_parallel_scan_with_p
             channels: Some(2),
             format: "WAV".into(),
             lyrics: None,
+            ..Default::default()
         };
         let _ = reader.write_metadata(&path, &meta);
         created_audio_files += 1;
@@ -202,10 +210,22 @@ async fn test_hundreds_of_adversarial_corrupted_audio_files_parallel_scan_with_p
 
     // 6. 50 Non-audio files that MUST be ignored
     let non_audio_files = [
-        "cover.jpg", "folder.png", "artwork.jpeg", "album.webp",
-        "info.nfo", "lyrics.txt", "notes.pdf", "checksums.md5",
-        "index.html", ".DS_Store", "desktop.ini", "archive.tar.gz",
-        "setup.exe", "script.sh", "data.bin", "thumbnail.bmp",
+        "cover.jpg",
+        "folder.png",
+        "artwork.jpeg",
+        "album.webp",
+        "info.nfo",
+        "lyrics.txt",
+        "notes.pdf",
+        "checksums.md5",
+        "index.html",
+        ".DS_Store",
+        "desktop.ini",
+        "archive.tar.gz",
+        "setup.exe",
+        "script.sh",
+        "data.bin",
+        "thumbnail.bmp",
     ];
     for (i, non_audio) in non_audio_files.iter().cycle().take(50).enumerate() {
         let folder = incoming_dir.join(format!("non_audio_tier/sub_{}", i % 3));
@@ -269,14 +289,28 @@ async fn test_hundreds_of_adversarial_corrupted_audio_files_parallel_scan_with_p
     println!("  Batch Ingested Count:   {batches}");
 
     // Assertions
-    assert_eq!(discovered, 370, "Scanner must discover exactly all 370 audio files");
-    assert_eq!(imported_tracks.len(), 370, "All 370 audio files must import without panic or error");
-    assert_eq!(manager.all_tracks().len(), 370, "Library manager cache must contain all 370 tracks");
+    assert_eq!(
+        discovered, 370,
+        "Scanner must discover exactly all 370 audio files"
+    );
+    assert_eq!(
+        imported_tracks.len(),
+        370,
+        "All 370 audio files must import without panic or error"
+    );
+    assert_eq!(
+        manager.all_tracks().len(),
+        370,
+        "Library manager cache must contain all 370 tracks"
+    );
 
     let summary = completed_summary.expect("Completed summary must be emitted");
     assert_eq!(summary.scanned_files, 370);
     assert_eq!(summary.imported_tracks, 370);
-    assert_eq!(summary.failed_files, 0, "Zero failures allowed for corrupted audio files (graceful fallbacks required)");
+    assert_eq!(
+        summary.failed_files, 0,
+        "Zero failures allowed for corrupted audio files (graceful fallbacks required)"
+    );
 
     // Verify Fallback Metadata Properties
     let mut fallback_count = 0;
@@ -284,8 +318,14 @@ async fn test_hundreds_of_adversarial_corrupted_audio_files_parallel_scan_with_p
 
     for track in &imported_tracks {
         assert!(!track.id.is_empty(), "Track ID must not be empty");
-        assert!(track.date_added > 0, "Track date_added must be valid timestamp");
-        assert!(track.source.path().exists(), "Imported destination file must exist in managed storage");
+        assert!(
+            track.date_added > 0,
+            "Track date_added must be valid timestamp"
+        );
+        assert!(
+            track.source.path().exists(),
+            "Imported destination file must exist in managed storage"
+        );
 
         if let Some(artist) = &track.metadata.artist {
             if artist.starts_with("Valid Artist") {
@@ -294,22 +334,45 @@ async fn test_hundreds_of_adversarial_corrupted_audio_files_parallel_scan_with_p
             }
         }
         fallback_count += 1;
-        assert!(track.metadata.title.is_some(), "Fallback track must have a filename stem title");
-        assert!(!track.metadata.format.is_empty(), "Format must be non-empty");
+        assert!(
+            track.metadata.title.is_some(),
+            "Fallback track must have a filename stem title"
+        );
+        assert!(
+            !track.metadata.format.is_empty(),
+            "Format must be non-empty"
+        );
     }
 
     println!("Metadata Analysis:");
     println!("  Properly Tagged Tracks: {tagged_count}");
     println!("  Fallback Tracks:        {fallback_count}");
-    assert_eq!(tagged_count, 20, "All 20 tagged WAV tracks must retain metadata");
-    assert_eq!(fallback_count, 350, "All 350 corrupted/noise/zero-byte files must gracefully fall back");
+    assert_eq!(
+        tagged_count, 20,
+        "All 20 tagged WAV tracks must retain metadata"
+    );
+    assert_eq!(
+        fallback_count, 350,
+        "All 350 corrupted/noise/zero-byte files must gracefully fall back"
+    );
 
     // Verify SQLite FTS5 Full Text Search on the imported corpus
-    let fts_results = manager.search_fts("Maestro").expect("search_fts must succeed");
-    assert_eq!(fts_results.len(), 20, "FTS query for 'Maestro' must find all 20 valid tracks");
+    let fts_results = manager
+        .search_fts("Maestro")
+        .expect("search_fts must succeed");
+    assert_eq!(
+        fts_results.len(),
+        20,
+        "FTS query for 'Maestro' must find all 20 valid tracks"
+    );
 
-    let fts_empty_search = manager.search_fts("empty").expect("search_fts must succeed");
-    assert!(fts_empty_search.len() >= 10, "FTS query for 'empty' must match fallback title stems");
+    let fts_empty_search = manager
+        .search_fts("empty")
+        .expect("search_fts must succeed");
+    assert!(
+        fts_empty_search.len() >= 10,
+        "FTS query for 'empty' must match fallback title stems"
+    );
 
     // Clean up
     drop(manager);
@@ -339,7 +402,11 @@ async fn test_parallel_scan_under_extreme_wal_read_concurrency_stress() {
     for i in 0..300 {
         pre_seed_tracks.push(Track {
             id: format!("seed_track_{i:04}"),
-            source: TrackSource::Managed(library_root.join(format!("Artist_{}/Album_{}/track_{i}.flac", i % 20, i % 10))),
+            source: TrackSource::Managed(library_root.join(format!(
+                "Artist_{}/Album_{}/track_{i}.flac",
+                i % 20,
+                i % 10
+            ))),
             metadata: TrackMetadata {
                 title: Some(format!("Seed Anthem {i}")),
                 artist: Some(format!("Artist_{}", i % 20)),
@@ -355,11 +422,15 @@ async fn test_parallel_scan_under_extreme_wal_read_concurrency_stress() {
                 channels: Some(2),
                 format: "FLAC".into(),
                 lyrics: None,
+                ..Default::default()
             },
             date_added: 1700000000 + i as u64,
         });
     }
-    manager.db().insert_or_update_batch(&pre_seed_tracks, &library_root).expect("pre-seed batch");
+    manager
+        .db()
+        .insert_or_update_batch(&pre_seed_tracks, &library_root)
+        .expect("pre-seed batch");
 
     // 2. Create 300 incoming adversarial and valid files to scan in parallel
     for i in 0..150 {
@@ -516,20 +587,41 @@ async fn test_parallel_scan_under_extreme_wal_read_concurrency_stress() {
     println!("\n=== WAL Concurrency Stress Results ===");
     println!("Scan Duration:       {scan_duration:?}");
     println!("Imported Audio:      {} files", imported.len());
-    println!("Total Read Queries:  {total_read_ops} ({:.1} queries/sec)", total_read_ops as f64 / scan_duration.as_secs_f64());
+    println!(
+        "Total Read Queries:  {total_read_ops} ({:.1} queries/sec)",
+        total_read_ops as f64 / scan_duration.as_secs_f64()
+    );
     println!("Database Lock Errors: {total_read_locks}");
     println!("Read Failures:       {total_read_errors}");
 
     // Assertions
-    assert_eq!(imported.len(), 300, "All 300 files must be imported successfully");
-    assert_eq!(total_read_locks, 0, "WAL mode must produce ZERO database lock/busy errors during heavy concurrent reads");
-    assert_eq!(total_read_errors, 0, "ZERO read errors allowed during concurrent scanner execution");
-    assert!(total_read_ops > 200, "Concurrent readers must have completed substantial read operations");
+    assert_eq!(
+        imported.len(),
+        300,
+        "All 300 files must be imported successfully"
+    );
+    assert_eq!(
+        total_read_locks, 0,
+        "WAL mode must produce ZERO database lock/busy errors during heavy concurrent reads"
+    );
+    assert_eq!(
+        total_read_errors, 0,
+        "ZERO read errors allowed during concurrent scanner execution"
+    );
+    assert!(
+        total_read_ops > 200,
+        "Concurrent readers must have completed substantial read operations"
+    );
 
     // 5. Verify SQLite Database Integrity
     let conn = rusqlite::Connection::open(&db_path).unwrap();
-    let integrity: String = conn.query_row("PRAGMA integrity_check", [], |r| r.get(0)).unwrap();
-    assert_eq!(integrity, "ok", "SQLite database must remain 100% structurally valid");
+    let integrity: String = conn
+        .query_row("PRAGMA integrity_check", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(
+        integrity, "ok",
+        "SQLite database must remain 100% structurally valid"
+    );
 
     // Clean up
     drop(conn);
@@ -563,24 +655,44 @@ async fn test_rebuild_and_vacuum_resilience_on_corrupted_managed_repository() {
     }
 
     // 2. Execute rebuild_library
-    let rebuilt = manager.rebuild_library().await.expect("rebuild_library must succeed");
-    assert_eq!(rebuilt.len(), 100, "Rebuild must discover all 100 corrupted tracks");
+    let rebuilt = manager
+        .rebuild_library()
+        .await
+        .expect("rebuild_library must succeed");
+    assert_eq!(
+        rebuilt.len(),
+        100,
+        "Rebuild must discover all 100 corrupted tracks"
+    );
     assert_eq!(manager.all_tracks().len(), 100);
 
     // 3. Delete 30 physical files behind manager's back
     for i in 0..30 {
         let ext = if i % 2 == 0 { "mp3" } else { "flac" };
-        let p = library_root.join(format!("Artist_{}/Album_{}/track_{i:03}.{ext}", i % 5, i % 3));
+        let p = library_root.join(format!(
+            "Artist_{}/Album_{}/track_{i:03}.{ext}",
+            i % 5,
+            i % 3
+        ));
         let _ = fs::remove_file(p);
     }
 
     // 4. Rebuild again and verify automatic pruning
-    let rebuilt_after_delete = manager.rebuild_library().await.expect("rebuild after delete must succeed");
-    assert_eq!(rebuilt_after_delete.len(), 70, "Pruned missing tracks accurately");
+    let rebuilt_after_delete = manager
+        .rebuild_library()
+        .await
+        .expect("rebuild after delete must succeed");
+    assert_eq!(
+        rebuilt_after_delete.len(),
+        70,
+        "Pruned missing tracks accurately"
+    );
     assert_eq!(manager.all_tracks().len(), 70);
 
     // 5. Test vacuum
-    manager.vacuum_database().expect("vacuum_database must succeed");
+    manager
+        .vacuum_database()
+        .expect("vacuum_database must succeed");
 
     drop(manager);
     let _ = fs::remove_dir_all(&temp_dir);
@@ -593,7 +705,8 @@ async fn test_rebuild_and_vacuum_resilience_on_corrupted_managed_repository() {
 
 #[test]
 fn test_metadata_reader_direct_fuzzing_matrix() {
-    let temp_dir = std::env::temp_dir().join(format!("wavery_reader_fuzz_{}", uuid::Uuid::new_v4()));
+    let temp_dir =
+        std::env::temp_dir().join(format!("wavery_reader_fuzz_{}", uuid::Uuid::new_v4()));
     fs::create_dir_all(&temp_dir).unwrap();
     let reader = LoftyMetadataReader::new();
 
@@ -601,18 +714,24 @@ fn test_metadata_reader_direct_fuzzing_matrix() {
     println!(">>> STARTING TEST: MetadataReader Direct Fuzzing Matrix");
     println!("========================================================");
 
-    let test_extensions = ["mp3", "flac", "ogg", "opus", "wav", "m4a", "aac", "alac", "aiff", "wma", "xyz"];
+    let test_extensions = [
+        "mp3", "flac", "ogg", "opus", "wav", "m4a", "aac", "alac", "aiff", "webm", "xyz",
+    ];
 
     // 1. Zero bytes
     for ext in &test_extensions {
         let p = temp_dir.join(format!("fuzz_zero.{ext}"));
         fs::write(&p, b"").unwrap();
-        let meta = reader.read_metadata(&p).expect("read_metadata on zero-byte file must not error");
+        let meta = reader
+            .read_metadata(&p)
+            .expect("read_metadata on zero-byte file must not error");
         assert_eq!(meta.duration, Duration::ZERO);
         assert_eq!(meta.title, Some("fuzz_zero".into()));
         assert_eq!(meta.format, ext.to_uppercase());
 
-        let art = reader.read_artwork(&p).expect("read_artwork on zero-byte file must not error");
+        let art = reader
+            .read_artwork(&p)
+            .expect("read_artwork on zero-byte file must not error");
         assert!(art.is_none());
     }
 
@@ -623,18 +742,24 @@ fn test_metadata_reader_direct_fuzzing_matrix() {
         let bytes = generate_pseudo_random_bytes(0xF00D0000 + i as u64, i * 4);
         fs::write(&p, bytes).unwrap();
 
-        let meta = reader.read_metadata(&p).expect("read_metadata on random noise must gracefully fall back");
+        let meta = reader
+            .read_metadata(&p)
+            .expect("read_metadata on random noise must gracefully fall back");
         assert_eq!(meta.duration, Duration::ZERO);
         assert_eq!(meta.title, Some(format!("fuzz_corrupt_{i:03}")));
         assert_eq!(meta.format, ext.to_uppercase());
 
-        let art = reader.read_artwork(&p).expect("read_artwork on random noise must return Ok(None)");
+        let art = reader
+            .read_artwork(&p)
+            .expect("read_artwork on random noise must return Ok(None)");
         assert!(art.is_none());
     }
 
     // 3. Non-existent file
     let missing_path = temp_dir.join("non_existent_audio.mp3");
-    let meta_missing = reader.read_metadata(&missing_path).expect("read_metadata on missing file returns fallback");
+    let meta_missing = reader
+        .read_metadata(&missing_path)
+        .expect("read_metadata on missing file returns fallback");
     assert_eq!(meta_missing.title, Some("non_existent_audio".into()));
 
     let _ = fs::remove_dir_all(&temp_dir);

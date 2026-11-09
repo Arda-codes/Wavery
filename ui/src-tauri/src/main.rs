@@ -27,7 +27,7 @@ use wavery_core::models::{
     Album, Artist, GenreInfo, ImportStrategy, LoopMode, PlaybackState, Playlist, QueueStateSnapshot,
     Track, WaveformData,
 };
-use wavery_core::traits::{LibraryManager, PlayerEngine, QueueManager};
+use wavery_core::traits::{LibraryManager, MprisBridge, PlayerEngine, QueueManager};
 use wavery_library::{DatabaseBackup, DatabaseHealth, DatabaseStats, SqliteLibraryManager};
 
 const MAX_ARTWORK_CACHE_ENTRIES: usize = 64;
@@ -170,6 +170,32 @@ struct AppState {
     server_abort_handle: SyncMutex<Option<tauri::async_runtime::JoinHandle<()>>>,
     discord_handle: wavery_server::discord::DiscordHandle,
     last_normal_size: SyncMutex<(u32, u32)>,
+    mpris_bridge: Arc<AsyncMutex<wavery_mpris::ZbusMprisBridge>>,
+}
+
+/// Synchronizes current playback state, track metadata, and position with the MPRIS D-Bus bridge.
+async fn sync_mpris_state(state: &Arc<AppState>) {
+    use wavery_core::traits::MprisBridge;
+    let (status, current_track, position) = {
+        let player_guard = state.player.lock().await;
+        let queue_guard = state.queue.lock();
+        let s = player_guard
+            .as_ref()
+            .map(|p| p.state())
+            .unwrap_or(PlaybackState::Stopped);
+        let pos = player_guard
+            .as_ref()
+            .map(|p| p.position())
+            .unwrap_or(Duration::ZERO);
+        let t = queue_guard.current_track().cloned();
+        (s, t, pos)
+    };
+    let mut bridge = state.mpris_bridge.lock().await;
+    let _ = bridge.update_status(status).await;
+    let _ = bridge.update_position(position).await;
+    if let Some(ref track) = current_track {
+        let _ = bridge.update_metadata(track, None).await;
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -864,6 +890,8 @@ async fn play_track(
         return Err(e.into());
     }
     player.play()?;
+    drop(player_guard);
+    sync_mpris_state(&state).await;
     Ok(())
 }
 
@@ -1320,6 +1348,8 @@ async fn pause_playback(state: tauri::State<'_, Arc<AppState>>) -> Result<(), Ip
         .as_mut()
         .ok_or(IpcError::AudioEngineUnavailable)?;
     player.pause()?;
+    drop(player_guard);
+    sync_mpris_state(&state).await;
     Ok(())
 }
 
@@ -1343,6 +1373,8 @@ async fn resume_playback(state: tauri::State<'_, Arc<AppState>>) -> Result<(), I
     if player.state() != wavery_core::models::PlaybackState::Playing {
         return Err(IpcError::NothingToResume);
     }
+    drop(player_guard);
+    sync_mpris_state(&state).await;
     Ok(())
 }
 
@@ -1353,6 +1385,8 @@ async fn stop_playback(state: tauri::State<'_, Arc<AppState>>) -> Result<(), Ipc
         .as_mut()
         .ok_or(IpcError::AudioEngineUnavailable)?;
     player.stop()?;
+    drop(player_guard);
+    sync_mpris_state(&state).await;
     Ok(())
 }
 
@@ -1366,6 +1400,8 @@ async fn seek_playback(
         .as_mut()
         .ok_or(IpcError::AudioEngineUnavailable)?;
     player.seek(Duration::from_secs_f64(position_secs.max(0.0)))?;
+    drop(player_guard);
+    sync_mpris_state(&state).await;
     Ok(())
 }
 
@@ -2941,6 +2977,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         server_abort_handle: SyncMutex::new(None),
         discord_handle: wavery_server::discord::new_discord_handle(None),
         last_normal_size: SyncMutex::new((1100, 720)),
+        mpris_bridge: Arc::new(AsyncMutex::new(wavery_mpris::ZbusMprisBridge::new())),
     });
 
     let app = tauri::Builder::default()
@@ -3191,6 +3228,99 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Start background web server if enabled in configuration
             if config.server.enable_browser_client {
                 start_in_process_server(&state);
+            }
+
+            // Initialize Linux MPRIS D-Bus integration
+            #[cfg(target_os = "linux")]
+            if config.general.enable_mpris {
+                let bridge_conn = Arc::clone(&state.mpris_bridge);
+                tauri::async_runtime::spawn(async move {
+                    let mut b = bridge_conn.lock().await;
+                    if let Err(e) = b.try_connect_dbus().await {
+                        eprintln!("[Wavery] MPRIS D-Bus registration notice: {e}");
+                    }
+                });
+
+                let bridge_poll = Arc::clone(&state.mpris_bridge);
+                let state_mpris = Arc::clone(&state);
+                let app_handle_mpris = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    let mut interval = tokio::time::interval(Duration::from_millis(100));
+                    loop {
+                        interval.tick().await;
+                        let cmds = {
+                            let mut b = bridge_poll.lock().await;
+                            b.poll_events().await
+                        };
+                        for cmd in cmds {
+                            match cmd {
+                                wavery_core::traits::MprisCommand::Play => {
+                                    let mut p = state_mpris.player.lock().await;
+                                    if let Some(player) = p.as_mut() {
+                                        let _ = player.play();
+                                    }
+                                }
+                                wavery_core::traits::MprisCommand::Pause => {
+                                    let mut p = state_mpris.player.lock().await;
+                                    if let Some(player) = p.as_mut() {
+                                        let _ = player.pause();
+                                    }
+                                }
+                                wavery_core::traits::MprisCommand::TogglePlayPause => {
+                                    let mut p = state_mpris.player.lock().await;
+                                    if let Some(player) = p.as_mut() {
+                                        if player.state() == PlaybackState::Playing {
+                                            let _ = player.pause();
+                                        } else {
+                                            let _ = player.play();
+                                        }
+                                    }
+                                }
+                                wavery_core::traits::MprisCommand::Stop => {
+                                    let mut p = state_mpris.player.lock().await;
+                                    if let Some(player) = p.as_mut() {
+                                        let _ = player.stop();
+                                    }
+                                }
+                                wavery_core::traits::MprisCommand::Next => {
+                                    let _ = advance_queue_next(&app_handle_mpris, &state_mpris).await;
+                                }
+                                wavery_core::traits::MprisCommand::Previous => {
+                                    let cur_pos = {
+                                        let p = state_mpris.player.lock().await;
+                                        p.as_ref().map(|x| x.position()).unwrap_or(Duration::ZERO)
+                                    };
+                                    let _ = advance_queue_previous(
+                                        cur_pos.as_secs_f64(),
+                                        &app_handle_mpris,
+                                        &state_mpris,
+                                    )
+                                    .await;
+                                }
+                                wavery_core::traits::MprisCommand::Seek(offset) => {
+                                    let mut p = state_mpris.player.lock().await;
+                                    if let Some(player) = p.as_mut() {
+                                        let target = player.position().saturating_add(offset);
+                                        let _ = player.seek(target);
+                                    }
+                                }
+                                wavery_core::traits::MprisCommand::SetPosition(pos) => {
+                                    let mut p = state_mpris.player.lock().await;
+                                    if let Some(player) = p.as_mut() {
+                                        let _ = player.seek(pos);
+                                    }
+                                }
+                                wavery_core::traits::MprisCommand::SetVolume(vol) => {
+                                    let mut p = state_mpris.player.lock().await;
+                                    if let Some(player) = p.as_mut() {
+                                        player.set_volume(vol.clamp(0.0, 1.0));
+                                    }
+                                }
+                            }
+                            sync_mpris_state(&state_mpris).await;
+                        }
+                    }
+                });
             }
 
             // Ensure main window has proper taskbar restore style flags and is shown on startup
@@ -3901,6 +4031,7 @@ mod tests {
             server_abort_handle: SyncMutex::new(None),
             discord_handle: wavery_server::discord::new_discord_handle(None),
             last_normal_size: SyncMutex::new((1100, 720)),
+            mpris_bridge: Arc::new(AsyncMutex::new(wavery_mpris::ZbusMprisBridge::new())),
         };
 
         let minimize = state.config.lock().general.minimize_to_tray;
@@ -4625,6 +4756,7 @@ mod tests {
             server_abort_handle: SyncMutex::new(None),
             discord_handle: wavery_server::discord::new_discord_handle(None),
             last_normal_size: SyncMutex::new((1100, 720)),
+            mpris_bridge: Arc::new(AsyncMutex::new(wavery_mpris::ZbusMprisBridge::new())),
         });
 
         // 1. Enable LAN mode on free port -> succeeds and persists 0.0.0.0
@@ -4691,6 +4823,7 @@ mod tests {
             server_abort_handle: SyncMutex::new(None),
             discord_handle: wavery_server::discord::new_discord_handle(None),
             last_normal_size: SyncMutex::new((1100, 720)),
+            mpris_bridge: Arc::new(AsyncMutex::new(wavery_mpris::ZbusMprisBridge::new())),
         };
 
         // Empty track_id returns Ok(None) even before library check
@@ -4714,6 +4847,7 @@ mod tests {
             server_abort_handle: SyncMutex::new(None),
             discord_handle: wavery_server::discord::new_discord_handle(None),
             last_normal_size: SyncMutex::new((1100, 720)),
+            mpris_bridge: Arc::new(AsyncMutex::new(wavery_mpris::ZbusMprisBridge::new())),
         };
 
         // Missing track waveform returns Ok(None)

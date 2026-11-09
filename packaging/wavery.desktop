@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Wavery
+Comment=Modular, high-performance desktop music player
+Exec=wavery-tauri %U
+Icon=wavery
+Terminal=false
+Type=Application
+Categories=AudioVideo;Audio;Player;Music;
+MimeType=audio/mpeg;audio/flac;audio/ogg;audio/wav;audio/mp4;audio/aac;audio/opus;
+StartupWMClass=Wavery
+Keywords=audio;music;player;flac;mp3;lyrics;

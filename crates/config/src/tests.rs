@@ -112,6 +112,8 @@ fn test_config_save_and_load_roundtrip() {
     let _ = fs::remove_dir_all(&temp_dir);
 }
 
+
+
 #[test]
 fn test_config_theme_modes_all_variants() {
     let cases = [
@@ -162,6 +164,8 @@ fn test_config_invalid_toml_error() {
     let _ = fs::remove_dir_all(&temp_dir);
 }
 
+
+
 #[test]
 fn test_config_partial_toml_fallback_and_defaults() {
     let temp_dir = std::env::temp_dir().join(format!("wavery_cfg_partial_{}", uuid::Uuid::new_v4()));
@@ -209,6 +213,8 @@ toggle_play = "KeyP"
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
+
+
 
 #[test]
 fn test_config_legacy_v1_backward_compatibility() {
@@ -286,6 +292,8 @@ unknown_number = 42
     let _ = fs::remove_dir_all(&temp_dir);
 }
 
+
+
 #[test]
 fn test_config_atomic_save_and_concurrency() {
     let temp_dir = std::env::temp_dir().join(format!("wavery_cfg_atomic_{}", uuid::Uuid::new_v4()));
@@ -327,6 +335,8 @@ fn test_config_atomic_save_and_concurrency() {
     let _ = fs::remove_dir_all(&temp_dir);
 }
 
+
+
 #[test]
 fn test_session_atomic_save_and_load() {
     let temp_dir = std::env::temp_dir().join(format!("wavery_sess_test_{}", uuid::Uuid::new_v4()));
@@ -358,6 +368,8 @@ fn test_session_atomic_save_and_load() {
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
+
+
 
 #[test]
 fn test_server_config_lan_toggle_and_helpers() {
@@ -503,4 +515,15 @@ fn test_config_atomic_save_sanitization_and_lan_roundtrip() {
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
+
+#[test]
+fn test_crash_log_path_resolution() {
+    let crash_path = crate::default_crash_log_path();
+    assert!(crash_path.is_ok());
+    let path = crash_path.unwrap();
+    assert!(path.ends_with("crash.log"));
+}
+
+
+
 

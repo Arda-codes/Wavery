@@ -528,6 +528,69 @@ pub fn default_config_path() -> Result<PathBuf, ConfigError> {
     }
 }
 
+/// Resolves standard XDG crash log path `~/.local/share/wavery/crash.log` (or `%APPDATA%\wavery\crash.log`).
+pub fn default_crash_log_path() -> Result<PathBuf, ConfigError> {
+    if let Some(proj_dirs) = ProjectDirs::from("org", "wavery", "wavery") {
+        let data_dir = proj_dirs.data_dir();
+        fs::create_dir_all(data_dir)?;
+        Ok(data_dir.join("crash.log"))
+    } else {
+        Err(ConfigError::DirectoryResolutionFailed)
+    }
+}
+
+/// Installs a local panic hook that writes panic diagnostics and stack traces
+/// to the XDG data directory (`crash.log`). Contains zero network calls or remote telemetry.
+pub fn install_panic_hook(app_name: &'static str) {
+    let prev_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |panic_info| {
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+
+        let location = panic_info
+            .location()
+            .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
+            .unwrap_or_else(|| "unknown location".to_string());
+
+        let payload = if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
+            (*s).to_string()
+        } else if let Some(s) = panic_info.payload().downcast_ref::<String>() {
+            s.clone()
+        } else {
+            "Box<dyn Any> payload (unknown type)".to_string()
+        };
+
+        let backtrace = std::backtrace::Backtrace::capture();
+
+        let report = format!(
+            "\n================================================================================\n\
+             [WAVERY CRASH REPORT]\n\
+             Timestamp: {timestamp} (Unix Epoch Seconds)\n\
+             Application: {app_name} v{version}\n\
+             Location: {location}\n\
+             Message: {payload}\n\
+             Backtrace:\n\
+             {backtrace}\n\
+             ================================================================================\n",
+            version = env!("CARGO_PKG_VERSION")
+        );
+
+        if let Ok(crash_path) = default_crash_log_path() {
+            if let Ok(mut file) = fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&crash_path)
+            {
+                let _ = file.write_all(report.as_bytes());
+            }
+        }
+
+        prev_hook(panic_info);
+    }));
+}
+
 /// Loads configuration from the specified path or creates standard defaults.
 pub fn load_or_create(path: &Path) -> Result<Config, ConfigError> {
     let mut last_err = None;

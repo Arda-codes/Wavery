@@ -16,6 +16,7 @@ use wavery_server::{build_router, AppState, ServerTrayManager};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    wavery_config::install_panic_hook("wavery-server");
     let _ = tracing_subscriber::fmt::try_init();
 
     let cfg_path = default_config_path().unwrap_or_else(|_| PathBuf::from("config.toml"));

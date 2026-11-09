@@ -2853,6 +2853,7 @@ fn start_header_drag(
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    wavery_config::install_panic_hook("wavery-tauri");
     #[cfg(target_os = "linux")]
     {
         // 1. Window backend: on native Wayland sessions (WAYLAND_DISPLAY set), prioritize native

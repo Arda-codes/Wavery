@@ -28,7 +28,7 @@
       }
     ],
     "security": {
-      "csp": null,
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' asset: https: data: blob:; media-src 'self' asset: http: https: blob:; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:* https://itunes.apple.com https://lrclib.net https://api.lyrics.ovh;",
       "capabilities": [
         {
           "identifier": "window-dragging-capability",

@@ -7,6 +7,16 @@ A fast, local-first music player that runs on your desktop or streams your audio
 
 ---
 
+<!-- Screenshot / UI Demo Placeholder -->
+<p align="center">
+  <img src="ui/src-tauri/icons/128x128@2x.png" width="128" alt="Wavery Icon" />
+  <br />
+  <strong>Wavery Desktop & Web Audio Player</strong><br />
+  <em>Local-first, gapless playback, SQLite FTS5 search, and Apple HIG aesthetic.</em>
+</p>
+
+---
+
 ## Why Wavery?
 
 Most modern desktop music players are bloated Electron wrappers that eat 800MB of RAM just to idle in the background. Others force you into cloud accounts, subscriptions, and telemetry.
@@ -20,7 +30,12 @@ Wavery is built for people who own their music files and want a snappy, reliable
 - **Synchronized live lyrics**: Automatically reads embedded LRC lyrics or ID3/Vorbis lyric tags and scrolls through them line by line in fullscreen mode. Click any lyric line to jump directly to that point in the song.
 - **Local-first and private**: No tracking, no user accounts, and no telemetry. Everything stays stored on your local disk.
 
-Pre-built binaries for Linux and Windows are available directly on the [Releases](https://github.com/Arda-codes/Wavery/releases) page.
+Pre-built native packages are available on the [Releases](https://github.com/Arda-codes/Wavery/releases) page:
+- **Debian / Ubuntu / Pop!_OS / Linux Mint**: `.deb`
+- **Arch Linux / Manjaro / EndeavourOS**: `.pkg.tar.zst`
+- **Fedora / RHEL**: `.rpm`
+- **Windows**: `.msi` / `.exe`
+- **Cross-Platform Web Player**: Standalone server binary streaming to any modern web browser.
 
 ---
 
@@ -69,17 +84,17 @@ If you want to build Wavery yourself or contribute to development, follow the st
 - **Rust**: 1.80 or newer (`rustup default stable`)
 - **Node.js**: 18 or newer (`npm` or `pnpm`)
 
-On Linux, install development headers for audio and D-Bus:
+On Linux, install development headers for WebKitGTK, audio, and tray support:
 
 ```bash
 # Debian / Ubuntu / Pop!_OS
-sudo apt-get install -y libasound2-dev libdbus-1-dev libssl-dev pkg-config
+sudo apt-get install -y libwebkit2gtk-4.1-dev libasound2-dev libssl-dev libayatana-appindicator3-dev pkg-config
 
 # Fedora / RHEL
-sudo dnf install -y alsa-lib-devel dbus-devel openssl-devel pkgconf-pkg-config
+sudo dnf install -y webkit2gtk4.1-devel alsa-lib-devel openssl-devel libayatana-appindicator-devel pkgconf-pkg-config
 
 # Arch Linux
-sudo pacman -S --needed alsa-lib dbus openssl pkgconf
+sudo pacman -S --needed webkit2gtk-4.1 alsa-lib openssl libayatana-appindicator pkgconf
 ```
 
 ### 1. Building the Desktop App (Tauri)
@@ -91,15 +106,15 @@ cd ui && npm install
 # Run desktop app in development mode
 npm run tauri dev
 
-# Build an optimized production desktop release
-npm run tauri build
+# Build an optimized production desktop release (.deb / .rpm)
+npm run tauri:build
 ```
 
-Compiled desktop binaries will be placed in `ui/src-tauri/target/release/`.
+Compiled desktop binaries will be placed in `ui/src-tauri/target/release/` and bundle packages in `target/release/bundle/`.
 
 ### 2. Building the Headless Server
 
-To run Wavery as a standalone server on a home server or Raspberry Pi:
+To run Wavery as a standalone streaming server on a desktop, home server, or Raspberry Pi:
 
 ```bash
 # 1. Build the web UI bundle
@@ -109,7 +124,7 @@ cd ..
 # 2. Build the server binary
 cargo build --release -p wavery-server
 
-# 3. Run the server (defaults to port 4040)
+# 3. Run the server (defaults to port 4242)
 ./target/release/wavery-server
 ```
 

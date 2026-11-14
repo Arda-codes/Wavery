@@ -2012,6 +2012,13 @@ fn test_heuristics_extract_artist_from_path() {
         extract_artist_from_path(p_caps, None),
         Some("Some Artist".to_string())
     );
+
+    // System temp & OS boundary folders must never be treated as artist names
+    let p_macos_tmp = Path::new("/var/folders/12/abcdef123456/T/wavery_corrupt_123/01_empty_song.mp3");
+    assert_eq!(extract_artist_from_path(p_macos_tmp, None), None);
+
+    let p_win_tmp = Path::new("/Users/runneradmin/AppData/Local/Temp/wavery_corrupt_123/01_empty_song.mp3");
+    assert_eq!(extract_artist_from_path(p_win_tmp, None), None);
 }
 
 

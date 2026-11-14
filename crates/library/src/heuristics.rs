@@ -10,6 +10,51 @@ pub static GENERIC_FOLDERS: &[&str] = &[
     "wavery", "tmp", "temp", "var", "opt", "usr", "private",
 ];
 
+/// Checks if a folder is a system, OS temp, or library root boundary that an artist folder
+/// cannot legitimately sit above (e.g. `Users`, `AppData`, `Local`, `Temp`, `Music`, `Downloads`).
+fn is_root_boundary_folder(segments: &[&str], index: usize) -> bool {
+    let lower = segments[index].trim().to_lowercase();
+    if matches!(
+        lower.as_str(),
+        "music"
+            | "downloads"
+            | "desktop"
+            | "documents"
+            | "home"
+            | "users"
+            | "user"
+            | "root"
+            | "library"
+            | "tmp"
+            | "temp"
+            | "var"
+            | "opt"
+            | "usr"
+            | "private"
+            | "appdata"
+            | "local"
+            | "roaming"
+            | "folders"
+    ) {
+        return true;
+    }
+
+    // macOS per-user temporary directories live under `/var/folders/<2>/<hash>/T`
+    if lower == "t"
+        && index >= 2
+        && segments[..index]
+            .iter()
+            .any(|s| s.eq_ignore_ascii_case("folders"))
+        && segments[..index]
+            .iter()
+            .any(|s| s.eq_ignore_ascii_case("var"))
+    {
+        return true;
+    }
+
+    false
+}
+
 /// Checks if a folder name is in the generic folder blacklist or is a system temp folder.
 fn is_generic_folder(name: &str) -> bool {
     let lower = name.trim().to_lowercase();
@@ -107,6 +152,9 @@ pub fn extract_artist_from_path(file_path: &Path, album_title: Option<&str>) -> 
 
     // 1. Check parent folders from deepest to highest
     for i in (0..segments.len() - 1).rev() {
+        if is_root_boundary_folder(&segments, i) {
+            break;
+        }
         let folder = segments[i];
         if is_generic_folder(folder) {
             continue;

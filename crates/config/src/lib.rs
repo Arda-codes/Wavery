@@ -639,27 +639,26 @@ pub fn load_or_create(path: &Path) -> Result<Config, ConfigError> {
 
 static TMP_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-/// Persists configuration to file atomically.
-pub fn save(path: &Path, config: &Config) -> Result<(), ConfigError> {
-    let mut config_clone = config.clone();
-    config_clone.sanitize();
-
+/// Atomically writes `contents` to `path` via a unique sibling temporary file and rename.
+fn atomic_write_str(path: &Path, contents: &str) -> Result<(), ConfigError> {
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
     fs::create_dir_all(parent)?;
 
-    let toml_str = toml::to_string_pretty(&config_clone)?;
     let count = TMP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos();
     let pid = std::process::id();
-    let file_stem = path.file_name().and_then(|n| n.to_str()).unwrap_or("config.toml");
+    let file_stem = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("wavery.tmp");
     let tmp_path = parent.join(format!(".{file_stem}.tmp.{pid}_{count}_{nanos}"));
 
     {
         let mut file = File::create(&tmp_path)?;
-        file.write_all(toml_str.as_bytes())?;
+        file.write_all(contents.as_bytes())?;
         file.sync_all()?;
     }
 
@@ -667,7 +666,7 @@ pub fn save(path: &Path, config: &Config) -> Result<(), ConfigError> {
     {
         let mut replaced = false;
         let mut last_err = None;
-        for _ in 0..25 {
+        for _ in 0..50 {
             match fs::rename(&tmp_path, path) {
                 Ok(_) => {
                     replaced = true;
@@ -676,11 +675,6 @@ pub fn save(path: &Path, config: &Config) -> Result<(), ConfigError> {
                 Err(e) => {
                     last_err = Some(e);
                 }
-            }
-            if fs::copy(&tmp_path, path).is_ok() {
-                let _ = fs::remove_file(&tmp_path);
-                replaced = true;
-                break;
             }
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
@@ -699,6 +693,15 @@ pub fn save(path: &Path, config: &Config) -> Result<(), ConfigError> {
         }
     }
     Ok(())
+}
+
+/// Persists configuration to file atomically.
+pub fn save(path: &Path, config: &Config) -> Result<(), ConfigError> {
+    let mut config_clone = config.clone();
+    config_clone.sanitize();
+
+    let toml_str = toml::to_string_pretty(&config_clone)?;
+    atomic_write_str(path, &toml_str)
 }
 
 /// Resolves standard XDG session file path `~/.config/wavery/session.json`.
@@ -714,16 +717,34 @@ pub fn default_session_path() -> Result<PathBuf, ConfigError> {
 
 /// Loads playback session from the specified path. Returns None if file does not exist.
 pub fn load_session(path: &Path) -> Result<Option<wavery_core::models::PlaybackSession>, ConfigError> {
-    if path.exists() {
-        let contents = fs::read_to_string(path)?;
-        if contents.trim().is_empty() {
+    let mut last_err = None;
+    for _ in 0..30 {
+        if !path.exists() {
             return Ok(None);
         }
-        let session: wavery_core::models::PlaybackSession = serde_json::from_str(&contents)?;
-        Ok(Some(session))
-    } else {
-        Ok(None)
+        match fs::read_to_string(path) {
+            Ok(contents) => {
+                if contents.trim().is_empty() {
+                    return Ok(None);
+                }
+                let session: wavery_core::models::PlaybackSession = serde_json::from_str(&contents)?;
+                return Ok(Some(session));
+            }
+            Err(e)
+                if e.kind() == std::io::ErrorKind::PermissionDenied
+                    || e.raw_os_error() == Some(5)
+                    || e.raw_os_error() == Some(32) =>
+            {
+                last_err = Some(ConfigError::Io(e));
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            Err(e) => return Err(ConfigError::Io(e)),
+        }
     }
+    if let Some(err) = last_err {
+        return Err(err);
+    }
+    Ok(None)
 }
 
 /// Persists playback session to file atomically.
@@ -731,61 +752,8 @@ pub fn save_session_atomic(
     path: &Path,
     session: &wavery_core::models::PlaybackSession,
 ) -> Result<(), ConfigError> {
-    let parent = path.parent().unwrap_or_else(|| Path::new("."));
-    fs::create_dir_all(parent)?;
-
     let json_str = serde_json::to_string_pretty(session)?;
-    let count = TMP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    let pid = std::process::id();
-    let file_stem = path.file_name().and_then(|n| n.to_str()).unwrap_or("session.json");
-    let tmp_path = parent.join(format!(".{file_stem}.tmp.{pid}_{count}_{nanos}"));
-
-    {
-        let mut file = File::create(&tmp_path)?;
-        file.write_all(json_str.as_bytes())?;
-        file.sync_all()?;
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        let mut replaced = false;
-        let mut last_err = None;
-        for _ in 0..25 {
-            match fs::rename(&tmp_path, path) {
-                Ok(_) => {
-                    replaced = true;
-                    break;
-                }
-                Err(e) => {
-                    last_err = Some(e);
-                }
-            }
-            if fs::copy(&tmp_path, path).is_ok() {
-                let _ = fs::remove_file(&tmp_path);
-                replaced = true;
-                break;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(10));
-        }
-        if !replaced {
-            let _ = fs::remove_file(&tmp_path);
-            if let Some(err) = last_err {
-                return Err(ConfigError::Io(err));
-            }
-        }
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        if let Err(e) = fs::rename(&tmp_path, path) {
-            let _ = fs::remove_file(&tmp_path);
-            return Err(ConfigError::Io(e));
-        }
-    }
-    Ok(())
+    atomic_write_str(path, &json_str)
 }
 
 #[cfg(test)]

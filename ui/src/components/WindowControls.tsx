@@ -54,7 +54,7 @@ export const WindowControls: React.FC<WindowControlsProps> = ({
   if (isMac) {
     return (
       <div
-        data-tauri-drag-region="none"
+        data-tauri-drag-region="false"
         className={`flex items-center space-x-2 select-none z-40 pointer-events-auto ${className}`}
         onMouseEnter={() => setIsMacHovered(true)}
         onMouseLeave={() => setIsMacHovered(false)}
@@ -64,7 +64,7 @@ export const WindowControls: React.FC<WindowControlsProps> = ({
         {/* Close Button (Red) */}
         <button
           type="button"
-          data-tauri-drag-region="none"
+          data-tauri-drag-region="false"
           onClick={handleClose}
           className="w-3 h-3 rounded-full bg-[#FF5F56] border border-[#E0443E]/50 flex items-center justify-center transition-transform duration-100 hover:scale-105 active:brightness-90 focus:outline-none focus:ring-1 focus:ring-danger"
           title="Close (⌘W)"
@@ -84,7 +84,7 @@ export const WindowControls: React.FC<WindowControlsProps> = ({
         {/* Minimize Button (Yellow) */}
         <button
           type="button"
-          data-tauri-drag-region="none"
+          data-tauri-drag-region="false"
           onClick={handleMinimize}
           className="w-3 h-3 rounded-full bg-[#FFBD2E] border border-[#DEA123]/50 flex items-center justify-center transition-transform duration-100 hover:scale-105 active:brightness-90 focus:outline-none focus:ring-1 focus:ring-warning"
           title="Minimize (⌘M)"
@@ -104,7 +104,7 @@ export const WindowControls: React.FC<WindowControlsProps> = ({
         {/* Fullscreen Button (Green) */}
         <button
           type="button"
-          data-tauri-drag-region="none"
+          data-tauri-drag-region="false"
           onClick={handleToggleFullscreen}
           className="w-3 h-3 rounded-full bg-[#27C93F] border border-[#1AAB29]/50 flex items-center justify-center transition-transform duration-100 hover:scale-105 active:brightness-90 focus:outline-none focus:ring-1 focus:ring-success"
           title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen (⌃⌘F)"}
@@ -129,7 +129,7 @@ export const WindowControls: React.FC<WindowControlsProps> = ({
   // ---------------------------------------------------------------------------
   return (
     <div
-      data-tauri-drag-region="none"
+      data-tauri-drag-region="false"
       className={`flex items-center space-x-1 select-none z-40 pointer-events-auto ${className}`}
       role="group"
       aria-label="Window Controls"
@@ -137,7 +137,7 @@ export const WindowControls: React.FC<WindowControlsProps> = ({
       {/* Minimize Button */}
       <button
         type="button"
-        data-tauri-drag-region="none"
+        data-tauri-drag-region="false"
         onClick={handleMinimize}
         className="w-8 h-8 rounded-md bg-transparent hover:bg-white/[0.08] active:bg-white/[0.14] text-textMuted hover:text-white flex items-center justify-center transition-colors duration-150 focus:outline-none focus:ring-1 focus:ring-accent/40"
         title="Minimize"
@@ -149,7 +149,7 @@ export const WindowControls: React.FC<WindowControlsProps> = ({
       {/* Maximize / Restore Button */}
       <button
         type="button"
-        data-tauri-drag-region="none"
+        data-tauri-drag-region="false"
         onClick={handleToggleMaximize}
         className="w-8 h-8 rounded-md bg-transparent hover:bg-white/[0.08] active:bg-white/[0.14] text-textMuted hover:text-white flex items-center justify-center transition-colors duration-150 focus:outline-none focus:ring-1 focus:ring-accent/40"
         title={isMaximized ? "Restore Down" : "Maximize"}
@@ -168,7 +168,7 @@ export const WindowControls: React.FC<WindowControlsProps> = ({
       {/* Close Button */}
       <button
         type="button"
-        data-tauri-drag-region="none"
+        data-tauri-drag-region="false"
         onClick={handleClose}
         className="w-8 h-8 rounded-md bg-transparent hover:bg-[#E81123] active:bg-[#C4101F] text-textMuted hover:text-white flex items-center justify-center transition-colors duration-150 focus:outline-none focus:ring-1 focus:ring-danger"
         title="Close"

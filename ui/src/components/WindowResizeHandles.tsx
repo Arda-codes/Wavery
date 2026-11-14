@@ -17,7 +17,7 @@ const ResizeEdge: React.FC<ResizeEdgeProps> = ({ direction, className }) => {
 
   return (
     <div
-      data-tauri-drag-region="none"
+      data-tauri-drag-region="false"
       onMouseDown={handleMouseDown}
       className={`fixed z-50 select-none ${className}`}
       aria-hidden="true"

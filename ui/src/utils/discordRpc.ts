@@ -51,17 +51,23 @@ const _pendingLookups = new Map<string, Promise<string | null>>();
  * different releases look distinct.
  */
 export function normalizeForMatch(value: string): string {
-  return value
+  const base = value
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/\([^)]*\)/g, " ")
     .replace(/\[[^\]]*\]/g, " ")
     .replace(/[^\p{L}\p{N}]+/gu, " ")
-    .replace(/\b(feat|ft|featuring|with|remaster|remastered|deluxe|edition|version|ep)\b/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const stripped = base
+    .replace(/\b(feat|ft|featuring|with|remaster|remastered|deluxe|edition|version|ep|single)\b/gu, " ")
     .replace(/\bthe\b/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
+
+  return stripped || base;
 }
 
 /** Token overlap in [0, 1]; 1 means the two normalized strings match exactly. */

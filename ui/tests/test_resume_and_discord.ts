@@ -177,6 +177,36 @@ export async function runPlaybackResumeAndDiscordTests(): Promise<void> {
     "Non-Latin album titles are preserved and match with high confidence"
   );
 
+  // Stop-word-only artists & titles: "The The" or "EP" must not collapse to empty string
+  ok(
+    normalizeForMatch("The The") === "the the",
+    "An artist composed solely of stop words retains base tokens"
+  );
+  ok(
+    normalizeForMatch("EP") === "ep",
+    "A title or album composed solely of stop words retains base tokens"
+  );
+  ok(
+    normalizeForMatch("Track - Single") === "track",
+    "Single release suffix is normalized away when other tokens exist"
+  );
+  const theTheResult: FakeResult = {
+    artistName: "The The",
+    collectionName: "Soul Mining",
+    trackName: "This Is the Day",
+    artworkUrl100: "https://is1.mzstatic.com/image/thumb/us/100x100bb.jpg",
+  };
+  const theTheBest = bestArtworkScore(
+    [theTheResult],
+    normalizeForMatch("The The"),
+    normalizeForMatch("Soul Mining"),
+    normalizeForMatch("This Is the Day")
+  );
+  ok(
+    theTheBest !== null && theTheBest.score >= 0.55,
+    "An artist composed of stop words matches with full confidence"
+  );
+
   // ---------------------------------------------------------------
   // 2. Resume after restart
   // ---------------------------------------------------------------

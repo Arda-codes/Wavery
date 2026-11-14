@@ -170,10 +170,12 @@ struct AppState {
     server_abort_handle: SyncMutex<Option<tauri::async_runtime::JoinHandle<()>>>,
     discord_handle: wavery_server::discord::DiscordHandle,
     last_normal_size: SyncMutex<(u32, u32)>,
+    #[cfg(target_os = "linux")]
     mpris_bridge: Arc<AsyncMutex<wavery_mpris::ZbusMprisBridge>>,
 }
 
 /// Synchronizes current playback state, track metadata, and position with the MPRIS D-Bus bridge.
+#[cfg(target_os = "linux")]
 async fn sync_mpris_state(state: &Arc<AppState>) {
     use wavery_core::traits::MprisBridge;
     let (status, current_track, position) = {
@@ -197,6 +199,10 @@ async fn sync_mpris_state(state: &Arc<AppState>) {
         let _ = bridge.update_metadata(track, None).await;
     }
 }
+
+/// No-op MPRIS sync stub for non-Linux targets.
+#[cfg(not(target_os = "linux"))]
+async fn sync_mpris_state(_state: &Arc<AppState>) {}
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PlayerStatus {
@@ -3020,6 +3026,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         server_abort_handle: SyncMutex::new(None),
         discord_handle: wavery_server::discord::new_discord_handle(None),
         last_normal_size: SyncMutex::new((1100, 720)),
+        #[cfg(target_os = "linux")]
         mpris_bridge: Arc::new(AsyncMutex::new(wavery_mpris::ZbusMprisBridge::new())),
     });
 
@@ -4074,6 +4081,7 @@ mod tests {
             server_abort_handle: SyncMutex::new(None),
             discord_handle: wavery_server::discord::new_discord_handle(None),
             last_normal_size: SyncMutex::new((1100, 720)),
+            #[cfg(target_os = "linux")]
             mpris_bridge: Arc::new(AsyncMutex::new(wavery_mpris::ZbusMprisBridge::new())),
         };
 
@@ -4799,6 +4807,7 @@ mod tests {
             server_abort_handle: SyncMutex::new(None),
             discord_handle: wavery_server::discord::new_discord_handle(None),
             last_normal_size: SyncMutex::new((1100, 720)),
+            #[cfg(target_os = "linux")]
             mpris_bridge: Arc::new(AsyncMutex::new(wavery_mpris::ZbusMprisBridge::new())),
         });
 
@@ -4866,6 +4875,7 @@ mod tests {
             server_abort_handle: SyncMutex::new(None),
             discord_handle: wavery_server::discord::new_discord_handle(None),
             last_normal_size: SyncMutex::new((1100, 720)),
+            #[cfg(target_os = "linux")]
             mpris_bridge: Arc::new(AsyncMutex::new(wavery_mpris::ZbusMprisBridge::new())),
         };
 
@@ -4890,6 +4900,7 @@ mod tests {
             server_abort_handle: SyncMutex::new(None),
             discord_handle: wavery_server::discord::new_discord_handle(None),
             last_normal_size: SyncMutex::new((1100, 720)),
+            #[cfg(target_os = "linux")]
             mpris_bridge: Arc::new(AsyncMutex::new(wavery_mpris::ZbusMprisBridge::new())),
         };
 

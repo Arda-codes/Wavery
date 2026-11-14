@@ -40,7 +40,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "[Wavery-Server] Quarantining corrupted database to {}",
                     quarantine.display()
                 );
-                let _ = std::fs::rename(db_path, quarantine);
+                let _ = std::fs::rename(db_path, &quarantine);
+                let mut wal = db_path.as_os_str().to_os_string();
+                wal.push("-wal");
+                let wal_path = PathBuf::from(wal);
+                if wal_path.exists() {
+                    let mut q_wal = quarantine.as_os_str().to_os_string();
+                    q_wal.push("-wal");
+                    let _ = std::fs::rename(&wal_path, PathBuf::from(q_wal));
+                }
+                let mut shm = db_path.as_os_str().to_os_string();
+                shm.push("-shm");
+                let shm_path = PathBuf::from(shm);
+                if shm_path.exists() {
+                    let mut q_shm = quarantine.as_os_str().to_os_string();
+                    q_shm.push("-shm");
+                    let _ = std::fs::rename(&shm_path, PathBuf::from(q_shm));
+                }
                 SqliteLibraryManager::new(
                     config.library.managed_directory.clone(),
                     config.library.database_path.clone(),

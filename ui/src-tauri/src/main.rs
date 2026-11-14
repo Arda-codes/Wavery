@@ -27,7 +27,9 @@ use wavery_core::models::{
     Album, Artist, GenreInfo, ImportStrategy, LoopMode, PlaybackState, Playlist, QueueStateSnapshot,
     Track, WaveformData,
 };
-use wavery_core::traits::{LibraryManager, MprisBridge, PlayerEngine, QueueManager};
+#[cfg(target_os = "linux")]
+use wavery_core::traits::MprisBridge;
+use wavery_core::traits::{LibraryManager, PlayerEngine, QueueManager};
 use wavery_library::{DatabaseBackup, DatabaseHealth, DatabaseStats, SqliteLibraryManager};
 
 const MAX_ARTWORK_CACHE_ENTRIES: usize = 64;

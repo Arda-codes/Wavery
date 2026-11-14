@@ -312,7 +312,11 @@ const TrackTableInner: React.FC<TrackTableProps> = ({
             name: "All Tracks",
           };
 
-        setQueue(filteredAndSortedTracks, index, effectiveContext);
+        if (effectiveContext.type === "tracks") {
+          setQueue([track], 0, effectiveContext);
+        } else {
+          setQueue(filteredAndSortedTracks, index, effectiveContext);
+        }
       }
     },
     [currentTrackId, isPlaying, pause, resume, setQueue, filteredAndSortedTracks, playbackContext]

@@ -340,7 +340,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
     if (!topResult) return;
     if (topResult.type === "song") {
       const track = topResult.item as Track;
-      await setQueue([track, ...matchingTracks.filter((t) => t.id !== track.id)], 0, {
+      await setQueue([track], 0, {
         type: "tracks",
         name: `Search: ${globalSearch}`,
       });
@@ -362,18 +362,18 @@ export const SearchView: React.FC<SearchViewProps> = ({
         });
       }
     }
-  }, [topResult, matchingTracks, globalSearch, setQueue]);
+  }, [topResult, globalSearch, setQueue]);
 
   // Play a single track from songs list
   const handlePlayTrack = useCallback(
-    async (track: Track, index: number) => {
+    async (track: Track, _index?: number) => {
       addRecentSearch(track.metadata.title || globalSearch);
-      await setQueue(matchingTracks, index, {
+      await setQueue([track], 0, {
         type: "tracks",
         name: `Search: ${globalSearch}`,
       });
     },
-    [matchingTracks, globalSearch, addRecentSearch, setQueue]
+    [globalSearch, addRecentSearch, setQueue]
   );
 
   // Play an album

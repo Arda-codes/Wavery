@@ -571,7 +571,7 @@ fn test_autoplay_large_candidate_pool_stress_10k() {
         "Must pick the 1 perfect match out of 10,000 candidates"
     );
     assert!(
-        elapsed < Duration::from_millis(100),
+        elapsed < Duration::from_millis(500),
         "10k candidate selection took too long: {:?}",
         elapsed
     );

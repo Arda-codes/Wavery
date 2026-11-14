@@ -125,13 +125,15 @@ a {
 }
 
 /* Tauri & WebKit custom titlebar drag region boundaries */
-[data-tauri-drag-region] {
+[data-tauri-drag-region]:not([data-tauri-drag-region="false"]):not([data-tauri-drag-region="none"]) {
   -webkit-app-region: drag;
   app-region: drag;
 }
 
 [data-tauri-drag-region="none"],
 [data-tauri-drag-region="none"] *,
+[data-tauri-drag-region="false"],
+[data-tauri-drag-region="false"] *,
 button,
 input,
 a,

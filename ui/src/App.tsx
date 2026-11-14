@@ -668,7 +668,7 @@ export const App: React.FC = () => {
       >
         {/* Left: macOS Traffic Lights space (if on Mac) + Hamburger + Brand Text */}
         <div
-          data-tauri-drag-region="none"
+          data-tauri-drag-region="false"
           className={`flex items-center space-x-2 sm:space-x-3 min-w-0 flex-shrink-0 z-20 pointer-events-auto ${
             isMac && isTauri ? "pl-16 sm:pl-20" : ""
           }`}
@@ -695,7 +695,7 @@ export const App: React.FC = () => {
 
         {/* Center: Global Search Bar (Flex child with max-w constraint, perfectly centered, never overlaps) */}
         <div
-          data-tauri-drag-region="none"
+          data-tauri-drag-region="false"
           className="flex-1 flex justify-center items-center min-w-0 pointer-events-auto z-20 px-1 sm:px-2"
         >
           <div className="relative group flex items-center w-full max-w-xs sm:max-w-md lg:max-w-xl xl:max-w-2xl">

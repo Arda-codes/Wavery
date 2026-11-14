@@ -28,26 +28,21 @@ import { SearchView } from "./components/SearchView";
 import { HistoryView } from "./components/HistoryView";
 import { Breadcrumbs, BreadcrumbItem } from "./components/Breadcrumbs";
 import { ImportModal } from "./components/ImportModal";
-import { InstallAppModal } from "./components/InstallAppModal";
 import { OfflineCover } from "./components/OfflineCover";
 import { NowPlayingDrawer } from "./components/NowPlayingDrawer";
 import { FullscreenPlayer } from "./components/FullscreenPlayer";
 import { MobileNowPlayingSheet } from "./components/MobileNowPlayingSheet";
 import { useIsMobile } from "./hooks/useIsMobile";
-import { usePwaInstall } from "./hooks/usePwaInstall";
 import { useServerConnection } from "./hooks/useServerConnection";
 import { BatchEnrichmentModal } from "./components/BatchEnrichmentModal";
 import { ContextMenu } from "./components/ContextMenu";
 import { matchesKeyCombo, isEditableTarget } from "./utils/keybindings";
 import { WindowControls } from "./components/WindowControls";
 import { WindowResizeHandles } from "./components/WindowResizeHandles";
-import { windowService, useWindowState } from "./services/windowService";
-import { Search, X, ExternalLink, Home, Menu, Library, ListMusic, Maximize2, Minimize2, Download } from "lucide-react";
+import { Search, X, ExternalLink, Home, Menu, Library, ListMusic } from "lucide-react";
 
 export const App: React.FC = () => {
   const isMobile = useIsMobile();
-  const { isFullscreen } = useWindowState();
-  const { isInstalledOrStandalone, canPromptNative, promptNativeInstall } = usePwaInstall();
   const {
     isOffline,
     isChecking: isServerChecking,
@@ -58,16 +53,7 @@ export const App: React.FC = () => {
     checkConnection,
   } = useServerConnection();
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
   const [isCreatePlaylistOpen, setIsCreatePlaylistOpen] = useState(false);
-
-  const handleInstallClick = useCallback(async () => {
-    if (canPromptNative) {
-      const accepted = await promptNativeInstall();
-      if (accepted) return;
-    }
-    setIsInstallModalOpen(true);
-  }, [canPromptNative, promptNativeInstall]);
   const [isAppClosed, setIsAppClosed] = useState(() => {
     if (typeof window !== "undefined" && window.location.pathname === "/closed") {
       return true;
@@ -189,9 +175,6 @@ export const App: React.FC = () => {
 
   // Search input ref & platform detection
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const { isMaximized: isWindowMaximized } = useWindowState();
-  const dragStartPosRef = useRef<{ x: number; y: number } | null>(null);
-
   const isMac = useMemo(
     () =>
       typeof navigator !== "undefined" &&
@@ -680,42 +663,7 @@ export const App: React.FC = () => {
 
       {/* Top Desktop Chrome / Merged Title Bar Header */}
       <header
-        data-tauri-drag-region={!isWindowMaximized ? "" : undefined}
-        onPointerDown={(e) => {
-          if (
-            !isTauri ||
-            e.button !== 0 ||
-            (e.target as HTMLElement).closest("button, input, a, [role='group'], [data-tauri-drag-region='none']")
-          ) {
-            return;
-          }
-          if (isWindowMaximized) {
-            dragStartPosRef.current = { x: e.screenX, y: e.screenY };
-          }
-        }}
-        onPointerMove={(e) => {
-          if (!isTauri || !isWindowMaximized || !dragStartPosRef.current) return;
-          const dx = e.screenX - dragStartPosRef.current.x;
-          const dy = e.screenY - dragStartPosRef.current.y;
-          if (Math.hypot(dx, dy) >= 6) {
-            dragStartPosRef.current = null;
-            windowService.startHeaderDrag().catch(() => {});
-          }
-        }}
-        onPointerUp={() => {
-          dragStartPosRef.current = null;
-        }}
-        onPointerCancel={() => {
-          dragStartPosRef.current = null;
-        }}
-        onDoubleClick={(e) => {
-          if (
-            isTauri &&
-            !(e.target as HTMLElement).closest("button, input, a, [role='group'], [data-tauri-drag-region='none']")
-          ) {
-            windowService.toggleMaximize().catch(() => {});
-          }
-        }}
+        data-tauri-drag-region={isTauri ? "deep" : undefined}
         className="relative min-h-[calc(52px+env(safe-area-inset-top))] sm:min-h-[calc(3.5rem+env(safe-area-inset-top))] safe-header-top bg-sidebar/95 backdrop-blur-xl border-b border-white/[0.06] px-3 sm:px-4 flex items-center justify-between flex-shrink-0 z-30 select-none cursor-default"
       >
         {/* Left: macOS Traffic Lights space (if on Mac) + Hamburger + Brand Text */}
@@ -820,42 +768,12 @@ export const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Right: Windows/Linux Window Controls (Desktop) or Fullscreen Toggle (Web / Mobile) */}
+        {/* Right: Windows/Linux Window Controls (Desktop) */}
         <div
-          data-tauri-drag-region="none"
+          data-tauri-drag-region="false"
           className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-shrink-0 z-20 pointer-events-auto"
         >
-          {isTauri ? (
-            !isMac && <WindowControls variant="windows" />
-          ) : (
-            <div className="flex items-center space-x-2">
-              {!isInstalledOrStandalone && (
-                <button
-                  type="button"
-                  onClick={handleInstallClick}
-                  className="p-2 sm:px-3 sm:py-2 rounded-xl bg-accent/15 hover:bg-accent/25 active:scale-95 text-accent hover:text-white transition focus:outline-none flex items-center space-x-2 border border-accent/30 text-xs font-semibold"
-                  title={canPromptNative ? "Install Wavery App (1-Click)" : "Install Wavery App"}
-                  aria-label="Install Wavery App"
-                >
-                  <Download className="w-4 h-4 flex-shrink-0" />
-                  <span className="hidden sm:inline">Install</span>
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => windowService.toggleFullscreen()}
-                className="p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] active:scale-95 text-textSecondary hover:text-white transition focus:outline-none flex items-center justify-center border border-white/[0.08]"
-                title={isFullscreen ? "Exit Fullscreen" : "Fullscreen (Hide Browser Bar)"}
-                aria-label={isFullscreen ? "Exit Fullscreen" : "Fullscreen (Hide Browser Bar)"}
-              >
-                {isFullscreen ? (
-                  <Minimize2 className="w-4 h-4 text-accent" />
-                ) : (
-                  <Maximize2 className="w-4 h-4" />
-                )}
-              </button>
-            </div>
-          )}
+          {isTauri && !isMac && <WindowControls variant="windows" />}
         </div>
       </header>
 
@@ -897,7 +815,6 @@ export const App: React.FC = () => {
           currentView={viewMode}
           onNavigate={navigate}
           onOpenImport={() => setIsImportModalOpen(true)}
-          onOpenInstall={handleInstallClick}
           trackCount={tracks.length}
           artistCount={artists.length}
           albumCount={albums.length}
@@ -1044,9 +961,7 @@ export const App: React.FC = () => {
             />
           )}
 
-            {viewMode === "settings" && (
-              <SettingsView onOpenInstall={handleInstallClick} />
-            )}
+            {viewMode === "settings" && <SettingsView />}
           </div>
         </main>
 
@@ -1138,12 +1053,6 @@ export const App: React.FC = () => {
           const pl = await createPlaylist(name);
           selectPlaylist(pl.id);
         }}
-      />
-
-      {/* PWA / Mobile Install App Modal */}
-      <InstallAppModal
-        isOpen={isInstallModalOpen}
-        onClose={() => setIsInstallModalOpen(false)}
       />
 
       {/* Immersive Fullscreen Now Playing & Live Lyrics (desktop) or the

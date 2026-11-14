@@ -172,11 +172,7 @@ function buildDeterministicQrMatrix(payload: string): boolean[][] {
   return grid;
 }
 
-interface SettingsViewProps {
-  onOpenInstall?: () => void;
-}
-
-export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenInstall }) => {
+export const SettingsView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<SettingsTab>("general");
   const [storageSection, setStorageSection] = useState<"database" | "curation">(
     "database"
@@ -2578,20 +2574,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenInstall }) => 
                           in Safari or Chrome.
                         </div>
                         <div className="text-2xs text-accent/90 font-medium pt-1">
-                          Tip: To hide the browser bar (X, URL, three dots), tap ⋮ (or Safari Share) and select &ldquo;Add to Home Screen&rdquo; to run as a standalone app, or tap the Fullscreen button.
+                          Tip: To hide the browser bar (X, URL, three dots), tap ⋮ (or Safari Share) and select &ldquo;Add to Home Screen&rdquo; to run as a standalone app.
                         </div>
-                        {onOpenInstall && (
-                          <div className="pt-2">
-                            <button
-                              type="button"
-                              onClick={onOpenInstall}
-                              className="px-3 py-2 rounded-xl bg-accent text-white hover:bg-accentHover active:scale-95 text-2xs font-semibold flex items-center space-x-2 transition shadow-sm"
-                            >
-                              <Download className="w-3.5 h-3.5" />
-                              <span>Install App Instructions</span>
-                            </button>
-                          </div>
-                        )}
                       </div>
                     </div>
 

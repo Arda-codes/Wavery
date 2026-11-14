@@ -21,19 +21,13 @@ import {
   Search,
   History,
   X,
-  Maximize2,
-  Minimize2,
-  Download,
 } from "lucide-react";
 import { useNavigationStore } from "../stores/navigationStore";
-import { isTauri } from "../services/adapter";
-import { windowService, useWindowState } from "../services/windowService";
 
 interface SidebarProps {
   currentView: ViewMode;
   onNavigate: (view: ViewMode) => void;
   onOpenImport?: () => void;
-  onOpenInstall?: () => void;
   trackCount: number;
   artistCount: number;
   albumCount: number;
@@ -49,7 +43,6 @@ const SidebarInner: React.FC<SidebarProps> = ({
   currentView,
   onNavigate,
   onOpenImport,
-  onOpenInstall,
   trackCount,
   artistCount,
   albumCount,
@@ -61,7 +54,6 @@ const SidebarInner: React.FC<SidebarProps> = ({
   onDeletePlaylist,
 }) => {
   const [hoveredPlaylistId, setHoveredPlaylistId] = useState<string | null>(null);
-  const { isFullscreen } = useWindowState();
 
   const playbackContext = usePlayerStore((s) => s.playbackContext);
   const isPlaying = usePlayerStore((s) => s.status.state === "Playing");
@@ -628,42 +620,6 @@ const SidebarInner: React.FC<SidebarProps> = ({
               />
               <span>Settings</span>
             </button>
-
-            {/* Fullscreen Toggle (Web / Mobile) */}
-            {!isTauri && (
-              <button
-                type="button"
-                onClick={async () => {
-                  await windowService.toggleFullscreen();
-                  setMobileSidebarOpen(false);
-                }}
-                className="w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-semibold text-textSecondary hover:text-textPrimary hover:bg-surfaceHover transition-colors group"
-                title={isFullscreen ? "Exit Fullscreen" : "Fullscreen (Hide Browser Bar)"}
-              >
-                {isFullscreen ? (
-                  <Minimize2 className="w-4 h-4 text-accent transition-colors" />
-                ) : (
-                  <Maximize2 className="w-4 h-4 text-textMuted group-hover:text-textPrimary transition-colors" />
-                )}
-                <span>{isFullscreen ? "Exit Fullscreen" : "Fullscreen (Hide Browser Bar)"}</span>
-              </button>
-            )}
-
-            {/* Install App (Web / Mobile PWA) */}
-            {!isTauri && onOpenInstall && (
-              <button
-                type="button"
-                onClick={() => {
-                  onOpenInstall();
-                  setMobileSidebarOpen(false);
-                }}
-                className="w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-semibold text-textSecondary hover:text-textPrimary hover:bg-surfaceHover transition-colors group"
-                title="Install Wavery App"
-              >
-                <Download className="w-4 h-4 text-accent transition-colors" />
-                <span>Install App</span>
-              </button>
-            )}
           </nav>
         </div>
       </div>

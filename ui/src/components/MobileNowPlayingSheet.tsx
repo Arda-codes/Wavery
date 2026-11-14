@@ -38,14 +38,11 @@ import {
   ChevronDown,
   ListMusic,
   Mic2,
-  Maximize2,
-  Minimize2,
 } from "lucide-react";
 import { usePlayerStore } from "../stores/playerStore";
 import { useLibraryStore } from "../stores/libraryStore";
 import { useNavigationStore } from "../stores/navigationStore";
 import { useSettingsStore } from "../stores/settingsStore";
-import { windowService, useWindowState } from "../services/windowService";
 import { useArtwork } from "../utils/useArtwork";
 import { getFullTrackArtistString } from "../utils/library";
 import {
@@ -505,7 +502,6 @@ QueueRow.displayName = "QueueRow";
 /* ------------------------------------------------------------------ */
 
 export const MobileNowPlayingSheet: React.FC = () => {
-  const { isFullscreen } = useWindowState();
   const isOpen = useNavigationStore((s) => s.isFullscreenNowPlayingOpen);
   const setOpen = useNavigationStore((s) => s.setFullscreenNowPlayingOpen);
   const toggleDrawer = useNavigationStore((s) => s.toggleNowPlayingDrawer);
@@ -1060,7 +1056,7 @@ export const MobileNowPlayingSheet: React.FC = () => {
             opacity: "clamp(0, calc((var(--p) - 0.25) * 2), 1)",
           }}
         >
-          {/* Top bar with dismiss chevron and fullscreen toggle */}
+          {/* Top bar with dismiss chevron */}
           <div className="min-h-[calc(3.5rem+env(safe-area-inset-top,0px))] flex items-center justify-between px-4">
             <div className="w-10" />
             <button
@@ -1071,19 +1067,7 @@ export const MobileNowPlayingSheet: React.FC = () => {
             >
               <ChevronDown className="w-5 h-5" />
             </button>
-            <button
-              type="button"
-              aria-label={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen (Hide Browser Bar)"}
-              onClick={() => windowService.toggleFullscreen()}
-              className="w-10 h-10 rounded-full flex items-center justify-center text-textSecondary hover:text-textPrimary hover:bg-white/[0.06] active:scale-95 transition-[color,background-color,transform] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] focus:outline-none"
-              title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen (Hide Browser Bar)"}
-            >
-              {isFullscreen ? (
-                <Minimize2 className="w-4 h-4 text-accent" />
-              ) : (
-                <Maximize2 className="w-4 h-4" />
-              )}
-            </button>
+            <div className="w-10" />
           </div>
 
           {/* Hero cover: the shared artwork layer lands on this slot. */}

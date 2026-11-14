@@ -698,51 +698,86 @@ export const MobileNowPlayingSheet: React.FC = () => {
 
   /* --- Open / close lifecycle ------------------------------------- */
 
-  useEffect(() => {
+  const driveExpand = useCallback(() => {
     const expanded = expandedRef.current;
-    const miniRow = miniRowRef.current;
-    // The whole docked card (row + play button) goes inert as one unit.
     const miniLayer = miniLayerRef.current;
+    measureSlots();
+    expanded?.removeAttribute("inert");
+    expanded?.setAttribute("aria-hidden", "false");
+    miniLayer?.setAttribute("inert", "");
+    animateTo(1, EXPAND_MS);
+    expanded?.focus({ preventScroll: true });
+  }, [animateTo, measureSlots]);
 
-    if (isOpen) {
-      measureSlots();
-      expanded?.removeAttribute("inert");
-      expanded?.setAttribute("aria-hidden", "false");
-      miniLayer?.setAttribute("inert", "");
-      animateTo(1, EXPAND_MS);
-      expanded?.focus({ preventScroll: true });
-      return;
-    }
-
-    if (pRef.current > 0.001 || rafRef.current !== null) {
-      animateTo(0, COLLAPSE_MS, () => {
+  const driveCollapse = useCallback(
+    (animate: boolean) => {
+      const expanded = expandedRef.current;
+      const miniLayer = miniLayerRef.current;
+      const miniRow = miniRowRef.current;
+      const finalizeCollapse = () => {
         if (useNavigationStore.getState().isFullscreenNowPlayingOpen) return;
         expanded?.setAttribute("inert", "");
         expanded?.setAttribute("aria-hidden", "true");
         miniLayer?.removeAttribute("inert");
         measureMiniSlot();
         miniRow?.focus({ preventScroll: true });
-      });
-    } else {
-      expanded?.setAttribute("inert", "");
-      expanded?.setAttribute("aria-hidden", "true");
-      miniLayer?.removeAttribute("inert");
+      };
+
+      if (animate) {
+        animateTo(0, COLLAPSE_MS, finalizeCollapse);
+      } else {
+        expanded?.setAttribute("inert", "");
+        expanded?.setAttribute("aria-hidden", "true");
+        miniLayer?.removeAttribute("inert");
+      }
+    },
+    [animateTo, measureMiniSlot]
+  );
+
+  useEffect(() => {
+    if (isOpen) {
+      driveExpand();
+      return;
     }
-  }, [isOpen, animateTo, measureSlots, measureMiniSlot]);
+    driveCollapse(pRef.current > 0.001 || rafRef.current !== null);
+  }, [isOpen, driveExpand, driveCollapse]);
+
+  /**
+   * Commit or snap the sheet cleanly to a terminal state (0 = collapsed, 1 = expanded).
+   * If the store boolean already matches the target (e.g. a sub-threshold drag or
+   * same-direction flick), we bypass the store update and drive the DOM animation
+   * directly so `--p` can never remain stuck mid-transition.
+   */
+  const settleTo = useCallback(
+    (target: 0 | 1) => {
+      const targetOpen = target === 1;
+      const currentStoreOpen =
+        useNavigationStore.getState().isFullscreenNowPlayingOpen;
+
+      if (currentStoreOpen !== targetOpen) {
+        setOpen(targetOpen);
+      } else if (targetOpen) {
+        driveExpand();
+      } else {
+        driveCollapse(true);
+      }
+    },
+    [driveCollapse, driveExpand, setOpen]
+  );
 
   /* --- Keyboard --------------------------------------------------- */
 
   useEffect(() => {
     if (!isOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") settleTo(0);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isOpen, setOpen]);
+  }, [isOpen, settleTo]);
 
-  const openSheet = useCallback(() => setOpen(true), [setOpen]);
-  const closeSheet = useCallback(() => setOpen(false), [setOpen]);
+  const openSheet = useCallback(() => settleTo(1), [settleTo]);
+  const closeSheet = useCallback(() => settleTo(0), [settleTo]);
 
   const handleMiniKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -843,10 +878,6 @@ export const MobileNowPlayingSheet: React.FC = () => {
     [setP, setSwipeX]
   );
 
-  const settleByPosition = useCallback(() => {
-    setOpen(pRef.current >= 0.5);
-  }, [setOpen]);
-
   const handlePointerUp = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
       const drag = dragRef.current;
@@ -868,7 +899,7 @@ export const MobileNowPlayingSheet: React.FC = () => {
         performance.now() - drag.startT < TAP_MS;
 
       if (isTap) {
-        if (pRef.current < 0.5) openSheet();
+        if (pRef.current < 0.999) settleTo(1);
         return;
       }
 
@@ -889,33 +920,37 @@ export const MobileNowPlayingSheet: React.FC = () => {
         return;
       }
 
-      if (drag.axis !== "vertical") return;
-
       if (drag.velY <= -FLICK_VELOCITY) {
-        openSheet();
+        settleTo(1);
         return;
       }
       if (drag.velY >= FLICK_VELOCITY + 100) {
-        closeSheet();
+        settleTo(0);
         return;
       }
-      settleByPosition();
+      settleTo(pRef.current >= 0.5 ? 1 : 0);
     },
-    [closeSheet, openSheet, playNext, playPrevious, releaseSwipe, settleByPosition]
+    [playNext, playPrevious, releaseSwipe, settleTo]
   );
 
   const handlePointerCancel = useCallback(() => {
+    if (!dragRef.current) return;
     dragRef.current = null;
     releaseSwipe();
-    settleByPosition();
-  }, [releaseSwipe, settleByPosition]);
+    settleTo(pRef.current >= 0.5 ? 1 : 0);
+  }, [releaseSwipe, settleTo]);
+
+  useEffect(() => {
+    window.addEventListener("blur", handlePointerCancel);
+    return () => window.removeEventListener("blur", handlePointerCancel);
+  }, [handlePointerCancel]);
 
   const handleOpenDrawer = useCallback(
     (tab: "queue" | "lyrics") => {
-      setOpen(false);
+      settleTo(0);
       toggleDrawer(tab);
     },
-    [setOpen, toggleDrawer]
+    [settleTo, toggleDrawer]
   );
 
   /* --- Render ------------------------------------------------------ */
@@ -946,6 +981,7 @@ export const MobileNowPlayingSheet: React.FC = () => {
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
+        onLostPointerCapture={handlePointerCancel}
       >
         {/*
           Card material: deck surface + hairline + contact shadow. It stays

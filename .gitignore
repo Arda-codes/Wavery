@@ -234,7 +234,6 @@ benchmark_results/
 .claude/
 .cursor/
 opencode.json
-Run_to_map_repo.sh
 scratch/
 tmp/
 temp/

@@ -668,6 +668,7 @@ export const App: React.FC = () => {
         onDoubleClick={(e) => {
           if (
             isTauri &&
+            e.button === 0 &&
             !(e.target as HTMLElement).closest(
               "button, input, a, select, textarea, [role='group'], [data-tauri-drag-region='false'], [data-tauri-drag-region='none']"
             )

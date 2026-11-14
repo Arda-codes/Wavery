@@ -57,9 +57,9 @@ export function normalizeForMatch(value: string): string {
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/\([^)]*\)/g, " ")
     .replace(/\[[^\]]*\]/g, " ")
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\b(feat|ft|featuring|with|remaster|remastered|deluxe|edition|version|ep)\b/g, " ")
-    .replace(/\bthe\b/g, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\b(feat|ft|featuring|with|remaster|remastered|deluxe|edition|version|ep)\b/gu, " ")
+    .replace(/\bthe\b/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -175,7 +175,8 @@ export function bestArtworkScore(
     // album (or title when the album tag is missing) instead of dropping the
     // cover; a Latin-script cover band is still rejected by the threshold.
     const artistLooksLocalized =
-      artistScore === 0 && (hasNonLatinScript(rawArtist) || normArtist === "");
+      artistScore === 0 &&
+      (hasNonLatinScript(rawArtist) || hasNonLatinScript(normArtist) || normArtist === "");
     const localizedMatch =
       artistLooksLocalized &&
       (albumScore >= 0.9 || (normAlbum === "" && titleScore >= 0.9));

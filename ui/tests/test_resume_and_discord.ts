@@ -141,6 +141,42 @@ export async function runPlaybackResumeAndDiscordTests(): Promise<void> {
     "A localized artist with the wrong album is still rejected"
   );
 
+  // Reverse localized: user tag is non-Latin ("杏里") and the storefront result is Latin ("Anri")
+  const reverseLocalized: FakeResult = {
+    artistName: "Anri",
+    collectionName: "Timely!!",
+    trackName: "DRIVING MY LOVE",
+    artworkUrl100: "https://is1.mzstatic.com/image/thumb/us/100x100bb.jpg",
+  };
+  const reverseLocalizedBest = bestArtworkScore(
+    [reverseLocalized],
+    normalizeForMatch("杏里"),
+    normalizeForMatch("Timely!!"),
+    normalizeForMatch("DRIVING MY LOVE")
+  );
+  ok(
+    reverseLocalizedBest !== null && reverseLocalizedBest.score >= 0.55,
+    "A localized track tag does not hide an exact album cover in a Latin storefront"
+  );
+
+  // Non-Latin album title match
+  const nonLatinAlbum: FakeResult = {
+    artistName: "杏里",
+    collectionName: "タイムリー",
+    trackName: "DRIVING MY LOVE",
+    artworkUrl100: "https://is1.mzstatic.com/image/thumb/jp/100x100bb.jpg",
+  };
+  const nonLatinAlbumBest = bestArtworkScore(
+    [nonLatinAlbum],
+    normalizeForMatch("杏里"),
+    normalizeForMatch("タイムリー"),
+    normalizeForMatch("DRIVING MY LOVE")
+  );
+  ok(
+    nonLatinAlbumBest !== null && nonLatinAlbumBest.score >= 0.55,
+    "Non-Latin album titles are preserved and match with high confidence"
+  );
+
   // ---------------------------------------------------------------
   // 2. Resume after restart
   // ---------------------------------------------------------------

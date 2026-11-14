@@ -85,9 +85,9 @@ jobs:
           projectPath: './ui'
           tagName: ${{ github.ref_name }}
           releaseName: 'Wavery ${{ github.ref_name }}'
-          releaseBody: 'Wavery Alpha/Pre-Release Preview Build.'
-          releaseDraft: false
-          prerelease: true
+          releaseBody: 'See [CHANGELOG.md](https://github.com/Arda-codes/Wavery/blob/main/CHANGELOG.md) for full release notes.'
+          releaseDraft: ${{ github.event_name == 'workflow_dispatch' && inputs.release_draft || false }}
+          prerelease: ${{ contains(github.ref_name, '-') }}
           args: ${{ matrix.args }}
 
       - name: Upload Artifacts (Fallback if not tagged)

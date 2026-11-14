@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ==============================================================================
-# Wavery Linux Builder (.AppImage & .deb)
+# Wavery Linux Builder (.deb & .rpm)
 # ==============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -29,7 +29,7 @@ echo "[3/4] Checking Rust workspace..."
 cd "${ROOT_DIR}"
 cargo check --workspace --all-targets
 
-echo "[4/4] Building Tauri desktop bundle (.AppImage, .deb)..."
+echo "[4/4] Building Tauri desktop bundle (.deb, .rpm)..."
 cd "${UI_DIR}"
 npx @tauri-apps/cli build
 

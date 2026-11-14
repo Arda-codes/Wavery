@@ -37,6 +37,10 @@ Pre-built native packages are available on the [Releases](https://github.com/Ard
 - **Windows**: `.msi` / `.exe`
 - **Cross-Platform Web Player**: Standalone server binary streaming to any modern web browser.
 
+### Recommended Usage
+
+Wavery is built for organizing and listening to **complete artist discographies and full albums** rather than loose, mixed single-song imports. Importing entire albums or artist folders gives you the best experience across album views, artist profiles, gapless album playback, and artwork grouping.
+
 ---
 
 ## Technical Architecture

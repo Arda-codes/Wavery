@@ -39,6 +39,7 @@ import { ContextMenu } from "./components/ContextMenu";
 import { matchesKeyCombo, isEditableTarget } from "./utils/keybindings";
 import { WindowControls } from "./components/WindowControls";
 import { WindowResizeHandles } from "./components/WindowResizeHandles";
+import { windowService } from "./services/windowService";
 import { Search, X, ExternalLink, Home, Menu, Library, ListMusic } from "lucide-react";
 
 export const App: React.FC = () => {
@@ -664,6 +665,16 @@ export const App: React.FC = () => {
       {/* Top Desktop Chrome / Merged Title Bar Header */}
       <header
         data-tauri-drag-region={isTauri ? "deep" : undefined}
+        onDoubleClick={(e) => {
+          if (
+            isTauri &&
+            !(e.target as HTMLElement).closest(
+              "button, input, a, select, textarea, [role='group'], [data-tauri-drag-region='false'], [data-tauri-drag-region='none']"
+            )
+          ) {
+            windowService.toggleMaximize().catch(() => {});
+          }
+        }}
         className="relative min-h-[calc(52px+env(safe-area-inset-top))] sm:min-h-[calc(3.5rem+env(safe-area-inset-top))] safe-header-top bg-sidebar/95 backdrop-blur-xl border-b border-white/[0.06] px-3 sm:px-4 flex items-center justify-between flex-shrink-0 z-30 select-none cursor-default"
       >
         {/* Left: macOS Traffic Lights space (if on Mac) + Hamburger + Brand Text */}

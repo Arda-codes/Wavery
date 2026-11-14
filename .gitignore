@@ -6,9 +6,17 @@
 **/*.rs.bk
 *.rs.bk
 Cargo.lock.bak
+cargo-timings/
+*.profraw
+*.profdata
+.cargo/credentials*
+.cargo/*.local
+
+# Ensure workspace lockfile is tracked
+!Cargo.lock
 
 # ==============================================================================
-# Node, Frontend & Vite Build Artifacts
+# Node, Frontend, Vite & TypeScript
 # ==============================================================================
 node_modules/
 **/node_modules/
@@ -16,101 +24,244 @@ ui/dist/
 ui/dist-ssr/
 dist/
 dist-ssr/
+build/
+out/
+.vite/
+ui/.vite/
 *.local
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+.eslintcache
+.stylelintcache
+.prettiercache
+.turbo/
+ui/.turbo/
+
+# Package manager logs and stores
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 .pnpm-debug.log*
+lerna-debug.log*
+.pnpm-store/
+.yarn/cache/
+.yarn/unplugged/
+.yarn/build-state.yml
+.yarn/install-state.gz
+
+# Ensure UI lockfile is tracked
+!ui/package-lock.json
 
 # ==============================================================================
-# Tauri Build Artifacts & Release Bundles
+# Tauri v2 Desktop Build Artifacts & Distribution Packages
 # ==============================================================================
 ui/src-tauri/target/
 src-tauri/target/
 dist-windows-beta/
 dist-macos/
 dist-linux/
+bundle/
+ui/src-tauri/target/release/bundle/
+
+# Package installers & bundle archives
 *.deb
 *.rpm
 *.AppImage
 *.dmg
+*.pkg
 *.msi
 *.exe
 *.zip
 *.tar.gz
+*.tar.xz
+*.tar.zst
+
+# Tauri updater keys & WiX toolset temporary directories
+*.key
+*.key.pub
+tauri.key
+tauri.key.pub
+.wix/
+Wix/
+tauri.conf.json.bak
 
 # ==============================================================================
-# SQLite, Databases & Runtime Storage
+# SQLite, Databases, Backups & Quarantined Stores
 # ==============================================================================
 *.db
 *.db-shm
 *.db-wal
+*.db.journal
+*.db-journal
 *.sqlite
 *.sqlite3
-*.db.journal
+*.sqlite-wal
+*.sqlite-shm
+library.db*
+*.corrupt.*.bak
+*.db.corrupt.*
+*.bak
+*.backup
 
 # ==============================================================================
-# Environment & Secrets
+# Audio Files, Media Caches & Metadata
+# ==============================================================================
+*.mp3
+*.flac
+*.wav
+*.wave
+*.ogg
+*.oga
+*.opus
+*.m4a
+*.m4b
+*.aac
+*.alac
+*.aiff
+*.aif
+*.ape
+*.wma
+*.dsf
+*.dff
+*.wv
+
+# Test music, library roots & artwork caches
+test_music/
+music/
+fixtures/music/
+album_art/
+album_art_cache/
+art_cache/
+waveform_cache/
+cache/
+
+# Local lyrics & playlist sidecars
+*.lrc
+*.cue
+*.nfo
+
+# ==============================================================================
+# Environment Variables, Secrets & Certificates
 # ==============================================================================
 .env
 .env.*
 !.env.example
 *.pem
-*.key
+*.crt
+*.cer
+*.der
+*.pfx
+*.p12
+*.pk8
+*.asc
+*.gpg
+*.sig
+id_rsa*
+id_ed25519*
+credentials.json
+token.json
 
 # ==============================================================================
-# Logs & Test Output
+# Local Configuration Overrides & XDG Simulation
+# ==============================================================================
+config.local.toml
+*.local.toml
+xdg_config/
+xdg_data/
+xdg_cache/
+.wavery/
+
+# ==============================================================================
+# Logs, Diagnostics & Crash Dumps
 # ==============================================================================
 *.log
+*.log.*
 logs/
+crash.log
+*.crash.log
+*.dump
+*.dmp
+core
+core.*
+*.trace
+perf.data*
+flamegraph.svg
+
+# ==============================================================================
+# Testing, Coverage & Benchmarks
+# ==============================================================================
 coverage/
 *.lcov
 .nyc_output/
+htmlcov/
+.coverage
+.coverage.*
+test-results/
+playwright-report/
+blob-report/
+benchmark_results/
+*.bench
 
 # ==============================================================================
-# IDEs & Editor Configuration
+# IDEs, Editors & Developer Tools
 # ==============================================================================
 .idea/
+*.iml
+*.iws
+*.ipr
 .vscode/
 *.sublime-project
 *.sublime-workspace
 *.swp
 *.swo
 *~
-*.bak
+*.un~
+.netrwhist
+*#*#
+.#*
+.project
+.cproject
+.settings/
+.vs/
 
 # ==============================================================================
-# AI Assistants & Scratch Directories
+# AI Assistants, Scratch & Tooling
 # ==============================================================================
 .agents/
 .gemini/
 .codex/
+.claude/
+.cursor/
 opencode.json
 Run_to_map_repo.sh
+scratch/
+tmp/
+temp/
 
 # ==============================================================================
-# Audio Files & Local Test Fixtures
+# Operating System & Filesystem Artifacts
 # ==============================================================================
-*.mp3
-*.flac
-*.wav
-*.ogg
-*.opus
-*.m4a
-*.aac
-test_music/
-album_art/
-
-# ==============================================================================
-# Operating System Files
-# ==============================================================================
+# macOS
 .DS_Store
 .DS_Store?
 ._*
 .Spotlight-V100
 .Trashes
-ehthumbs.db
+.AppleDouble
+.LSOverride
+Icon\r\r
+
+# Linux
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# Windows
 Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
 [Dd]esktop.ini
 $RECYCLE.BIN/

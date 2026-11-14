@@ -87,10 +87,15 @@ interface ITunesResult {
 }
 
 /** Fetches iTunes search results, returning `null` (not empty) on a transport error. */
-async function searchItunes(term: string, entity: "song" | "album"): Promise<ITunesResult[] | null> {
+async function searchItunes(
+  term: string,
+  entity: "song" | "album",
+  country?: string
+): Promise<ITunesResult[] | null> {
   try {
+    const countryParam = country ? `&country=${encodeURIComponent(country)}` : "";
     const res = await fetch(
-      `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=${entity}&limit=12`,
+      `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=${entity}&limit=12${countryParam}`,
       { signal: AbortSignal.timeout(4000) }
     );
     if (!res.ok) return null;
@@ -100,6 +105,38 @@ async function searchItunes(term: string, entity: "song" | "album"): Promise<ITu
     return null;
   }
 }
+
+/**
+ * Apple Music storefronts to try, in priority order. The bare entry is the
+ * API default (United States). Local releases — Japanese city pop, Turkish
+ * singles, European editions — often exist only in their regional store, so
+ * a US-only lookup silently drops the cover.
+ */
+const STOREFRONTS: ReadonlyArray<string | undefined> = [
+  undefined,
+  "jp",
+  "gb",
+  "de",
+  "fr",
+  "tr",
+  "kr",
+];
+
+/** Score high enough to stop querying further storefronts. */
+const CONFIDENT_MATCH_SCORE = 0.68;
+
+/**
+ * Effective score for a strong album match whose artist name is written in a
+ * different script (e.g. the file says "Anri" while the JP store lists "杏里").
+ * The album cover is the same asset, so the missing artist overlap must not
+ * veto an otherwise exact album match.
+ */
+
+/** True when the string contains characters outside the Latin script. */
+function hasNonLatinScript(value: string): boolean {
+  return /[^\p{Script=Latin}\p{Script=Common}\p{Script=Inherited}]/u.test(value);
+}
+
 
 /** Discord renders the cover at roughly 512px, so ask for a 600px asset. */
 export function upscaleArtwork(url: string): string {
@@ -120,7 +157,8 @@ export function bestArtworkScore(
   let best: { url: string; score: number } | null = null;
   for (const result of results) {
     if (!result.artworkUrl100) continue;
-    const artistScore = tokenScore(normalizeForMatch(result.artistName ?? ""), normArtist);
+    const rawArtist = result.artistName ?? "";
+    const artistScore = tokenScore(normalizeForMatch(rawArtist), normArtist);
     const albumScore = normAlbum
       ? tokenScore(normalizeForMatch(result.collectionName ?? ""), normAlbum)
       : 0;
@@ -128,9 +166,23 @@ export function bestArtworkScore(
       ? tokenScore(normalizeForMatch(result.trackName ?? ""), normTitle)
       : 0;
     // Artist identity dominates; album and title break ties between releases.
-    const score = normAlbum
+    const baseScore = normAlbum
       ? artistScore * 0.5 + albumScore * 0.35 + titleScore * 0.15
       : artistScore * 0.6 + titleScore * 0.4;
+
+    // Localized storefronts romanize differently ("Anri" vs "杏里"), which
+    // zeroes the artist overlap even for the exact release. Trust an exact
+    // album (or title when the album tag is missing) instead of dropping the
+    // cover; a Latin-script cover band is still rejected by the threshold.
+    const artistLooksLocalized =
+      artistScore === 0 && (hasNonLatinScript(rawArtist) || normArtist === "");
+    const localizedMatch =
+      artistLooksLocalized &&
+      (albumScore >= 0.9 || (normAlbum === "" && titleScore >= 0.9));
+    const score = localizedMatch
+      ? Math.max(baseScore, CONFIDENT_MATCH_SCORE)
+      : baseScore;
+
     if (!best || score > best.score) {
       best = { url: upscaleArtwork(result.artworkUrl100), score };
     }
@@ -139,12 +191,44 @@ export function bestArtworkScore(
 }
 
 /**
+ * Searches every storefront until a confident match is found. Returns the
+ * best-scoring candidate across all stores and whether at least one store
+ * answered (so transport failures can avoid poisoning the negative cache).
+ */
+async function searchStorefronts(
+  term: string,
+  entity: "song" | "album",
+  normArtist: string,
+  normAlbum: string,
+  normTitle: string
+): Promise<{ best: { url: string; score: number } | null; anyResponse: boolean }> {
+  let best: { url: string; score: number } | null = null;
+  let anyResponse = false;
+
+  for (const country of STOREFRONTS) {
+    const results = await searchItunes(term, entity, country);
+    if (results === null) continue;
+    anyResponse = true;
+
+    const candidate = bestArtworkScore(results, normArtist, normAlbum, normTitle);
+    if (candidate && (!best || candidate.score > best.score)) {
+      best = candidate;
+    }
+    if (best && best.score >= CONFIDENT_MATCH_SCORE) break;
+  }
+
+  return { best, anyResponse };
+}
+
+/**
  * Resolves a high-resolution public artwork URL for Discord RPC using the
  * iTunes Search API. Discord RPC requires public HTTP/HTTPS URLs (or uploaded
  * asset keys) to render album covers.
  *
  * Matches are scored rather than first-hit so an artist's live album or a
- * compilation never replaces the studio cover.
+ * compilation never replaces the studio cover. Regional storefronts are
+ * searched because releases that are absent from the US catalog (Japanese
+ * city pop, Turkish singles, local editions) still have a valid cover there.
  */
 export async function resolveOnlineArtwork(
   artist: string,
@@ -173,44 +257,38 @@ export async function resolveOnlineArtwork(
   const normTitle = normalizeForMatch(cleanTitle);
 
   const promise = (async () => {
-    let confidence = 0;
     try {
       // 1. Track search scoped by artist + album (or title when no album).
-      const songResults = await searchItunes(`${cleanArtist} ${cleanAlbum || cleanTitle}`, "song");
-      if (songResults && songResults.length > 0) {
-        const best = bestArtworkScore(songResults, normArtist, normAlbum, normTitle);
-        if (best && best.score >= 0.55) {
-          _artworkCache.set(queryKey, best.url);
-          return best.url;
-        }
-        confidence = best?.score ?? 0;
-      } else if (songResults === null) {
-        // Transport failure: do not poison the cache with a false negative.
+      const songSearch = await searchStorefronts(
+        `${cleanArtist} ${cleanAlbum || cleanTitle}`,
+        "song",
+        normArtist,
+        normAlbum,
+        normTitle
+      );
+      if (!songSearch.anyResponse) {
+        // Every storefront failed (offline/unreachable): do not poison the
+        // cache with a false negative.
         return null;
+      }
+      if (songSearch.best && songSearch.best.score >= 0.55) {
+        _artworkCache.set(queryKey, songSearch.best.url);
+        return songSearch.best.url;
       }
 
       // 2. Fall back to an album search, which is more forgiving when the
       //    track is credited to a featured artist or titled differently.
       if (normAlbum) {
-        const albumResults = await searchItunes(`${cleanArtist} ${cleanAlbum}`, "album");
-        if (albumResults && albumResults.length > 0) {
-          const best = bestArtworkScore(albumResults, normArtist, normAlbum, "");
-          if (best && best.score >= 0.6) {
-            _artworkCache.set(queryKey, best.url);
-            return best.url;
-          }
-        }
-      }
-
-      // 3. Last resort: a strong artist + title match with no album context.
-      if (!normAlbum && confidence < 0.4) {
-        const titleResults = await searchItunes(`${cleanArtist} ${cleanTitle}`, "song");
-        if (titleResults && titleResults.length > 0) {
-          const best = bestArtworkScore(titleResults, normArtist, "", normTitle);
-          if (best && best.score >= 0.6) {
-            _artworkCache.set(queryKey, best.url);
-            return best.url;
-          }
+        const albumSearch = await searchStorefronts(
+          `${cleanArtist} ${cleanAlbum}`,
+          "album",
+          normArtist,
+          normAlbum,
+          ""
+        );
+        if (albumSearch.best && albumSearch.best.score >= 0.6) {
+          _artworkCache.set(queryKey, albumSearch.best.url);
+          return albumSearch.best.url;
         }
       }
 

@@ -112,6 +112,35 @@ export async function runPlaybackResumeAndDiscordTests(): Promise<void> {
     "A wrong-artist cover falls below the confidence bar instead of being used"
   );
 
+  // Regional storefronts list the same release under a localized artist name
+  // ("Anri" in the file vs "杏里" on the JP store). An exact album match must
+  // still resolve, but a wrong album by that localized artist must not.
+  const localized: FakeResult = {
+    artistName: "杏里",
+    collectionName: "Timely!!",
+    trackName: "DRIVING MY LOVE",
+    artworkUrl100: "https://is1.mzstatic.com/image/thumb/jp/100x100bb.jpg",
+  };
+  const localizedBest = bestArtworkScore(
+    [localized],
+    normalizeForMatch("Anri"),
+    normalizeForMatch("Timely!!"),
+    normalizeForMatch("DRIVING MY LOVE")
+  );
+  ok(
+    localizedBest !== null && localizedBest.score >= 0.55,
+    "A localized artist name does not hide an exact album cover"
+  );
+  ok(
+    bestArtworkScore(
+      [{ ...localized, collectionName: "Different Album" }],
+      normalizeForMatch("Anri"),
+      normalizeForMatch("Timely!!"),
+      normalizeForMatch("DRIVING MY LOVE")
+    )!.score < 0.55,
+    "A localized artist with the wrong album is still rejected"
+  );
+
   // ---------------------------------------------------------------
   // 2. Resume after restart
   // ---------------------------------------------------------------

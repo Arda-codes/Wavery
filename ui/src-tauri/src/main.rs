@@ -2950,21 +2950,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     quarantine_path.display()
                 );
                 let _ = std::fs::rename(db_path, &quarantine_path);
-                let mut wal = db_path.as_os_str().to_os_string();
-                wal.push("-wal");
-                let wal_path = PathBuf::from(wal);
-                if wal_path.exists() {
-                    let mut q_wal = quarantine_path.as_os_str().to_os_string();
-                    q_wal.push("-wal");
-                    let _ = std::fs::rename(&wal_path, PathBuf::from(q_wal));
-                }
-                let mut shm = db_path.as_os_str().to_os_string();
-                shm.push("-shm");
-                let shm_path = PathBuf::from(shm);
-                if shm_path.exists() {
-                    let mut q_shm = quarantine_path.as_os_str().to_os_string();
-                    q_shm.push("-shm");
-                    let _ = std::fs::rename(&shm_path, PathBuf::from(q_shm));
+                for sidecar in &["-wal", "-shm", "-journal"] {
+                    let mut s = db_path.as_os_str().to_os_string();
+                    s.push(sidecar);
+                    let sidecar_path = PathBuf::from(s);
+                    if sidecar_path.exists() {
+                        let mut q_s = quarantine_path.as_os_str().to_os_string();
+                        q_s.push(sidecar);
+                        let q_path = PathBuf::from(q_s);
+                        if std::fs::rename(&sidecar_path, &q_path).is_err() {
+                            let _ = std::fs::remove_file(&sidecar_path);
+                        }
+                    }
                 }
 
                 match SqliteLibraryManager::new(
@@ -4922,11 +4919,14 @@ mod tests {
         std::fs::write(&db_path, b"CORRUPTED_GARBAGE_NOT_A_SQLITE_HEADER").unwrap();
         let wal_path = temp_dir.join("library.db-wal");
         let shm_path = temp_dir.join("library.db-shm");
+        let journal_path = temp_dir.join("library.db-journal");
         std::fs::write(&wal_path, b"CORRUPT_WAL").unwrap();
         std::fs::write(&shm_path, b"CORRUPT_SHM").unwrap();
+        std::fs::write(&journal_path, b"CORRUPT_JOURNAL").unwrap();
         assert!(db_path.exists());
         assert!(wal_path.exists());
         assert!(shm_path.exists());
+        assert!(journal_path.exists());
 
         // Primary initialization fails
         let init_res = SqliteLibraryManager::new(music_dir.clone(), db_path.clone());
@@ -4935,18 +4935,24 @@ mod tests {
         // Quarantine corrupted database and sidecars if present
         let quarantine_path = db_path.with_extension("corrupt.bak");
         std::fs::rename(&db_path, &quarantine_path).unwrap();
-        let q_wal = temp_dir.join("library.corrupt.bak-wal");
-        let q_shm = temp_dir.join("library.corrupt.bak-shm");
-        if wal_path.exists() {
-            let _ = std::fs::rename(&wal_path, &q_wal);
-        }
-        if shm_path.exists() {
-            let _ = std::fs::rename(&shm_path, &q_shm);
+        for sidecar in &["-wal", "-shm", "-journal"] {
+            let mut s = db_path.as_os_str().to_os_string();
+            s.push(sidecar);
+            let s_path = PathBuf::from(s);
+            if s_path.exists() {
+                let mut q_s = quarantine_path.as_os_str().to_os_string();
+                q_s.push(sidecar);
+                let q_path = PathBuf::from(q_s);
+                if std::fs::rename(&s_path, &q_path).is_err() {
+                    let _ = std::fs::remove_file(&s_path);
+                }
+            }
         }
         assert!(quarantine_path.exists());
         assert!(!db_path.exists());
         assert!(!wal_path.exists());
         assert!(!shm_path.exists());
+        assert!(!journal_path.exists());
 
         // Re-initialization succeeds with fresh database
         let recovered_res = SqliteLibraryManager::new(music_dir, db_path.clone());

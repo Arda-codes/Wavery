@@ -31,7 +31,7 @@ cargo check --workspace --all-targets
 
 echo "[4/4] Building Tauri desktop bundle (.deb, .rpm)..."
 cd "${UI_DIR}"
-npx @tauri-apps/cli build
+npx @tauri-apps/cli build --bundles deb,rpm
 
 echo "======================================================="
 echo "  Linux Build Successful!"

@@ -187,8 +187,20 @@ export async function runPlaybackResumeAndDiscordTests(): Promise<void> {
     "A title or album composed solely of stop words retains base tokens"
   );
   ok(
+    normalizeForMatch("LP") === "lp",
+    "An album title composed solely of LP retains base tokens"
+  );
+  ok(
     normalizeForMatch("Track - Single") === "track",
     "Single release suffix is normalized away when other tokens exist"
+  );
+  ok(
+    normalizeForMatch("Album - LP") === "album",
+    "LP release suffix is normalized away when other tokens exist"
+  );
+  ok(
+    normalizeForMatch("Simon & Garfunkel") === normalizeForMatch("Simon and Garfunkel"),
+    "Ampersand and 'and' normalize to equivalent token sequences"
   );
   const theTheResult: FakeResult = {
     artistName: "The The",

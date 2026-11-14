@@ -62,7 +62,7 @@ export function normalizeForMatch(value: string): string {
     .trim();
 
   const stripped = base
-    .replace(/\b(feat|ft|featuring|with|remaster|remastered|deluxe|edition|version|ep|single)\b/gu, " ")
+    .replace(/\b(feat|ft|featuring|with|remaster|remastered|deluxe|edition|version|ep|lp|single|and)\b/gu, " ")
     .replace(/\bthe\b/gu, " ")
     .replace(/\s+/g, " ")
     .trim();

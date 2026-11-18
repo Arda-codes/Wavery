@@ -15,6 +15,7 @@ import {
   LoopMode,
   WaveformData,
   PlaylistImportSummary,
+  FolderPlaylistImportResult,
   DatabaseStats,
   DatabaseHealth,
   DatabaseBackup,
@@ -38,9 +39,15 @@ export interface AudioPlayerAdapter {
   getTracks(): Promise<Track[]>;
   pickFile(): Promise<string | null>;
   pickFolder(): Promise<string | null>;
+  pickFolders(): Promise<string[]>;
   pickPlaylistFile(): Promise<string | null>;
   importFile(path: string, strategy: ImportStrategy): Promise<Track>;
   importFolder(path: string, strategy: ImportStrategy): Promise<Track[]>;
+  importFoldersAsPlaylist(
+    dirPaths: string[],
+    strategy: ImportStrategy,
+    combineName?: string
+  ): Promise<FolderPlaylistImportResult>;
   importPlaylistFile(path: string): Promise<PlaylistImportSummary>;
   playTrack(track: Track): Promise<void>;
   pause(): Promise<void>;
@@ -289,6 +296,13 @@ class BrowserAudioPlayer implements AudioPlayerAdapter {
     });
   }
 
+  async pickFolders(): Promise<string[]> {
+    const res = await fetch("/api/dialog/pick-folders", { method: "POST" });
+    if (!res.ok) throw new Error(await res.text());
+    const data: { paths?: string[] } = await res.json();
+    return Array.isArray(data.paths) ? data.paths : [];
+  }
+
   async getTracks(): Promise<Track[]> {
     const res = await fetch("/api/tracks");
     if (!res.ok) throw new Error("Failed to fetch tracks");
@@ -310,6 +324,24 @@ class BrowserAudioPlayer implements AudioPlayerAdapter {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ dir_path: dirPath, strategy }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  }
+
+  async importFoldersAsPlaylist(
+    dirPaths: string[],
+    strategy: ImportStrategy,
+    combineName?: string
+  ): Promise<FolderPlaylistImportResult> {
+    const res = await fetch("/api/import/folders-as-playlist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        dir_paths: dirPaths,
+        strategy,
+        combine_name: combineName || null,
+      }),
     });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
@@ -1586,6 +1618,11 @@ class TauriAudioPlayer implements AudioPlayerAdapter {
     return invoke<string | null>("pick_folder");
   }
 
+  async pickFolders(): Promise<string[]> {
+    const invoke = await getTauriInvoke();
+    return invoke<string[]>("pick_folders");
+  }
+
   async pickPlaylistFile(): Promise<string | null> {
     const invoke = await getTauriInvoke();
     return invoke<string | null>("pick_playlist_file");
@@ -1599,6 +1636,19 @@ class TauriAudioPlayer implements AudioPlayerAdapter {
   async importFolder(dirPath: string, strategy: ImportStrategy): Promise<Track[]> {
     const invoke = await getTauriInvoke();
     return invoke<Track[]>("import_folder", { dirPath, strategy });
+  }
+
+  async importFoldersAsPlaylist(
+    dirPaths: string[],
+    strategy: ImportStrategy,
+    combineName?: string
+  ): Promise<FolderPlaylistImportResult> {
+    const invoke = await getTauriInvoke();
+    return invoke<FolderPlaylistImportResult>("import_folders_as_playlist", {
+      dirPaths,
+      strategy,
+      combineName: combineName || null,
+    });
   }
 
   async importPlaylistFile(filePath: string): Promise<PlaylistImportSummary> {

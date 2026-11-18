@@ -6,7 +6,8 @@
 use crate::db::{DatabaseBackup, DatabaseHealth, DatabaseStats, LibraryDatabase};
 use crate::m3u::{match_m3u_entries, parse_m3u};
 use crate::playlist_import::{
-    match_entries, parse_json, resolve_playlist, unmatched_preview, PlaylistImportSummary,
+    match_entries, parse_json, resolve_playlist, unmatched_preview, FolderPlaylistImportResult,
+    PlaylistImportSummary,
 };
 use crate::reader::LoftyMetadataReader;
 use async_trait::async_trait;
@@ -269,6 +270,129 @@ impl SqliteLibraryManager {
                 "Unsupported playlist file extension: \".{ext}\". Expected .m3u, .m3u8, or .json"
             ))),
         }
+    }
+
+    /// Imports one or more folders into the library and creates (or updates)
+    /// Wavery playlists from the imported tracks.
+    ///
+    /// When `combine_name` is `Some`, all imported tracks across the provided
+    /// folders are added to a single playlist with that name. When `None`, each
+    /// folder creates or updates a playlist named after the folder itself.
+    ///
+    /// # Errors
+    /// Returns a [`LibraryError`] if no folders are provided, a folder does not
+    /// exist, no supported audio files are found, or database operations fail.
+    pub async fn import_folders_as_playlists(
+        &mut self,
+        dir_paths: &[PathBuf],
+        strategy: ImportStrategy,
+        combine_name: Option<&str>,
+    ) -> Result<FolderPlaylistImportResult, LibraryError> {
+        if dir_paths.is_empty() {
+            return Err(LibraryError::IndexError(
+                "No folders selected to import as playlist.".to_string(),
+            ));
+        }
+
+        for dir_path in dir_paths {
+            if !dir_path.is_dir() {
+                return Err(LibraryError::Io(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("Folder not found: {}", dir_path.display()),
+                )));
+            }
+        }
+
+        let trimmed_combine = combine_name.map(str::trim).filter(|s| !s.is_empty());
+        let mut skipped_folders = Vec::new();
+
+        if let Some(playlist_name) = trimmed_combine {
+            let mut combined_ids = Vec::new();
+            let mut seen_ids = HashSet::new();
+
+            for dir_path in dir_paths {
+                let mut tracks = self.import_directory(dir_path, strategy).await?;
+                if tracks.is_empty() {
+                    skipped_folders.push(dir_path.to_string_lossy().to_string());
+                    continue;
+                }
+                sort_tracks_for_playlist(&mut tracks);
+                for track in tracks {
+                    if seen_ids.insert(track.id.clone()) {
+                        combined_ids.push(track.id);
+                    }
+                }
+            }
+
+            if combined_ids.is_empty() {
+                return Err(LibraryError::TrackNotFound(
+                    "No supported audio files were found in the selected folder(s).".to_string(),
+                ));
+            }
+
+            let total_tracks_imported = combined_ids.len();
+            let summary = self.apply_playlist_import(
+                playlist_name,
+                total_tracks_imported,
+                combined_ids,
+                Vec::new(),
+            )?;
+
+            return Ok(FolderPlaylistImportResult {
+                playlists: vec![summary],
+                total_tracks_imported,
+                skipped_folders,
+            });
+        }
+
+        let mut playlists = Vec::new();
+        let mut total_tracks_imported = 0;
+
+        for dir_path in dir_paths {
+            let mut tracks = self.import_directory(dir_path, strategy).await?;
+            if tracks.is_empty() {
+                skipped_folders.push(dir_path.to_string_lossy().to_string());
+                continue;
+            }
+            sort_tracks_for_playlist(&mut tracks);
+
+            let mut seen_ids = HashSet::new();
+            let mut track_ids = Vec::with_capacity(tracks.len());
+            for track in tracks {
+                if seen_ids.insert(track.id.clone()) {
+                    track_ids.push(track.id);
+                }
+            }
+
+            let playlist_name = dir_path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .unwrap_or("Imported Playlist")
+                .to_string();
+
+            total_tracks_imported += track_ids.len();
+            let summary = self.apply_playlist_import(
+                &playlist_name,
+                track_ids.len(),
+                track_ids,
+                Vec::new(),
+            )?;
+            playlists.push(summary);
+        }
+
+        if playlists.is_empty() {
+            return Err(LibraryError::TrackNotFound(
+                "No supported audio files were found in any of the selected folders.".to_string(),
+            ));
+        }
+
+        Ok(FolderPlaylistImportResult {
+            playlists,
+            total_tracks_imported,
+            skipped_folders,
+        })
     }
 
     /// Fetches a playlist and its ordered tracks by playlist ID.
@@ -982,4 +1106,29 @@ impl LibraryManager for SqliteLibraryManager {
     async fn save_waveform(&mut self, waveform: &WaveformData) -> Result<(), LibraryError> {
         self.db.save_waveform(waveform)
     }
+}
+
+/// Sorts tracks deterministically by disc number, track number, title, and path.
+fn sort_tracks_for_playlist(tracks: &mut [Track]) {
+    tracks.sort_by(|a, b| {
+        a.metadata
+            .disc_number
+            .unwrap_or(0)
+            .cmp(&b.metadata.disc_number.unwrap_or(0))
+            .then_with(|| {
+                a.metadata
+                    .track_number
+                    .unwrap_or(0)
+                    .cmp(&b.metadata.track_number.unwrap_or(0))
+            })
+            .then_with(|| {
+                a.metadata
+                    .title
+                    .as_deref()
+                    .unwrap_or("")
+                    .to_lowercase()
+                    .cmp(&b.metadata.title.as_deref().unwrap_or("").to_lowercase())
+            })
+            .then_with(|| a.source.path().cmp(b.source.path()))
+    });
 }

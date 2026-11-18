@@ -2653,3 +2653,84 @@ fn test_database_stats_health_backup_and_prune() {
     drop(db);
     let _ = fs::remove_dir_all(&temp_dir);
 }
+
+#[tokio::test]
+async fn test_import_folders_as_playlists_per_folder_reuse_and_combine() {
+    let temp_dir = std::env::temp_dir().join(format!("wavery_folder_pl_{}", uuid::Uuid::new_v4()));
+    let library_root = temp_dir.join("library");
+    let db_path = temp_dir.join("library.db");
+    let rock_dir = temp_dir.join("Rock");
+    let jazz_dir = temp_dir.join("Jazz");
+    let empty_dir = temp_dir.join("Empty");
+
+    fs::create_dir_all(&library_root).unwrap();
+    fs::create_dir_all(&rock_dir).unwrap();
+    fs::create_dir_all(&jazz_dir).unwrap();
+    fs::create_dir_all(&empty_dir).unwrap();
+
+    fs::write(rock_dir.join("01_anthem.mp3"), b"ID3\x03\x00\x00\x00\x00\x00\x00rock1").unwrap();
+    fs::write(rock_dir.join("02_encore.mp3"), b"ID3\x03\x00\x00\x00\x00\x00\x00rock2").unwrap();
+    fs::write(jazz_dir.join("blue_note.flac"), b"fLaC\x00\x00\x00\x00jazz1").unwrap();
+
+    let mut manager = SqliteLibraryManager::new(library_root, db_path).unwrap();
+
+    // 1. Per-folder mode with an empty folder included
+    let result = manager
+        .import_folders_as_playlists(
+            &[rock_dir.clone(), jazz_dir.clone(), empty_dir.clone()],
+            ImportStrategy::Copy,
+            None,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(result.playlists.len(), 2);
+    assert_eq!(result.total_tracks_imported, 3);
+    assert_eq!(result.skipped_folders.len(), 1);
+    assert_eq!(result.playlists[0].playlist_name, "Rock");
+    assert_eq!(result.playlists[0].matched_tracks, 2);
+    assert_eq!(result.playlists[1].playlist_name, "Jazz");
+    assert_eq!(result.playlists[1].matched_tracks, 1);
+
+    let playlists = manager.list_playlists().unwrap();
+    assert_eq!(playlists.len(), 2);
+
+    // 2. Re-import Rock after adding a 3rd track -> reuses "Rock" without duplicating first 2
+    fs::write(rock_dir.join("03_bonus.mp3"), b"ID3\x03\x00\x00\x00\x00\x00\x00rock3").unwrap();
+    let reimport = manager
+        .import_folders_as_playlists(std::slice::from_ref(&rock_dir), ImportStrategy::Copy, None)
+        .await
+        .unwrap();
+
+    assert_eq!(reimport.playlists.len(), 1);
+    assert_eq!(reimport.playlists[0].playlist_name, "Rock");
+    assert_eq!(reimport.playlists[0].already_in_playlist, 2);
+
+    let rock_pl = manager
+        .get_playlist(&reimport.playlists[0].playlist_id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(rock_pl.track_ids.len(), 3);
+
+    // 3. Combine multiple folders into one custom-named playlist
+    let combined = manager
+        .import_folders_as_playlists(
+            &[rock_dir, jazz_dir],
+            ImportStrategy::Copy,
+            Some("Road Trip"),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(combined.playlists.len(), 1);
+    assert_eq!(combined.playlists[0].playlist_name, "Road Trip");
+    assert_eq!(combined.playlists[0].matched_tracks, 4);
+
+    let road_trip = manager
+        .get_playlist(&combined.playlists[0].playlist_id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(road_trip.track_ids.len(), 4);
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}

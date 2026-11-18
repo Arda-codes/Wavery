@@ -350,6 +350,14 @@ pub struct ImportFolderRequest {
     pub strategy: ImportStrategy,
 }
 
+/// Request payload for importing one or more folders into the library as playlists.
+#[derive(Deserialize)]
+pub struct ImportFoldersAsPlaylistRequest {
+    pub dir_paths: Vec<String>,
+    pub strategy: ImportStrategy,
+    pub combine_name: Option<String>,
+}
+
 /// Request payload for deleting a track via POST.
 #[derive(Deserialize)]
 pub struct DeleteTrackRequest {
@@ -643,8 +651,13 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route("/api/stream/{id}", get(stream_track_handler))
         .route("/api/import", post(import_handler))
         .route("/api/import/folder", post(import_folder_handler))
+        .route(
+            "/api/import/folders-as-playlist",
+            post(import_folders_as_playlist_handler),
+        )
         .route("/api/dialog/pick-file", post(pick_file_dialog_handler))
         .route("/api/dialog/pick-folder", post(pick_folder_dialog_handler))
+        .route("/api/dialog/pick-folders", post(pick_folders_dialog_handler))
         .route("/api/search", get(search_handler))
         .route("/api/liked", get(list_liked_tracks_handler))
         .route("/api/liked/ids", get(list_liked_ids_handler))
@@ -1294,6 +1307,41 @@ async fn pick_folder_dialog_handler() -> Json<PickDialogResponse> {
     Json(PickDialogResponse {
         path: folder.map(|f| f.path().to_string_lossy().to_string()),
     })
+}
+
+/// Response payload for multi-folder host picker dialog.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PickFoldersResponse {
+    /// Full absolute paths chosen by the user (empty if canceled).
+    pub paths: Vec<String>,
+}
+
+/// Native host multi-folder chooser dialog for importing folders as playlists.
+async fn pick_folders_dialog_handler() -> Json<PickFoldersResponse> {
+    let folders = rfd::AsyncFileDialog::new()
+        .set_title("Select Music Folder(s) to Import as Playlist")
+        .pick_folders()
+        .await;
+    Json(PickFoldersResponse {
+        paths: folders
+            .unwrap_or_default()
+            .into_iter()
+            .map(|f| f.path().to_string_lossy().to_string())
+            .collect(),
+    })
+}
+
+/// Imports one or more folders into the library and creates or updates playlists.
+async fn import_folders_as_playlist_handler(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<ImportFoldersAsPlaylistRequest>,
+) -> Result<Json<wavery_library::FolderPlaylistImportResult>, ServerError> {
+    let mut lib = state.library.lock().await;
+    let paths: Vec<PathBuf> = req.dir_paths.into_iter().map(PathBuf::from).collect();
+    let result = lib
+        .import_folders_as_playlists(&paths, req.strategy, req.combine_name.as_deref())
+        .await?;
+    Ok(Json(result))
 }
 
 async fn list_liked_tracks_handler(

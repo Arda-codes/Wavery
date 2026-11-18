@@ -820,6 +820,40 @@ async fn pick_folder() -> Result<Option<String>, IpcError> {
     Ok(folder.map(|f| f.path().to_string_lossy().to_string()))
 }
 
+/// Opens a multi-folder picker dialog for importing folders as playlists.
+#[tauri::command]
+async fn pick_folders() -> Result<Vec<String>, IpcError> {
+    let folders = rfd::AsyncFileDialog::new()
+        .set_title("Select Music Folder(s) to Import as Playlist")
+        .pick_folders()
+        .await;
+    Ok(folders
+        .unwrap_or_default()
+        .into_iter()
+        .map(|f| f.path().to_string_lossy().to_string())
+        .collect())
+}
+
+/// Imports one or more folders into the library and creates or updates playlists.
+#[tauri::command]
+async fn import_folders_as_playlist(
+    dir_paths: Vec<String>,
+    strategy: ImportStrategy,
+    combine_name: Option<String>,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<wavery_library::FolderPlaylistImportResult, IpcError> {
+    let lib_arc = state
+        .library
+        .as_ref()
+        .ok_or(IpcError::LibraryNotInitialized)?;
+    let mut lib = lib_arc.lock().await;
+    let paths: Vec<PathBuf> = dir_paths.into_iter().map(PathBuf::from).collect();
+    let result = lib
+        .import_folders_as_playlists(&paths, strategy, combine_name.as_deref())
+        .await?;
+    Ok(result)
+}
+
 /// Opens a file picker for playlist files (.m3u, .m3u8, or yt-dlp JSON).
 #[tauri::command]
 async fn pick_playlist_file() -> Result<Option<String>, IpcError> {
@@ -3474,8 +3508,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             delete_track,
             import_file,
             import_folder,
+            import_folders_as_playlist,
             pick_file,
             pick_folder,
+            pick_folders,
             pick_playlist_file,
             import_playlist_file,
             play_track,

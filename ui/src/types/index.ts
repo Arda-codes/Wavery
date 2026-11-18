@@ -98,6 +98,15 @@ export interface PlaylistImportSummary {
 }
 
 /**
+ * Result of importing one or more folders into the library as playlists.
+ */
+export interface FolderPlaylistImportResult {
+  playlists: PlaylistImportSummary[];
+  total_tracks_imported: number;
+  skipped_folders: string[];
+}
+
+/**
  * Aggregate row counts and on-disk sizes reported by the library database.
  */
 export interface DatabaseStats {

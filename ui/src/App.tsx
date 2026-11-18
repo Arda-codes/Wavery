@@ -27,7 +27,7 @@ import { HomeView } from "./components/HomeView";
 import { SearchView } from "./components/SearchView";
 import { HistoryView } from "./components/HistoryView";
 import { Breadcrumbs, BreadcrumbItem } from "./components/Breadcrumbs";
-import { ImportModal } from "./components/ImportModal";
+import { ImportModal, ImportMode } from "./components/ImportModal";
 import { OfflineCover } from "./components/OfflineCover";
 import { NowPlayingDrawer } from "./components/NowPlayingDrawer";
 import { FullscreenPlayer } from "./components/FullscreenPlayer";
@@ -54,6 +54,7 @@ export const App: React.FC = () => {
     checkConnection,
   } = useServerConnection();
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importModalMode, setImportModalMode] = useState<ImportMode>("folder");
   const [isCreatePlaylistOpen, setIsCreatePlaylistOpen] = useState(false);
   const [isAppClosed, setIsAppClosed] = useState(() => {
     if (typeof window !== "undefined" && window.location.pathname === "/closed") {
@@ -155,6 +156,7 @@ export const App: React.FC = () => {
   const removeTrackFromPlaylist = useLibraryStore((s) => s.removeTrackFromPlaylist);
   const importFile = useLibraryStore((s) => s.importFile);
   const importFolder = useLibraryStore((s) => s.importFolder);
+  const importFoldersAsPlaylist = useLibraryStore((s) => s.importFoldersAsPlaylist);
 
   // Centralized Navigation Store
   const viewMode = useNavigationStore((s) => s.viewMode);
@@ -707,10 +709,13 @@ export const App: React.FC = () => {
 
         {/* Center: Global Search Bar (Flex child with max-w constraint, perfectly centered, never overlaps) */}
         <div
-          data-tauri-drag-region="false"
+          data-tauri-drag-region={isTauri ? "deep" : undefined}
           className="flex-1 flex justify-center items-center min-w-0 pointer-events-auto z-20 px-1 sm:px-2"
         >
-          <div className="relative group flex items-center w-full max-w-xs sm:max-w-md lg:max-w-xl xl:max-w-2xl">
+          <div
+            data-tauri-drag-region="false"
+            className="relative group flex items-center w-full max-w-xs sm:max-w-md lg:max-w-xl xl:max-w-2xl"
+          >
             <Search
               onClick={() => {
                 if (viewMode !== "search") navigate("search");
@@ -826,7 +831,10 @@ export const App: React.FC = () => {
         <Sidebar
           currentView={viewMode}
           onNavigate={navigate}
-          onOpenImport={() => setIsImportModalOpen(true)}
+          onOpenImport={() => {
+            setImportModalMode("folder");
+            setIsImportModalOpen(true);
+          }}
           trackCount={tracks.length}
           artistCount={artists.length}
           albumCount={albums.length}
@@ -859,7 +867,10 @@ export const App: React.FC = () => {
               onSelectArtist={handleSelectArtist}
               onSelectPlaylist={handleSelectPlaylist}
               onNavigate={navigate}
-              onOpenImport={() => setIsImportModalOpen(true)}
+              onOpenImport={() => {
+            setImportModalMode("folder");
+            setIsImportModalOpen(true);
+          }}
               getArtworkUrl={getArtworkUrl}
             />
           )}
@@ -912,6 +923,10 @@ export const App: React.FC = () => {
               playlists={playlists}
               onSelectPlaylist={handleSelectPlaylist}
               onCreatePlaylist={() => setIsCreatePlaylistOpen(true)}
+              onImportFolderAsPlaylist={() => {
+                setImportModalMode("folder-playlist");
+                setIsImportModalOpen(true);
+              }}
               onDeletePlaylist={handleDeletePlaylist}
             />
           )}
@@ -1053,8 +1068,10 @@ export const App: React.FC = () => {
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
         onImport={handleImport}
+        onImportFoldersAsPlaylist={importFoldersAsPlaylist}
         onImportPlaylist={handleImportPlaylist}
         onOpenPlaylist={selectPlaylist}
+        initialMode={importModalMode}
       />
 
       {/* Create Playlist Modal */}

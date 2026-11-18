@@ -16,7 +16,7 @@ pub use db::{DatabaseBackup, DatabaseHealth, DatabaseStats, LibraryDatabase};
 pub use heuristics::extract_artist_from_path;
 pub use m3u::{parse_m3u, M3uEntry, M3uPlaylist};
 pub use manager::SqliteLibraryManager;
-pub use playlist_import::PlaylistImportSummary;
+pub use playlist_import::{FolderPlaylistImportResult, PlaylistImportSummary};
 pub use reader::LoftyMetadataReader;
 pub use waveform::{compute_waveform_peaks, resample_peaks_to_100};
 

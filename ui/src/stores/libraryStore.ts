@@ -6,7 +6,15 @@
  */
 
 import { create } from "zustand";
-import { Track, AlbumInfo, ArtistInfo, GenreInfo, ImportStrategy, Playlist } from "../types";
+import {
+  Track,
+  AlbumInfo,
+  ArtistInfo,
+  GenreInfo,
+  ImportStrategy,
+  Playlist,
+  FolderPlaylistImportResult,
+} from "../types";
 import { playerAdapter } from "../services/adapter";
 import { groupTracksByAlbum, groupTracksByArtist, extractLibraryGenres } from "../utils/library";
 import { usePlayerStore, registerLibraryTracksGetter } from "./playerStore";
@@ -35,6 +43,11 @@ interface LibraryState {
   removeTrackFromPlaylist: (playlistId: string, trackId: string) => Promise<void>;
   importFile: (path: string, strategy: ImportStrategy) => Promise<void>;
   importFolder: (path: string, strategy: ImportStrategy) => Promise<void>;
+  importFoldersAsPlaylist: (
+    dirPaths: string[],
+    strategy: ImportStrategy,
+    combineName?: string
+  ) => Promise<FolderPlaylistImportResult>;
   rebuildDatabase: () => Promise<void>;
   vacuumDatabase: () => Promise<void>;
   getAlbumDetails: (title: string, artist?: string) => Promise<AlbumInfo | null>;
@@ -278,6 +291,31 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       const msg = err instanceof Error ? err.message : String(err);
       set({
         error: msg || "Failed to import folder",
+        isLoading: false,
+      });
+      throw err;
+    }
+  },
+
+  importFoldersAsPlaylist: async (
+    dirPaths: string[],
+    strategy: ImportStrategy,
+    combineName?: string
+  ) => {
+    set({ isLoading: true, error: null });
+    try {
+      const result = await playerAdapter.importFoldersAsPlaylist(
+        dirPaths,
+        strategy,
+        combineName
+      );
+      await Promise.all([get().loadTracks(), get().loadPlaylists()]);
+      set({ isLoading: false });
+      return result;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      set({
+        error: msg || "Failed to import folders as playlist",
         isLoading: false,
       });
       throw err;

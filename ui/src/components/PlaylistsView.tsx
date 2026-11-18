@@ -3,7 +3,7 @@ import { Playlist, Track, PlaylistSortKey, SortDirection } from "../types";
 import { sortPlaylists } from "../utils/library";
 import { useSortStore } from "../stores/sortStore";
 import { FilterMenu, FilterSection } from "./FilterMenu";
-import { ListMusic, Plus, Play, Trash2, ListPlus, CornerDownRight, ArrowUp, ArrowDown, Search } from "lucide-react";
+import { ListMusic, Plus, Play, Trash2, ListPlus, CornerDownRight, ArrowUp, ArrowDown, Search, FolderPlus } from "lucide-react";
 import { usePlayerStore } from "../stores/playerStore";
 import { useContextMenuStore, ContextMenuItem } from "../stores/contextMenuStore";
 import { playerAdapter } from "../services/adapter";
@@ -12,6 +12,7 @@ interface PlaylistsViewProps {
   playlists: Playlist[];
   onSelectPlaylist: (id: string) => void;
   onCreatePlaylist: () => void;
+  onImportFolderAsPlaylist?: () => void;
   onDeletePlaylist?: (id: string) => void;
 }
 
@@ -19,6 +20,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
   playlists,
   onSelectPlaylist,
   onCreatePlaylist,
+  onImportFolderAsPlaylist,
   onDeletePlaylist,
 }) => {
   const setQueue = usePlayerStore((s) => s.setQueue);
@@ -206,13 +208,25 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
             {playlists.length} {playlists.length === 1 ? "playlist" : "playlists"} in your library
           </p>
         </div>
-        <button
-          onClick={onCreatePlaylist}
-          className="flex items-center space-x-2 px-4 py-2 bg-accent-fill hover:bg-accentHover active:scale-[0.98] text-white rounded-xl text-xs font-semibold shadow-md shadow-accent/20 transition"
-        >
-          <Plus className="w-4 h-4" />
-          <span>New Playlist</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {onImportFolderAsPlaylist && (
+            <button
+              type="button"
+              onClick={onImportFolderAsPlaylist}
+              className="flex items-center space-x-2 px-4 py-2 bg-white/[0.06] hover:bg-white/[0.12] active:scale-[0.98] text-white border border-white/[0.08] rounded-xl text-xs font-semibold transition"
+            >
+              <FolderPlus className="w-4 h-4 text-accent" />
+              <span>Import Folder(s)</span>
+            </button>
+          )}
+          <button
+            onClick={onCreatePlaylist}
+            className="flex items-center space-x-2 px-4 py-2 bg-accent-fill hover:bg-accentHover active:scale-[0.98] text-white rounded-xl text-xs font-semibold shadow-md shadow-accent/20 transition"
+          >
+            <Plus className="w-4 h-4" />
+            <span>New Playlist</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter and Sort Controls */}

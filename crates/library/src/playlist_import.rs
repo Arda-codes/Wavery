@@ -148,6 +148,17 @@ pub struct PlaylistImportSummary {
     pub unmatched_titles: Vec<String>,
 }
 
+/// Summary returned to the UI after importing one or more folders as playlists.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FolderPlaylistImportResult {
+    /// Per-playlist summaries for every created or updated playlist.
+    pub playlists: Vec<PlaylistImportSummary>,
+    /// Total audio tracks imported or updated across all selected folders.
+    pub total_tracks_imported: usize,
+    /// Folder paths that contained no supported audio files and were skipped.
+    pub skipped_folders: Vec<String>,
+}
+
 /// Parses a yt-dlp JSON document.
 ///
 /// # Errors

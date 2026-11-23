@@ -12,7 +12,6 @@ A fast, local-first music player that runs on your desktop or streams your audio
   <img src="ui/src-tauri/icons/128x128@2x.png" width="128" alt="Wavery Icon" />
   <br />
   <strong>Wavery Desktop & Web Audio Player</strong><br />
-  <em>Local-first, gapless playback, SQLite FTS5 search, and Apple HIG aesthetic.</em>
 </p>
 
 ---

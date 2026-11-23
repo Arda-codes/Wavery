@@ -1,5 +1,5 @@
 # Wavery
-
+<p align="center">
 A fast, local-first music player that runs on your desktop or streams your audio library to any web browser. Built in Rust, Tauri v2, and React.
 
 [![Release](https://img.shields.io/github/v/release/Arda-codes/Wavery?include_prereleases&style=flat-square&color=FA586A)](https://github.com/Arda-codes/Wavery/releases)
@@ -8,7 +8,7 @@ A fast, local-first music player that runs on your desktop or streams your audio
 ---
 
 <!-- Screenshot / UI Demo Placeholder -->
-<p align="center">
+
   <img src="ui/src-tauri/icons/128x128@2x.png" width="128" alt="Wavery Icon" />
   <br />
   <strong>Wavery Desktop & Web Audio Player</strong><br />
